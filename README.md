@@ -1,36 +1,108 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Basket Production
 
-## Getting Started
+Dashboard operativo para programación deportiva con Next.js, Tailwind y Supabase.
 
-First, run the development server:
+## Incluye
+
+- Login con Supabase Auth
+- Grilla por día o mes con buscador y filtros por liga, modo, estado y responsable
+- Detalle del partido con edición de datos base, asignaciones por rol, historial y conflictos por solape
+- ABM de personas y roles
+- Auditoría automática en `audit_log`
+- RLS para `admin`, `editor` y `viewer`
+- Link dinámico a Google Calendar y panel `GRUPO` con copiar / abrir WhatsApp
+- Importador CSV en `tools/import`
+
+## Stack
+
+- Next.js 16 App Router
+- Tailwind CSS 4
+- Supabase (`@supabase/ssr`, Postgres, Auth)
+
+## Calidad y proceso
+
+- `CHANGELOG.md`: historial de cambios relevantes
+- `CONTRIBUTING.md`: normas de desarrollo y definición de done
+- `docs/production-sheet.md`: hoja de produccion visual con tipografia, colores y reglas del sistema
+- `.github/workflows/ci.yml`: verificación automática en push y PR
+- `.github/pull_request_template.md`: checklist mínima para cambios reales
+
+Comandos de verificación:
+
+```bash
+npm run lint
+npm run typecheck
+npm run check
+```
+
+## Setup
+
+1. Instala dependencias:
+
+```bash
+npm install
+```
+
+2. Crea tu entorno local:
+
+```bash
+cp .env.example .env.local
+```
+
+3. Completa estas variables:
+
+```bash
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
+SUPABASE_SERVICE_ROLE_KEY=
+NEXT_PUBLIC_APP_TIMEZONE=America/Bogota
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+```
+
+4. En Supabase ejecuta:
+
+- `supabase/migrations/0001_initial.sql`
+- `supabase/seed.sql`
+
+5. Crea o invita un usuario en Supabase Auth y luego promuévelo a admin:
+
+```sql
+update public.profiles
+set role = 'admin'
+where id = '<AUTH_USER_ID>';
+```
+
+6. Levanta el proyecto:
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Importar CSV
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+El importador mapea columnas típicas como `Día`, `Hora`, `Liga`, `Producción`, `Partido`, `Local`, `Visitante`, `Responsable`, `Observaciones` y trata el resto de columnas como roles.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+npm run import:csv -- ./archivo.csv
+```
 
-## Learn More
+También acepta una zona horaria por argumento:
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+npm run import:csv -- ./archivo.csv America/Bogota
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Rutas
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- `/login`
+- `/grid`
+- `/match/[id]`
+- `/people`
+- `/roles`
+- `/api/health`
 
-## Deploy on Vercel
+## Notas
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- Si faltan variables de entorno, la app muestra un panel de setup en lugar de romper durante el build.
+- La auditoría se genera desde triggers SQL sobre `matches`, `people`, `roles` y `assignments`.
+- Los conflictos por solape se calculan en el detalle del partido usando la ventana `kickoff_at + duration_minutes`.
