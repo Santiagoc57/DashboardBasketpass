@@ -3,6 +3,7 @@ values
   ('Responsable', 'Coordinacion', 10),
   ('Realizador', 'Produccion', 20),
   ('Operador de Control', 'Produccion', 30),
+  ('Operador de Grafica', 'Produccion', 35),
   ('Soporte tecnico', 'Produccion', 40),
   ('Productor', 'Produccion', 50),
   ('Relator', 'Talento', 60),

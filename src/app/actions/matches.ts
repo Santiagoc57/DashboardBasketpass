@@ -11,7 +11,38 @@ import { MATCH_STATUS_OPTIONS, PRODUCTION_MODE_OPTIONS } from "@/lib/constants";
 import { buildKickoffAt } from "@/lib/date";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { requireEditor } from "@/lib/auth";
-import { ensureErrorMessage, maybeNull } from "@/lib/utils";
+import { ensureErrorMessage, maybeNull, pickFirstString } from "@/lib/utils";
+
+const STAFF_ROLE_FIELD_MAP = [
+  {
+    fields: ["responsableId", "responsableEnCanchaId", "ownerId"],
+    roleName: "Responsable",
+  },
+  { fields: ["realizadorId"], roleName: "Realizador" },
+  {
+    fields: ["graphicsOperatorId", "graficaId"],
+    roleName: "Operador de Grafica",
+  },
+  {
+    fields: ["controlOperatorId", "controlId"],
+    roleName: "Operador de Control",
+  },
+  { fields: ["supportTechId", "soporteId"], roleName: "Soporte tecnico" },
+  { fields: ["camera1Id", "camara1Id"], roleName: "Camara 1" },
+  { fields: ["camera2Id", "camara2Id"], roleName: "Camara 2" },
+  { fields: ["camera3Id", "camara3Id"], roleName: "Camara 3" },
+  { fields: ["camera4Id", "camara4Id"], roleName: "Camara 4" },
+  { fields: ["camera5Id", "camara5Id"], roleName: "Camara 5" },
+  { fields: ["relatorId"], roleName: "Relator" },
+  {
+    fields: ["commentator1Id", "comentario1Id"],
+    roleName: "Comentario 1",
+  },
+  {
+    fields: ["commentator2Id", "comentario2Id"],
+    roleName: "Comentario 2",
+  },
+] as const;
 
 function assertMatchStatus(value: string) {
   if (!MATCH_STATUS_OPTIONS.includes(value as (typeof MATCH_STATUS_OPTIONS)[number])) {
@@ -62,6 +93,41 @@ function getGridRedirectForCreatedMatch(formData: FormData, fallback: string) {
   return `${url.pathname}${url.search}`;
 }
 
+function getCreateOwnerId(formData: FormData) {
+  return maybeNull(
+    pickFirstString([
+      formData.get("responsableId"),
+      formData.get("responsableEnCanchaId"),
+      formData.get("ownerId"),
+    ]),
+  );
+}
+
+function buildStaffAssignments(params: {
+  matchId: string;
+  formData: FormData;
+  roleIdsByName: Map<string, string>;
+}) {
+  return STAFF_ROLE_FIELD_MAP.flatMap(({ fields, roleName }) => {
+    const personId = maybeNull(
+      pickFirstString(fields.map((field) => params.formData.get(field))),
+    );
+    const roleId = params.roleIdsByName.get(roleName);
+
+    if (!personId || !roleId) {
+      return [];
+    }
+
+    return {
+      match_id: params.matchId,
+      role_id: roleId,
+      person_id: personId,
+      confirmed: false,
+      notes: null,
+    };
+  });
+}
+
 export async function createMatchAction(formData: FormData) {
   const redirectTo = getRedirectTarget(formData, "/grid");
   const createdMatchGridRedirect = getGridRedirectForCreatedMatch(formData, redirectTo);
@@ -79,6 +145,8 @@ export async function createMatchAction(formData: FormData) {
       .from("matches")
       .insert({
         competition: maybeNull(String(formData.get("competition") ?? "")),
+        external_match_id: maybeNull(String(formData.get("externalMatchId") ?? "")),
+        production_code: maybeNull(String(formData.get("productionCode") ?? "")),
         production_mode: assertProductionMode(
           String(formData.get("productionMode") ?? ""),
         ),
@@ -86,10 +154,12 @@ export async function createMatchAction(formData: FormData) {
         home_team: String(formData.get("homeTeam") ?? "").trim(),
         away_team: String(formData.get("awayTeam") ?? "").trim(),
         venue: maybeNull(String(formData.get("venue") ?? "")),
+        commentary_plan: maybeNull(String(formData.get("commentaryPlan") ?? "")),
+        transport: maybeNull(String(formData.get("transport") ?? "")),
         kickoff_at: kickoffAt,
         duration_minutes: Number(formData.get("durationMinutes") ?? 150),
         timezone: String(formData.get("timezone") ?? ""),
-        owner_id: maybeNull(String(formData.get("ownerId") ?? "")),
+        owner_id: getCreateOwnerId(formData),
         notes: maybeNull(String(formData.get("notes") ?? "")),
       })
       .select("id")
@@ -97,6 +167,36 @@ export async function createMatchAction(formData: FormData) {
 
     if (result.error) {
       throw result.error;
+    }
+
+    const roleNames = STAFF_ROLE_FIELD_MAP.map((item) => item.roleName);
+    const rolesResult = await supabase
+      .from("roles")
+      .select("id, name")
+      .in("name", roleNames);
+
+    if (rolesResult.error) {
+      throw rolesResult.error;
+    }
+
+    const roleIdsByName = new Map(
+      (rolesResult.data ?? []).map((role) => [role.name, role.id]),
+    );
+
+    const assignments = buildStaffAssignments({
+      matchId: result.data.id,
+      formData,
+      roleIdsByName,
+    });
+
+    if (assignments.length) {
+      const assignmentsResult = await supabase
+        .from("assignments")
+        .upsert(assignments, { onConflict: "match_id,role_id" });
+
+      if (assignmentsResult.error) {
+        throw assignmentsResult.error;
+      }
     }
 
     revalidatePath("/grid");
@@ -129,25 +229,140 @@ export async function updateMatchAction(formData: FormData) {
       time: String(formData.get("time") ?? ""),
       timezone: String(formData.get("timezone") ?? ""),
     });
+    const payload: Record<string, string | number | null> = {
+      competition: maybeNull(String(formData.get("competition") ?? "")),
+      production_mode: assertProductionMode(
+        String(formData.get("productionMode") ?? ""),
+      ),
+      status: assertMatchStatus(String(formData.get("status") ?? "Pendiente")),
+      home_team: String(formData.get("homeTeam") ?? "").trim(),
+      away_team: String(formData.get("awayTeam") ?? "").trim(),
+      venue: maybeNull(String(formData.get("venue") ?? "")),
+      kickoff_at: kickoffAt,
+      duration_minutes: Number(formData.get("durationMinutes") ?? 150),
+      timezone: String(formData.get("timezone") ?? ""),
+      owner_id: getCreateOwnerId(formData),
+      notes: maybeNull(String(formData.get("notes") ?? "")),
+    };
+
+    if (formData.has("externalMatchId")) {
+      payload.external_match_id = maybeNull(String(formData.get("externalMatchId") ?? ""));
+    }
+
+    if (formData.has("productionCode")) {
+      payload.production_code = maybeNull(String(formData.get("productionCode") ?? ""));
+    }
+
+    if (formData.has("commentaryPlan")) {
+      payload.commentary_plan = maybeNull(String(formData.get("commentaryPlan") ?? ""));
+    }
+
+    if (formData.has("transport")) {
+      payload.transport = maybeNull(String(formData.get("transport") ?? ""));
+    }
 
     const result = await supabase
       .from("matches")
-      .update({
-        competition: maybeNull(String(formData.get("competition") ?? "")),
-        production_mode: assertProductionMode(
-          String(formData.get("productionMode") ?? ""),
-        ),
-        status: assertMatchStatus(String(formData.get("status") ?? "Pendiente")),
-        home_team: String(formData.get("homeTeam") ?? "").trim(),
-        away_team: String(formData.get("awayTeam") ?? "").trim(),
-        venue: maybeNull(String(formData.get("venue") ?? "")),
-        kickoff_at: kickoffAt,
-        duration_minutes: Number(formData.get("durationMinutes") ?? 150),
-        timezone: String(formData.get("timezone") ?? ""),
-        owner_id: maybeNull(String(formData.get("ownerId") ?? "")),
-        notes: maybeNull(String(formData.get("notes") ?? "")),
-      })
+      .update(payload)
       .eq("id", matchId);
+
+    if (result.error) {
+      throw result.error;
+    }
+
+    const roleNames = STAFF_ROLE_FIELD_MAP.map((item) => item.roleName);
+    const rolesResult = await supabase
+      .from("roles")
+      .select("id, name")
+      .in("name", roleNames);
+
+    if (rolesResult.error) {
+      throw rolesResult.error;
+    }
+
+    const roleIdsByName = new Map(
+      (rolesResult.data ?? []).map((role) => [role.name, role.id]),
+    );
+    const roleIds = [...roleIdsByName.values()];
+
+    if (roleIds.length) {
+      const deleteAssignmentsResult = await supabase
+        .from("assignments")
+        .delete()
+        .eq("match_id", matchId)
+        .in("role_id", roleIds);
+
+      if (deleteAssignmentsResult.error) {
+        throw deleteAssignmentsResult.error;
+      }
+    }
+
+    const assignments = buildStaffAssignments({
+      matchId,
+      formData,
+      roleIdsByName,
+    });
+
+    if (assignments.length) {
+      const assignmentsResult = await supabase
+        .from("assignments")
+        .upsert(assignments, { onConflict: "match_id,role_id" });
+
+      if (assignmentsResult.error) {
+        throw assignmentsResult.error;
+      }
+    }
+
+    revalidatePath("/grid");
+    revalidatePath(`/match/${matchId}`);
+    redirectWithNotice({
+      redirectTo,
+      intent: "success",
+      notice: "Partido actualizado.",
+    });
+  } catch (error) {
+    rethrowNavigationError(error);
+    redirectWithNotice({
+      redirectTo,
+      intent: "error",
+      notice: ensureErrorMessage(error),
+    });
+  }
+}
+
+export async function quickUpdateMatchFieldAction(formData: FormData) {
+  const redirectTo = getRedirectTarget(formData, "/grid");
+  await requireEditor();
+
+  const matchId = String(formData.get("matchId") ?? "");
+  const field = String(formData.get("field") ?? "");
+  const rawValue = String(formData.get("value") ?? "").trim();
+
+  try {
+    const supabase = await createSupabaseServerClient();
+    const payload: Record<string, string | number | null> = {};
+
+    switch (field) {
+      case "homeTeam":
+        payload.home_team = rawValue;
+        break;
+      case "awayTeam":
+        payload.away_team = rawValue;
+        break;
+      case "competition":
+        payload.competition = maybeNull(rawValue);
+        break;
+      case "productionMode":
+        payload.production_mode = assertProductionMode(rawValue);
+        break;
+      case "status":
+        payload.status = assertMatchStatus(rawValue);
+        break;
+      default:
+        throw new Error("Campo de edición rápida no soportado.");
+    }
+
+    const result = await supabase.from("matches").update(payload).eq("id", matchId);
 
     if (result.error) {
       throw result.error;
@@ -171,6 +386,7 @@ export async function updateMatchAction(formData: FormData) {
 }
 
 export async function deleteMatchAction(formData: FormData) {
+  const redirectTo = getRedirectTarget(formData, "/grid");
   await requireEditor();
   const matchId = String(formData.get("matchId") ?? "");
 
@@ -184,14 +400,14 @@ export async function deleteMatchAction(formData: FormData) {
 
     revalidatePath("/grid");
     redirectWithNotice({
-      redirectTo: "/grid",
+      redirectTo,
       intent: "success",
       notice: "Partido eliminado.",
     });
   } catch (error) {
     rethrowNavigationError(error);
     redirectWithNotice({
-      redirectTo: `/match/${matchId}`,
+      redirectTo,
       intent: "error",
       notice: ensureErrorMessage(error),
     });
@@ -225,7 +441,7 @@ export async function upsertAssignmentAction(formData: FormData) {
     redirectWithNotice({
       redirectTo,
       intent: "success",
-      notice: "Asignacion actualizada.",
+      notice: "Asignación actualizada.",
     });
   } catch (error) {
     rethrowNavigationError(error);

@@ -23,7 +23,7 @@ export function HistoryTimeline({
         </h3>
       </div>
 
-      <div className="rounded-[20px] border border-[var(--border)] bg-[var(--surface)] p-5">
+      <div className="panel-surface border border-[var(--border)] bg-[var(--surface)] p-5">
         {history.length ? (
           <div className="space-y-6 border-l border-[var(--border)] pl-6">
             {history.map((entry, index) => {
@@ -66,8 +66,8 @@ export function HistoryTimeline({
             })}
           </div>
         ) : (
-          <div className="rounded-[18px] border border-dashed border-[var(--border)] bg-[var(--surface-muted)] p-4 text-sm text-[var(--muted)]">
-            Todavia no hay eventos auditados para este partido.
+          <div className="panel-surface border border-dashed border-[var(--border)] bg-[var(--surface-muted)] p-4 text-sm text-[var(--muted)]">
+            Todavía no hay eventos auditados para este partido.
           </div>
         )}
       </div>

@@ -1,5 +1,8 @@
 import { cn } from "@/lib/utils";
 
+export const badgeBaseClassName =
+  "inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.16em]";
+
 export function Badge({
   children,
   className,
@@ -10,7 +13,8 @@ export function Badge({
   return (
     <span
       className={cn(
-        "inline-flex items-center rounded-full border border-[var(--border)] bg-[var(--background-soft)] px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--muted)]",
+        badgeBaseClassName,
+        "border border-[var(--border)] bg-[var(--background-soft)] text-[var(--muted)]",
         className,
       )}
     >

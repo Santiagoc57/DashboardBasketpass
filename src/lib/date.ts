@@ -4,6 +4,7 @@ import {
   formatISO,
   parseISO,
 } from "date-fns";
+import { es } from "date-fns/locale";
 import { formatInTimeZone, fromZonedTime } from "date-fns-tz";
 
 import { DEFAULT_MATCH_DURATION_MINUTES, DEFAULT_TIMEZONE } from "@/lib/constants";
@@ -24,7 +25,7 @@ export function formatMatchTime(
   timezone = DEFAULT_TIMEZONE,
   pattern = "HH:mm",
 ) {
-  return formatInTimeZone(kickoffAt, timezone, pattern);
+  return formatInTimeZone(kickoffAt, timezone, pattern, { locale: es });
 }
 
 export function formatMatchDate(
@@ -32,14 +33,16 @@ export function formatMatchDate(
   timezone = DEFAULT_TIMEZONE,
   pattern = "EEE d MMM",
 ) {
-  return formatInTimeZone(kickoffAt, timezone, pattern);
+  return formatInTimeZone(kickoffAt, timezone, pattern, { locale: es });
 }
 
 export function formatMatchDateTime(
   kickoffAt: string,
   timezone = DEFAULT_TIMEZONE,
 ) {
-  return formatInTimeZone(kickoffAt, timezone, "EEE d MMM · HH:mm");
+  return formatInTimeZone(kickoffAt, timezone, "EEE d MMM · HH:mm", {
+    locale: es,
+  });
 }
 
 export function getMatchEndIso(

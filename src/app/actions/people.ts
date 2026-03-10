@@ -8,6 +8,7 @@ import {
   rethrowNavigationError,
 } from "@/app/actions/helpers";
 import { requireEditor } from "@/lib/auth";
+import { buildPersonNotesMeta } from "@/lib/people-notes";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { ensureErrorMessage, maybeNull } from "@/lib/utils";
 
@@ -20,7 +21,11 @@ export async function upsertPersonAction(formData: FormData) {
     full_name: String(formData.get("fullName") ?? "").trim(),
     phone: maybeNull(String(formData.get("phone") ?? "")),
     email: maybeNull(String(formData.get("email") ?? "")),
-    notes: maybeNull(String(formData.get("notes") ?? "")),
+    notes: buildPersonNotesMeta({
+      role: maybeNull(String(formData.get("roleName") ?? "")),
+      coverage: maybeNull(String(formData.get("coverageTeams") ?? "")),
+      notes: maybeNull(String(formData.get("notes") ?? "")),
+    }),
     active: hasActiveField
       ? String(formData.get("active") ?? "") !== "off"
       : true,

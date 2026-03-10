@@ -56,7 +56,11 @@ export async function getUserContext() {
     email: user.email ?? null,
     profile,
     role: profile.role,
-    canEdit: profile.role === "admin" || profile.role === "editor",
+    canEdit:
+      profile.role === "admin" ||
+      profile.role === "editor" ||
+      profile.role === "coordinator" ||
+      profile.role === "collaborator",
   };
 }
 

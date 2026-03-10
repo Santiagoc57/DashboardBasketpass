@@ -19,7 +19,7 @@ export async function loginAction(formData: FormData) {
     redirectWithNotice({
       redirectTo: "/login",
       intent: "error",
-      notice: "Email y password son obligatorios.",
+      notice: "Correo electrónico y contraseña son obligatorios.",
     });
   }
 

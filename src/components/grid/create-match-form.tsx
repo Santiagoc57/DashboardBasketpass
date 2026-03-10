@@ -33,7 +33,7 @@ export function CreateMatchForm({
   return (
     <Card
       className={cn(
-        "flex flex-col overflow-hidden rounded-[22px] border border-[var(--border)] p-0 shadow-[0_10px_24px_rgba(28,13,16,0.05)]",
+        "panel-surface flex flex-col overflow-hidden border border-[var(--border)] p-0",
         className,
       )}
     >
@@ -44,7 +44,7 @@ export function CreateMatchForm({
           </div>
           <div>
             <h2 className="text-[28px] font-extrabold leading-none tracking-tight text-[var(--foreground)]">
-              Alta Rapida
+              Alta Rápida
             </h2>
             <p className="mt-1 text-sm font-medium text-[var(--muted)]">
               Nuevo partido / evento
@@ -179,7 +179,7 @@ export function CreateMatchForm({
             </label>
             <label className="space-y-2">
               <span className="text-sm font-bold text-[var(--foreground)]">
-                Duracion
+                Duración
               </span>
               <Input
                 type="number"
@@ -211,7 +211,7 @@ export function CreateMatchForm({
             <Textarea
               name="notes"
               disabled={!canEdit}
-              placeholder="Notas operativas, tecnicas o contexto editorial"
+              placeholder="Notas operativas, técnicas o contexto editorial"
               className="min-h-[110px] rounded-[16px] border-[var(--border)] bg-[#f7f7f7] px-3.5 py-3 text-[14px] font-medium text-[var(--foreground)] placeholder:text-[var(--muted)] focus:bg-white"
             />
           </label>

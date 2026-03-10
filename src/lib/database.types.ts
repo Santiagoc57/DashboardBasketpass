@@ -10,7 +10,12 @@ export interface Database {
   public: {
     CompositeTypes: Record<string, never>;
     Enums: {
-      app_role: "admin" | "editor" | "viewer";
+      app_role:
+        | "admin"
+        | "editor"
+        | "coordinator"
+        | "collaborator"
+        | "viewer";
       match_status: "Pendiente" | "Confirmado" | "Realizado";
     };
     Functions: Record<string, never>;
@@ -113,11 +118,15 @@ export interface Database {
         Row: {
           id: string;
           competition: string | null;
+          external_match_id: string | null;
+          production_code: string | null;
           production_mode: string | null;
           status: Database["public"]["Enums"]["match_status"];
           home_team: string;
           away_team: string;
           venue: string | null;
+          commentary_plan: string | null;
+          transport: string | null;
           kickoff_at: string;
           duration_minutes: number;
           timezone: string;
@@ -131,11 +140,15 @@ export interface Database {
         Insert: {
           id?: string;
           competition?: string | null;
+          external_match_id?: string | null;
+          production_code?: string | null;
           production_mode?: string | null;
           status?: Database["public"]["Enums"]["match_status"];
           home_team: string;
           away_team: string;
           venue?: string | null;
+          commentary_plan?: string | null;
+          transport?: string | null;
           kickoff_at: string;
           duration_minutes?: number;
           timezone?: string;
@@ -148,11 +161,15 @@ export interface Database {
         };
         Update: {
           competition?: string | null;
+          external_match_id?: string | null;
+          production_code?: string | null;
           production_mode?: string | null;
           status?: Database["public"]["Enums"]["match_status"];
           home_team?: string;
           away_team?: string;
           venue?: string | null;
+          commentary_plan?: string | null;
+          transport?: string | null;
           kickoff_at?: string;
           duration_minutes?: number;
           timezone?: string;

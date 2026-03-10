@@ -11,7 +11,7 @@ export function EmptyState({
 }) {
   return (
     <Card className="flex flex-col items-start gap-3 border-dashed">
-      <div className="rounded-2xl border border-[var(--border)] bg-[var(--background-soft)] p-3 text-[var(--muted)]">
+      <div className="panel-radius border border-[var(--border)] bg-[var(--background-soft)] p-3 text-[var(--muted)]">
         <AlertCircle className="size-5" />
       </div>
       <div>

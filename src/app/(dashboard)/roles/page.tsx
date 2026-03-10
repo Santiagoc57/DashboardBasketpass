@@ -1,4 +1,6 @@
 import { deleteRoleAction, upsertRoleAction } from "@/app/actions/roles";
+import { SectionAiAssistant } from "@/components/ai/section-ai-assistant";
+import { SectionPageHeader } from "@/components/layout/section-page-header";
 import { SetupPanel } from "@/components/layout/setup-panel";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -8,8 +10,10 @@ import { PageMessage } from "@/components/ui/page-message";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { requireUserContext } from "@/lib/auth";
 import { getRolesData } from "@/lib/data/dashboard";
+import { getRoleCategoryDisplayName, getRoleDisplayName } from "@/lib/display";
 import { isSupabaseConfigured } from "@/lib/env";
 import { parseNotice } from "@/lib/search-params";
+import { getSettingsSnapshot } from "@/lib/settings";
 
 type PageProps = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -25,20 +29,37 @@ export default async function RolesPage({ searchParams }: PageProps) {
 
   const user = await requireUserContext();
   const { roles, grouped } = await getRolesData();
+  const settings = await getSettingsSnapshot();
+  const aiContext = roles.map((role) => ({
+    nombre: getRoleDisplayName(role.name),
+    categoria: getRoleCategoryDisplayName(role.category),
+    orden: role.sort_order,
+    activo: role.active ? "Sí" : "No",
+  }));
 
   return (
-    <div className="space-y-6">
-      <section className="rounded-[24px] border border-[var(--border)] bg-[var(--surface)] p-6 shadow-[0_18px_44px_rgba(28,13,16,0.05)]">
-        <p className="text-xs font-bold uppercase tracking-[0.32em] text-[var(--accent)]">
-          Configuracion
-        </p>
-        <h2 className="mt-2 text-3xl font-black tracking-tight text-[var(--foreground)]">
-          Roles
-        </h2>
-        <p className="mt-2 max-w-2xl text-sm text-[var(--muted)]">
-          Gestiona la plantilla de roles visibles en el detalle del partido y en la importacion CSV.
-        </p>
-      </section>
+    <div className="space-y-10">
+      <SectionPageHeader
+        title="Roles"
+        actions={
+          <SectionAiAssistant
+            section="Roles"
+            title="Consulta los roles visibles"
+            description="Pregunta por categorías, orden, disponibilidad o estructura de los roles configurados."
+            placeholder="Ej. ¿Qué roles tiene Producción y cuáles están activos?"
+            contextLabel="Roles visibles en la configuración actual"
+            context={aiContext}
+            guidance="Responde usando nombre, categoría, orden y estado activo de cada rol visible. Si preguntan por una categoría, agrupa de forma simple."
+            examples={[
+              "¿Qué roles hay en Producción?",
+              "¿Cuál es el orden de las cámaras?",
+              "¿Qué roles están inactivos?",
+            ]}
+            hasGeminiKey={settings.hasGeminiKey}
+            buttonVariant="icon"
+          />
+        }
+      />
 
       <PageMessage intent={intent} message={notice} />
 
@@ -53,8 +74,8 @@ export default async function RolesPage({ searchParams }: PageProps) {
         </div>
         <form action={upsertRoleAction} className="grid gap-3 lg:grid-cols-4">
           <input type="hidden" name="redirectTo" value="/roles" />
-          <Input name="name" placeholder="Camara 6" disabled={!user.canEdit} />
-          <Input name="category" placeholder="Camaras" disabled={!user.canEdit} />
+          <Input name="name" placeholder="Cámara 6" disabled={!user.canEdit} />
+          <Input name="category" placeholder="Cámaras" disabled={!user.canEdit} />
           <Input name="sortOrder" type="number" placeholder="170" disabled={!user.canEdit} />
           <label className="flex items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--background-soft)] px-4 py-3 text-sm font-semibold text-[var(--foreground)]">
             <input
@@ -84,10 +105,10 @@ export default async function RolesPage({ searchParams }: PageProps) {
             <Card key={group.category} className="space-y-4">
               <div>
                 <p className="text-xs font-bold uppercase tracking-[0.32em] text-[var(--accent)]">
-                  Categoria
+                  Categoría
                 </p>
                 <h3 className="mt-2 text-xl font-extrabold text-[var(--foreground)]">
-                  {group.category}
+                  {getRoleCategoryDisplayName(group.category)}
                 </h3>
               </div>
               <div className="space-y-4">
@@ -95,19 +116,19 @@ export default async function RolesPage({ searchParams }: PageProps) {
                   <form
                     key={role.id}
                     action={upsertRoleAction}
-                    className="rounded-[20px] border border-[var(--border)] bg-[var(--background-soft)] p-4"
+                    className="panel-surface border border-[var(--border)] bg-[var(--background-soft)] p-4"
                   >
                     <input type="hidden" name="redirectTo" value="/roles" />
                     <input type="hidden" name="roleId" value={role.id} />
                     <div className="grid gap-3 lg:grid-cols-4">
                       <Input
                         name="name"
-                        defaultValue={role.name}
+                        defaultValue={getRoleDisplayName(role.name)}
                         disabled={!user.canEdit}
                       />
                       <Input
                         name="category"
-                        defaultValue={role.category}
+                        defaultValue={getRoleCategoryDisplayName(role.category)}
                         disabled={!user.canEdit}
                       />
                       <Input

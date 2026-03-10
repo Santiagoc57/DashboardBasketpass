@@ -1,6 +1,7 @@
 import type { Database } from "@/lib/database.types";
 
 export const APP_NAME = "Basket Production";
+export const APP_RELEASE_LABEL = "Consola operativa v0.1.0";
 export const DEFAULT_TIMEZONE =
   process.env.NEXT_PUBLIC_APP_TIMEZONE ?? "America/Bogota";
 export const DEFAULT_MATCH_DURATION_MINUTES = 150;
@@ -15,9 +16,14 @@ export const PRODUCTION_MODE_OPTIONS = [
 ] as const;
 
 export const DASHBOARD_NAV = [
-  { href: "/grid", label: "Grilla" },
+  { href: "/grid", label: "Producción" },
+  { href: "/mi-jornada", label: "Mi jornada" },
+  { href: "/incidents", label: "Incidencias" },
+  { href: "/reports", label: "Reportes" },
+  { href: "/teams", label: "Equipos" },
   { href: "/people", label: "Personal" },
   { href: "/roles", label: "Roles" },
+  { href: "/settings", label: "Configuración" },
 ] as const;
 
 export const RESERVED_IMPORT_HEADERS = new Set([
@@ -48,6 +54,7 @@ export const ROLE_SEED = [
   { name: "Responsable", category: "Coordinacion", sortOrder: 10 },
   { name: "Realizador", category: "Produccion", sortOrder: 20 },
   { name: "Operador de Control", category: "Produccion", sortOrder: 30 },
+  { name: "Operador de Grafica", category: "Produccion", sortOrder: 35 },
   { name: "Soporte tecnico", category: "Produccion", sortOrder: 40 },
   { name: "Productor", category: "Produccion", sortOrder: 50 },
   { name: "Relator", category: "Talento", sortOrder: 60 },

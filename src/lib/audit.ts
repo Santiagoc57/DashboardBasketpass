@@ -1,4 +1,5 @@
 import type { Json } from "@/lib/database.types";
+import { getRoleDisplayName } from "@/lib/display";
 import type { AuditEntry, AssignmentDetail } from "@/lib/types";
 
 const FIELD_LABELS: Record<string, string> = {
@@ -9,18 +10,18 @@ const FIELD_LABELS: Record<string, string> = {
   away_team: "Visitante",
   venue: "Sede",
   kickoff_at: "Inicio",
-  duration_minutes: "Duracion",
+  duration_minutes: "Duración",
   timezone: "Zona horaria",
   owner_id: "Responsable",
   notes: "Observaciones",
   person_id: "Persona",
   confirmed: "Confirmado",
   role_id: "Rol",
-  category: "Categoria",
+  category: "Categoría",
   sort_order: "Orden",
   active: "Activo",
   full_name: "Nombre",
-  phone: "Telefono",
+  phone: "Teléfono",
   email: "Email",
 };
 
@@ -47,11 +48,11 @@ function stringifyValue(key: string, value: Json | undefined, lookup: LookupMaps
   }
 
   if (typeof value === "boolean") {
-    return value ? "Si" : "No";
+    return value ? "Sí" : "No";
   }
 
   if (value === null || value === undefined) {
-    return "Vacio";
+    return "Vacío";
   }
 
   return JSON.stringify(value);
@@ -102,7 +103,7 @@ export function formatAuditEntry(
   const roleMap = new Map(
     (options.assignments ?? []).map((assignment) => [
       assignment.role.id,
-      assignment.role.name,
+      getRoleDisplayName(assignment.role.name),
     ]),
   );
 
@@ -113,7 +114,7 @@ export function formatAuditEntry(
 
   const entityName =
     entry.table_name === "assignments"
-      ? "asignacion"
+      ? "asignación"
       : entry.table_name === "matches"
         ? "partido"
         : entry.table_name === "people"
@@ -122,10 +123,10 @@ export function formatAuditEntry(
 
   const headline =
     entry.action === "INSERT"
-      ? `Se creo ${entityName}`
+      ? `Se creó ${entityName}`
       : entry.action === "DELETE"
-        ? `Se elimino ${entityName}`
-        : `Se actualizo ${entityName}`;
+        ? `Se eliminó ${entityName}`
+        : `Se actualizó ${entityName}`;
 
   return {
     headline,

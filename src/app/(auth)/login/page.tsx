@@ -44,15 +44,15 @@ export default async function LoginPage({ searchParams }: PageProps) {
                 {APP_NAME}
               </p>
               <h1 className="text-4xl font-black leading-[1.02] tracking-[-0.04em] text-[var(--foreground)] xl:text-5xl 2xl:text-6xl">
-                Operacion, talento y tecnica en una sola consola.
+                Operación, talento y técnica en una sola consola.
               </h1>
               <p className="max-w-xl text-base font-medium leading-relaxed text-[var(--muted)] xl:text-lg">
-                El proyecto ya esta listo. Solo falta conectar Supabase para activar auth,
+                El proyecto ya está listo. Solo falta conectar Supabase para activar auth,
                 CRUD, historial y permisos en tiempo real.
               </p>
             </div>
             <p className="text-sm font-medium text-[var(--muted)]">
-              Configuracion inicial del entorno operativo.
+              Configuración inicial del entorno operativo.
             </p>
           </section>
 
@@ -106,7 +106,7 @@ export default async function LoginPage({ searchParams }: PageProps) {
           <div className="relative z-10 max-w-2xl space-y-6 xl:space-y-8">
             <div className="space-y-4 xl:space-y-5">
               <p className="text-xs font-bold uppercase tracking-[0.32em] text-[var(--muted)]">
-                Operacion en vivo
+                Operación en vivo
               </p>
               <h1 className="text-4xl font-black leading-[1.02] tracking-[-0.04em] text-[var(--foreground)] xl:text-5xl 2xl:text-6xl">
                 Basket
@@ -114,8 +114,8 @@ export default async function LoginPage({ searchParams }: PageProps) {
                 Production.
               </h1>
               <p className="max-w-xl text-base font-medium leading-relaxed text-[var(--muted)] xl:text-lg">
-                Coordinacion ejecutiva para transmisiones en vivo, gestion integral de
-                talento y monitoreo del equipo tecnico en tiempo real.
+                Coordinación ejecutiva para transmisiones en vivo, gestión integral de
+                talento y monitoreo del equipo técnico en tiempo real.
               </p>
             </div>
 
@@ -130,7 +130,7 @@ export default async function LoginPage({ searchParams }: PageProps) {
                   </h3>
                   <p className="mt-1 text-sm leading-relaxed text-[var(--muted)]">
                     Monitorea la grilla diaria, valida señales principales y coordina
-                    equipos de produccion sin friccion operativa.
+                    equipos de producción sin fricción operativa.
                   </p>
                 </div>
               </div>
@@ -141,7 +141,7 @@ export default async function LoginPage({ searchParams }: PageProps) {
                 </div>
                 <div>
                   <h3 className="text-base font-extrabold text-[var(--foreground)] xl:text-lg">
-                    Gestion de talento
+                    Gestión de talento
                   </h3>
                   <p className="mt-1 text-sm leading-relaxed text-[var(--muted)]">
                     Asigna relatores, comentaristas, soporte y responsables con trazabilidad
@@ -188,7 +188,7 @@ export default async function LoginPage({ searchParams }: PageProps) {
 
                 <label className="block">
                   <span className="mb-2 block text-sm font-bold text-[var(--foreground)]">
-                    Email
+                    Correo electrónico
                   </span>
                   <div className="relative">
                     <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-4 text-[var(--muted)]">
@@ -206,7 +206,7 @@ export default async function LoginPage({ searchParams }: PageProps) {
 
                 <label className="block">
                   <span className="mb-2 block text-sm font-bold text-[var(--foreground)]">
-                    Contrasena
+                    Contraseña
                   </span>
                   <div className="relative">
                     <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-4 text-[var(--muted)]">
@@ -252,7 +252,7 @@ export default async function LoginPage({ searchParams }: PageProps) {
 
             <p className="mt-6 flex items-center justify-center gap-2 text-center text-sm font-medium text-[var(--muted)] xl:mt-8">
               <Headset className="size-4" />
-              Problemas tecnicos?{" "}
+              ¿Problemas técnicos?{" "}
               <a
                 href="mailto:soporte@dashboardproduccion.local"
                 className="text-[var(--foreground)] underline transition hover:text-[var(--accent)]"

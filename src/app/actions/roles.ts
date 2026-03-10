@@ -8,6 +8,7 @@ import {
   rethrowNavigationError,
 } from "@/app/actions/helpers";
 import { requireEditor } from "@/lib/auth";
+import { normalizeRoleCategoryInput, normalizeRoleNameInput } from "@/lib/display";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { ensureErrorMessage } from "@/lib/utils";
 
@@ -16,8 +17,10 @@ export async function upsertRoleAction(formData: FormData) {
   await requireEditor();
 
   const payload = {
-    name: String(formData.get("name") ?? "").trim(),
-    category: String(formData.get("category") ?? "Produccion").trim(),
+    name: normalizeRoleNameInput(String(formData.get("name") ?? "")),
+    category: normalizeRoleCategoryInput(
+      String(formData.get("category") ?? "Produccion"),
+    ),
     sort_order: Number(formData.get("sortOrder") ?? 0),
     active: String(formData.get("active") ?? "") !== "off",
   };

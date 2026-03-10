@@ -1,18 +1,38 @@
-import {
-  Bell,
-  Headset,
-  LogOut,
-  Search,
-  Settings,
-  Waves,
-} from "lucide-react";
+import Link from "next/link";
+import { Bell, LogOut, Settings2 } from "lucide-react";
 
 import { signOutAction } from "@/app/actions/auth";
+import { DashboardHeaderUtility } from "@/components/layout/dashboard-header-search";
 import { DashboardNav } from "@/components/layout/dashboard-nav";
-import { Badge } from "@/components/ui/badge";
+import { UserProfileChip } from "@/components/layout/user-profile-chip";
 import { SubmitButton } from "@/components/ui/submit-button";
-import { APP_NAME } from "@/lib/constants";
+import { APP_NAME, APP_RELEASE_LABEL } from "@/lib/constants";
+import { getAppRoleDisplayName } from "@/lib/display";
+import { getSystemStatus } from "@/lib/system-status";
 import type { UserContext } from "@/lib/types";
+
+function BasketMark() {
+  return (
+    <div className="flex size-12 items-center justify-center rounded-2xl bg-[var(--accent)] text-white shadow-[0_12px_28px_rgba(230,18,56,0.22)]">
+      <svg
+        viewBox="0 0 32 32"
+        aria-hidden="true"
+        className="size-6"
+        fill="none"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.8"
+      >
+        <circle cx="16" cy="16" r="11.5" />
+        <path d="M16 4.5v23" />
+        <path d="M5.5 16h21" />
+        <path d="M9.5 7.5c2.6 2.2 4 5.1 4 8.5s-1.4 6.3-4 8.5" />
+        <path d="M22.5 7.5c-2.6 2.2-4 5.1-4 8.5s1.4 6.3 4 8.5" />
+      </svg>
+    </div>
+  );
+}
 
 export function DashboardShell({
   children,
@@ -21,93 +41,116 @@ export function DashboardShell({
   children: React.ReactNode;
   user: UserContext | null;
 }) {
+  const displayName =
+    user?.profile?.full_name?.trim() ||
+    user?.email?.split("@")[0] ||
+    "Usuario";
+  const roleLabel = getAppRoleDisplayName(user?.role).toUpperCase();
+  const systemStatus = getSystemStatus(Boolean(user?.userId));
+
   return (
-    <div className="flex min-h-screen flex-col bg-[var(--background)]">
-      <header className="sticky top-0 z-50 border-b border-[var(--border)] bg-[rgba(255,255,255,0.96)] backdrop-blur">
-        <div className="flex flex-wrap items-center gap-4 px-4 py-3 sm:px-6 lg:px-8">
-          <div className="flex items-center gap-4">
-            <div className="flex size-8 items-center justify-center text-[var(--accent)]">
-              <Waves className="size-5" />
+    <div className="min-h-screen bg-[var(--page-canvas)]">
+      <div className="flex min-h-screen">
+        <aside className="sticky top-0 hidden h-screen w-72 shrink-0 flex-col overflow-y-auto border-r border-[var(--border)] bg-[var(--surface)] lg:flex">
+          <div className="border-b border-[var(--border)] px-6 py-7">
+            <div className="flex items-center gap-4">
+              <BasketMark />
+              <div className="min-w-0">
+                <p className="text-[1.5rem] font-extrabold leading-none tracking-[-0.04em] text-[var(--foreground)]">
+                  BASKET
+                </p>
+                <p className="mt-1 text-[11px] font-black uppercase tracking-[0.32em] text-[var(--accent)]">
+                  Production
+                </p>
+              </div>
             </div>
-            <h1 className="text-xl font-extrabold tracking-tight text-[var(--foreground)]">
-              {APP_NAME}
-            </h1>
           </div>
 
-          <div className="hidden min-w-[280px] max-w-xl flex-1 md:block">
-            <label className="flex h-11 items-center gap-3 rounded-2xl border border-[var(--border)] bg-[var(--background-soft)] px-4">
-              <Search className="size-4 text-[var(--muted)]" />
-              <input
-                aria-label="Buscar"
-                placeholder="Buscar partidos, personas o ligas..."
-                className="w-full bg-transparent text-sm font-medium text-[var(--foreground)] outline-none placeholder:text-[var(--muted)]"
-              />
-            </label>
-          </div>
-
-          <div className="ml-auto flex items-center gap-2 sm:gap-3">
-            <button className="flex size-10 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--background-soft)] text-[var(--muted)] transition hover:bg-[#ece7e8] hover:text-[var(--foreground)]">
-              <Bell className="size-4" />
-            </button>
-            <button className="hidden size-10 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--background-soft)] text-[var(--muted)] transition hover:bg-[#ece7e8] hover:text-[var(--foreground)] sm:flex">
-              <Settings className="size-4" />
-            </button>
-            <div className="hidden h-8 w-px bg-[var(--border)] sm:block" />
-            <div className="hidden text-right sm:block">
-              <p className="text-sm font-extrabold text-[var(--foreground)]">
-                {user?.profile?.full_name ?? user?.email ?? "Usuario"}
-              </p>
-              <p className="text-xs font-medium text-[var(--muted)]">
-                {user?.role ?? "viewer"}
-              </p>
-            </div>
-            {user?.profile?.full_name ? (
-              <Badge className="border-[#cde8d9] bg-[#f2fbf6] text-[#2ea866]">
-                {user.role}
-              </Badge>
-            ) : null}
-            {user?.userId ? (
-              <form action={signOutAction}>
-                <SubmitButton
-                  variant="secondary"
-                  pendingLabel="Saliendo..."
-                  className="gap-2"
-                >
-                  <LogOut className="size-4" />
-                  Salir
-                </SubmitButton>
-              </form>
-            ) : null}
-          </div>
-        </div>
-      </header>
-
-      <div className="flex min-h-[calc(100vh-76px)] flex-1">
-        <aside className="hidden w-64 shrink-0 flex-col justify-between border-r border-[var(--border)] bg-[var(--surface)] px-4 py-6 lg:flex">
-          <DashboardNav />
-          <div className="rounded-[18px] border border-[var(--border)] bg-[var(--background-soft)] p-4">
-            <div className="mb-3 flex size-10 items-center justify-center rounded-2xl bg-[var(--surface)] text-[var(--accent)]">
-              <Headset className="size-4" />
-            </div>
-            <p className="text-sm font-extrabold text-[var(--foreground)]">
-              Soporte técnico
-            </p>
-            <p className="mt-1 text-sm text-[var(--muted)]">
-              Si la operación cambia sobre la marcha, deja este bloque como punto
-              de ayuda rápida.
-            </p>
-            <button className="mt-4 inline-flex w-full items-center justify-center rounded-xl bg-[var(--accent-soft)] px-4 py-2.5 text-sm font-bold text-[var(--accent)] transition hover:bg-[#ffe7ec]">
-              Contactar
-            </button>
+          <div className="flex flex-1 flex-col justify-between px-4 py-6">
+            <DashboardNav />
           </div>
         </aside>
 
-        <main className="min-w-0 flex-1 bg-[var(--background)] px-4 py-5 sm:px-6 lg:px-8">
-          <div className="mb-4 lg:hidden">
-            <DashboardNav mobile />
-          </div>
-          {children}
-        </main>
+        <div className="flex min-w-0 flex-1 flex-col">
+          <header className="sticky top-0 z-40 border-b border-[var(--border)] bg-[rgba(255,255,255,0.88)] backdrop-blur-md">
+            <div className="flex h-20 items-center gap-4 px-4 sm:px-6 lg:px-8">
+              <div className="flex min-w-0 flex-1 items-center gap-4">
+                <div className="flex items-center gap-3 lg:hidden">
+                  <BasketMark />
+                  <p className="text-sm font-extrabold tracking-[-0.03em] text-[var(--foreground)]">
+                    {APP_NAME}
+                  </p>
+                </div>
+
+                <DashboardHeaderUtility />
+              </div>
+
+              <div className="ml-auto flex items-center gap-4 sm:gap-5">
+                <button className="relative flex size-11 items-center justify-center rounded-2xl bg-[var(--surface)] text-[#52627b] transition hover:bg-[var(--background-soft)] hover:text-[var(--foreground)]">
+                  <Bell className="size-5" />
+                  <span className="absolute right-3 top-2.5 size-2.5 rounded-full bg-[var(--accent)]" />
+                </button>
+                <Link
+                  href="/settings"
+                  className="flex size-11 items-center justify-center rounded-2xl bg-[var(--surface)] text-[#52627b] transition hover:bg-[var(--background-soft)] hover:text-[var(--foreground)]"
+                  title="Configuración"
+                >
+                  <Settings2 className="size-5" />
+                </Link>
+                <div className="hidden h-10 w-px bg-[var(--border)] sm:block" />
+                <UserProfileChip
+                  userId={user?.userId ?? null}
+                  fullName={displayName}
+                  email={user?.email ?? null}
+                  roleLabel={roleLabel}
+                />
+                {user?.userId ? (
+                  <form action={signOutAction}>
+                    <SubmitButton
+                      variant="ghost"
+                      pendingLabel="Saliendo..."
+                      className="size-11 rounded-2xl px-0"
+                    >
+                      <LogOut className="size-4" />
+                    </SubmitButton>
+                  </form>
+                ) : null}
+              </div>
+            </div>
+          </header>
+
+          <main className="min-w-0 flex-1 bg-[var(--page-canvas)] px-4 py-5 sm:px-6 lg:px-8">
+            <div className="mb-4 lg:hidden">
+              <DashboardNav mobile />
+            </div>
+            {children}
+          </main>
+
+          <footer className="border-t border-[var(--border)] bg-[var(--page-footer-bg)] px-4 py-8 backdrop-blur-sm sm:px-6 lg:px-8">
+            <div className="flex flex-col gap-4">
+              <p className="text-center text-[11px] font-black uppercase tracking-[0.28em] text-[#94a3b8]">
+                {APP_RELEASE_LABEL}
+              </p>
+              <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2">
+                {systemStatus.map((item) => (
+                  <span
+                    key={item.label}
+                    className="inline-flex items-center gap-2 text-xs font-medium text-[#64748b]"
+                  >
+                    <span
+                      className={
+                        item.tone === "success"
+                          ? "size-2 rounded-full bg-emerald-500"
+                          : "size-2 rounded-full bg-slate-400"
+                      }
+                    />
+                    {item.label}: {item.value}
+                  </span>
+                ))}
+              </div>
+            </div>
+          </footer>
+        </div>
       </div>
     </div>
   );

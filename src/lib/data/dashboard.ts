@@ -15,7 +15,7 @@ import type {
   PersonListItem,
 } from "@/lib/types";
 
-type GridFilters = {
+export type GridFilters = {
   view: "day" | "month";
   date: string;
   q: string;
@@ -24,6 +24,12 @@ type GridFilters = {
   status: string;
   owner: string;
   timezone: string;
+};
+
+export type GridCalendarDaySummary = {
+  date: string;
+  total: number;
+  competitions: Record<string, number>;
 };
 
 type ActiveRole = Pick<
@@ -227,6 +233,97 @@ export async function getGridData(filters: GridFilters) {
     leagueOptions,
     modeOptions,
   };
+}
+
+export async function getGridCalendarData({
+  month,
+  q,
+  league,
+  mode,
+  status,
+  owner,
+  timezone,
+}: Pick<GridFilters, "q" | "league" | "mode" | "status" | "owner" | "timezone"> & {
+  month: string;
+}) {
+  const supabase = await createSupabaseServerClient();
+  const window = resolveDateWindow({
+    view: "month",
+    date: month,
+    timezone,
+  });
+
+  let query = supabase
+    .from("matches")
+    .select("kickoff_at, timezone, production_mode, competition, home_team, away_team, status, owner_id")
+    .gte("kickoff_at", window.startUtc)
+    .lte("kickoff_at", window.endUtc)
+    .order("kickoff_at", { ascending: true });
+
+  if (league) {
+    query = query.eq("competition", league);
+  }
+
+  if (mode) {
+    query = query.eq("production_mode", mode);
+  }
+
+  if (status) {
+    query = query.eq("status", status as MatchRow["status"]);
+  }
+
+  if (owner) {
+    query = query.eq("owner_id", owner);
+  }
+
+  if (q) {
+    const term = q.replaceAll(",", " ").trim();
+    query = query.or(
+      `home_team.ilike.%${term}%,away_team.ilike.%${term}%,competition.ilike.%${term}%`,
+    );
+  }
+
+  const { data, error } = await query;
+
+  if (error) {
+    throw error;
+  }
+
+  const matches = (data ?? []) as Array<
+    Pick<
+      MatchRow,
+      | "kickoff_at"
+      | "timezone"
+      | "production_mode"
+      | "competition"
+      | "home_team"
+      | "away_team"
+      | "status"
+      | "owner_id"
+    >
+  >;
+
+  const byDay = matches.reduce<Map<string, GridCalendarDaySummary>>((map, match) => {
+    const dateKey = toDateKey(match.kickoff_at, match.timezone ?? timezone);
+    const existing = map.get(dateKey) ?? {
+      date: dateKey,
+      total: 0,
+      competitions: {},
+    };
+
+    existing.total += 1;
+
+    const competitionKey = match.competition?.trim() || "Sin liga";
+    existing.competitions[competitionKey] =
+      (existing.competitions[competitionKey] ?? 0) + 1;
+
+    map.set(dateKey, existing);
+    return map;
+  }, new Map());
+
+  return Array.from(byDay.values()).sort((left, right) =>
+    left.date.localeCompare(right.date),
+  );
 }
 
 export async function getMatchDetailData(matchId: string) {

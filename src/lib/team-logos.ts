@@ -10,9 +10,19 @@ type LogoEntry = {
   baseName: string;
   baseNormalized: string;
   tokens: string[];
+  rootPriority: number;
 };
 
-const LOGO_ROOT = path.join(process.cwd(), "public", "Logos");
+const LOGO_ROOTS = [
+  {
+    dir: path.join(process.cwd(), "public", "LogosPNG"),
+    rootPriority: 2,
+  },
+  {
+    dir: path.join(process.cwd(), "public", "Logos"),
+    rootPriority: 1,
+  },
+] as const;
 const STOPWORDS = new Set([
   "de",
   "del",
@@ -53,10 +63,13 @@ const COMPETITION_FOLDER_HINTS: Array<{
   },
   {
     match: ["liga metropolitana"],
-    folders: ["logos liga metropolitana 500 x 500"],
+    folders: [
+      "logos liga metropolitana 500 x 500",
+      "logos liga metroplitana 500 x 500",
+    ],
   },
   {
-    match: ["liga femenina"],
+    match: ["liga femenina", "liga metropolitana fem"],
     folders: ["logos liga femenina 500 x 500"],
   },
 ];
@@ -69,7 +82,6 @@ const TEAM_QUERY_ALIASES: Record<string, string[]> = {
   "gimnasia y esgrima de comodoro rivadavia": ["gimnasia cr", "gimnasia comodoro"],
   "la union de formosa": ["la union"],
   "obera tenis club": ["obera"],
-  "olimpico de la banda": ["olimpico"],
   "racing de chivilcoy": ["racing ch", "racing"],
   "regatas corrientes": ["regatas"],
   "san lorenzo de almagro": ["san lorenzo"],
@@ -129,6 +141,7 @@ const TEAM_QUERY_ALIASES: Record<string, string[]> = {
   "independiente de general pico": ["independiente gral pico", "independiente general pico"],
   "independiente de neuquen": ["independiente neuquen"],
   "independiente de tandil": ["independiente tandil"],
+  "independiente de oliva": ["independiente oliva", "independiente o"],
   "jose hernandez": ["jose hernandez"],
   "la armonia de colon": ["la armonia colon"],
   "los indios de moreno": ["los indios moreno"],
@@ -138,6 +151,8 @@ const TEAM_QUERY_ALIASES: Record<string, string[]> = {
   "nautico avellaneda": ["nautico", "nautico rosario"],
   "nautico sportivo avellaneda": ["nautico", "nautico rosario"],
   "olimpia de venado tuerto": ["olimpia de venado tuerto", "olimpia"],
+  "olimpico de la banda": ["olimpico", "olimpico la banda"],
+  "peñarol de mar del plata": ["penarol", "penarol mdp", "peñarol"],
   "pacifico de neuquen": ["pacifico neuquen"],
   "presidente derqui": ["pte derqui", "presidente derqui"],
   "quique club de parana": ["quique parana", "quique"],
@@ -218,19 +233,22 @@ function readLogoFiles(dir: string): string[] {
   return files;
 }
 
-const LOGO_ENTRIES: LogoEntry[] = readLogoFiles(LOGO_ROOT).map((absolutePath) => {
-  const baseName = path.basename(absolutePath, path.extname(absolutePath));
-  const folder = path.basename(path.dirname(absolutePath));
+const LOGO_ENTRIES: LogoEntry[] = LOGO_ROOTS.flatMap(({ dir, rootPriority }) =>
+  readLogoFiles(dir).map((absolutePath) => {
+    const baseName = path.basename(absolutePath, path.extname(absolutePath));
+    const folder = path.basename(path.dirname(absolutePath));
 
-  return {
-    src: toPublicPath(absolutePath),
-    folder,
-    folderNormalized: normalizeText(folder),
-    baseName,
-    baseNormalized: normalizeText(baseName),
-    tokens: tokenize(baseName),
-  };
-});
+    return {
+      src: toPublicPath(absolutePath),
+      folder,
+      folderNormalized: normalizeText(folder),
+      baseName,
+      baseNormalized: normalizeText(baseName),
+      tokens: tokenize(baseName),
+      rootPriority,
+    };
+  }),
+);
 
 function getCompetitionFolderHints(competition?: string | null) {
   const normalizedCompetition = normalizeText(competition ?? "");
@@ -287,6 +305,8 @@ function scoreEntry(
   if (competitionFolders.some((folder) => entry.folderNormalized.includes(folder))) {
     score += 220;
   }
+
+  score += entry.rootPriority * 12;
 
   return score;
 }

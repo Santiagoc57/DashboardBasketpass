@@ -19,7 +19,7 @@ const plexMono = IBM_Plex_Mono({
 export const metadata: Metadata = {
   title: APP_NAME,
   description:
-    "Grilla operativa con asignaciones, auditoria, permisos y flujo de produccion en vivo.",
+    "Grilla operativa con asignaciones, auditoría, permisos y flujo de producción en vivo.",
 };
 
 export default function RootLayout({

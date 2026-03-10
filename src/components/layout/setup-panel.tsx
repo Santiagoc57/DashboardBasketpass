@@ -7,7 +7,7 @@ export function SetupPanel() {
     <Card className="space-y-4 border-[#f2d8ae] bg-[#fffaf0]">
       <div>
         <p className="text-xs uppercase tracking-[0.28em] text-[#9a5a0f]">
-          Setup pendiente
+          Configuración pendiente
         </p>
         <h2 className="mt-2 text-2xl font-semibold text-[var(--foreground)]">
           Falta conectar Supabase
@@ -16,11 +16,14 @@ export function SetupPanel() {
       <div className="space-y-2 text-sm text-[var(--muted)]">
         <p>1. Copia <code>.env.example</code> a <code>.env.local</code>.</p>
         <p>
-          2. Ejecuta el SQL de <code>supabase/migrations/0001_initial.sql</code> y
-          luego <code>supabase/seed.sql</code>.
+          2. Ejecuta los SQL de <code>supabase/migrations/0001_initial.sql</code>,{" "}
+          <code>0002_fix_audit_trigger.sql</code> y{" "}
+          <code>0003_add_operator_roles.sql</code>,{" "}
+          <code>0004_allow_collaborator_edit.sql</code> y luego{" "}
+          <code>supabase/seed.sql</code>.
         </p>
         <p>
-          3. Promove tu usuario a <code>admin</code> desde la tabla{" "}
+          3. Promueve tu usuario a <code>admin</code> desde la tabla{" "}
           <code>profiles</code>.
         </p>
       </div>

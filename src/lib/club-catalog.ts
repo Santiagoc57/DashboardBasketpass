@@ -240,7 +240,28 @@ export const LIGA_ARGENTINA_OFFTUBE_CONTACTS = [
   "Salta Basket",
 ] as const;
 
-export const CLUB_COMPETITIONS = CLUB_CATALOG.map((entry) => entry.competition);
+export const ADDITIONAL_COMPETITIONS = [
+  "ABB",
+  "Amistosos",
+  "BCLA",
+  "Liga Desarrollo",
+  "Liga Sudamericana Masc.",
+  "Super 20",
+  "Amistoso Selección Argentina",
+  "Tour 3x3",
+  "Metro 3x3",
+  "Circuito 3x3",
+  "La Liga 3x3",
+  "Liga Metropolitana Fem",
+  "Supercopa",
+] as const;
+
+export const CLUB_COMPETITIONS = Array.from(
+  new Set([
+    ...CLUB_CATALOG.map((entry) => entry.competition),
+    ...ADDITIONAL_COMPETITIONS,
+  ]),
+);
 
 export const ALL_CLUB_OPTIONS = Array.from(
   new Set([

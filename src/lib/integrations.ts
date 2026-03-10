@@ -1,4 +1,5 @@
 import { toCalendarDates } from "@/lib/date";
+import { getRoleDisplayName } from "@/lib/display";
 import type { AssignmentDetail, MatchDetail } from "@/lib/types";
 import { buildWhatsAppUrl } from "@/lib/utils";
 
@@ -18,7 +19,7 @@ export function buildGoogleCalendarLink(match: MatchDetail) {
       .filter((assignment) => assignment.person)
       .map(
         (assignment) =>
-          `${assignment.role.name}: ${assignment.person?.full_name ?? "Pendiente"}`,
+          `${getRoleDisplayName(assignment.role.name)}: ${assignment.person?.full_name ?? "Pendiente"}`,
       ),
     "",
     `Observaciones: ${match.notes ?? "Sin observaciones"}`,
@@ -50,8 +51,8 @@ export function buildGroupMessage(match: MatchDetail) {
     ...match.assignments
       .filter((assignment) => assignment.person)
       .map((assignment) => {
-        const phone = assignment.person?.phone ?? "sin telefono";
-        return `${assignment.role.name}: ${assignment.person?.full_name} (${phone})`;
+        const phone = assignment.person?.phone ?? "sin teléfono";
+        return `${getRoleDisplayName(assignment.role.name)}: ${assignment.person?.full_name} (${phone})`;
       }),
   ];
 
@@ -63,7 +64,7 @@ export function getWhatsAppRoster(assignments: AssignmentDetail[]) {
     .filter((assignment) => assignment.person?.phone)
     .map((assignment) => ({
       assignmentId: assignment.id,
-      roleName: assignment.role.name,
+      roleName: getRoleDisplayName(assignment.role.name),
       personName: assignment.person?.full_name ?? "Sin asignar",
       phone: assignment.person?.phone ?? "",
       href: buildWhatsAppUrl(assignment.person?.phone),

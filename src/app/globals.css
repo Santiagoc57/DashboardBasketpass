@@ -3,6 +3,8 @@
 :root {
   --background: #fafafa;
   --background-soft: #f6f4f4;
+  --page-canvas: var(--background);
+  --page-footer-bg: rgba(255, 255, 255, 0.72);
   --foreground: #1c0d10;
   --surface: #ffffff;
   --surface-muted: #fdfcfc;
@@ -11,6 +13,8 @@
   --accent: #e61238;
   --accent-soft: #fff0f3;
   --accent-strong: #c61031;
+  --panel-radius: 10px;
+  --panel-shadow: 0 10px 24px rgba(28, 13, 16, 0.05);
 }
 
 @theme inline {
@@ -54,4 +58,20 @@ select option {
 ::selection {
   background: rgba(230, 18, 56, 0.18);
   color: white;
+}
+
+@layer utilities {
+  .rounded-xl,
+  .rounded-2xl {
+    border-radius: var(--panel-radius) !important;
+  }
+
+  .panel-radius {
+    border-radius: var(--panel-radius) !important;
+  }
+
+  .panel-surface {
+    border-radius: var(--panel-radius) !important;
+    box-shadow: var(--panel-shadow) !important;
+  }
 }

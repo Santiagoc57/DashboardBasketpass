@@ -1,0 +1,96 @@
+import type { AppRole } from "@/lib/database.types";
+import type { PersonListItem } from "@/lib/types";
+
+const ROLE_DISPLAY_NAMES: Record<string, string> = {
+  Responsable: "Responsable",
+  Realizador: "Realizador",
+  Productor: "Productor",
+  "Operador de Control": "Operador de control",
+  "Operador de Grafica": "Operador de gráfica",
+  "Soporte tecnico": "Soporte técnico",
+  "Comentario 1": "Comentario 1",
+  "Comentario 2": "Comentario 2",
+  Encoder: "Encoder",
+  Ingenieria: "Ingeniería",
+  "Camara 1": "Cámara 1",
+  "Camara 2": "Cámara 2",
+  "Camara 3": "Cámara 3",
+  "Camara 4": "Cámara 4",
+  "Camara 5": "Cámara 5",
+};
+
+const CATEGORY_DISPLAY_NAMES: Record<string, string> = {
+  Coordinacion: "Coordinación",
+  Produccion: "Producción",
+  Talento: "Talento",
+  Transmision: "Transmisión",
+  Camaras: "Cámaras",
+};
+
+const ASSIGNMENT_STATE_DISPLAY_NAMES: Record<PersonListItem["assignment_state"], string> = {
+  "En asignacion": "En asignación",
+  Disponible: "Disponible",
+  Inactivo: "Inactivo",
+};
+
+const APP_ROLE_DISPLAY_NAMES: Record<AppRole, string> = {
+  admin: "admin",
+  editor: "editor",
+  coordinator: "coordinación",
+  collaborator: "colaborador",
+  viewer: "lectura",
+};
+
+export function getRoleDisplayName(value?: string | null) {
+  if (!value) {
+    return "";
+  }
+
+  return ROLE_DISPLAY_NAMES[value] ?? value;
+}
+
+export function getRoleCategoryDisplayName(value?: string | null) {
+  if (!value) {
+    return "";
+  }
+
+  return CATEGORY_DISPLAY_NAMES[value] ?? value;
+}
+
+export function getAssignmentStateDisplayName(
+  value: PersonListItem["assignment_state"],
+) {
+  return ASSIGNMENT_STATE_DISPLAY_NAMES[value] ?? value;
+}
+
+export function getAppRoleDisplayName(value?: AppRole | null) {
+  if (!value) {
+    return "lectura";
+  }
+
+  return APP_ROLE_DISPLAY_NAMES[value] ?? value;
+}
+
+export function normalizeRoleNameInput(value: string) {
+  const normalized = value.trim();
+  const reverseMap = new Map(
+    Object.entries(ROLE_DISPLAY_NAMES).map(([rawValue, displayValue]) => [
+      displayValue.toLowerCase(),
+      rawValue,
+    ]),
+  );
+
+  return reverseMap.get(normalized.toLowerCase()) ?? normalized;
+}
+
+export function normalizeRoleCategoryInput(value: string) {
+  const normalized = value.trim();
+  const reverseMap = new Map(
+    Object.entries(CATEGORY_DISPLAY_NAMES).map(([rawValue, displayValue]) => [
+      displayValue.toLowerCase(),
+      rawValue,
+    ]),
+  );
+
+  return reverseMap.get(normalized.toLowerCase()) ?? normalized;
+}

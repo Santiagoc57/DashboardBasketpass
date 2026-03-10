@@ -39,6 +39,7 @@ import { ALL_CLUB_OPTIONS, CLUB_COMPETITIONS } from "@/lib/club-catalog";
 import { MATCH_STATUS_OPTIONS, PRODUCTION_MODE_OPTIONS } from "@/lib/constants";
 import { getMatchDetailData } from "@/lib/data/dashboard";
 import { formatMatchDate, formatMatchTime } from "@/lib/date";
+import { getRoleDisplayName } from "@/lib/display";
 import type { PersonRow } from "@/lib/database.types";
 import { isSupabaseConfigured } from "@/lib/env";
 import {
@@ -157,7 +158,7 @@ function AssignmentControls({
         <Input
           name="notes"
           defaultValue={assignment.notes ?? ""}
-          placeholder="Observacion operativa"
+          placeholder="Observación operativa"
           disabled={!canEdit}
         />
       </label>
@@ -208,7 +209,7 @@ function PrincipalAssignmentCard({
     <details
       id={`assignment-${assignment.role.id}`}
       className={cn(
-        "group rounded-[18px] border bg-[var(--surface)] transition",
+        "panel-surface group border bg-[var(--surface)] transition",
         conflict
           ? "border-[#f0c8d1] bg-[#fff7f8]"
           : "border-[var(--border)] hover:border-[#e4cdd1]",
@@ -227,7 +228,7 @@ function PrincipalAssignmentCard({
         </div>
         <div className="min-w-0 flex-1">
           <p className="text-[11px] font-bold uppercase tracking-[0.24em] text-[var(--accent)]">
-            {assignment.role.name}
+            {getRoleDisplayName(assignment.role.name)}
           </p>
           <div className="mt-1 flex items-center gap-2">
             <p
@@ -294,7 +295,7 @@ function CameraAssignmentCard({
     <details
       id={`assignment-${assignment.role.id}`}
       className={cn(
-        "group rounded-[18px] border bg-[var(--surface)] transition",
+        "panel-surface group border bg-[var(--surface)] transition",
         conflict
           ? "border-[#f0c8d1] bg-[#fff7f8]"
           : pending
@@ -305,7 +306,7 @@ function CameraAssignmentCard({
       <summary className="cursor-pointer list-none p-4 [&::-webkit-details-marker]:hidden">
         <div className="flex items-start justify-between gap-3">
           <span className="rounded-md bg-[var(--background-soft)] px-2 py-1 text-[11px] font-bold text-[var(--muted)]">
-            {assignment.role.name}
+            {getRoleDisplayName(assignment.role.name)}
           </span>
           {conflict ? (
             <CircleAlert className="size-4 text-[var(--accent)]" />
@@ -326,7 +327,7 @@ function CameraAssignmentCard({
           {assignment.person?.full_name ?? "Pendiente asignar"}
         </p>
         <p className="mt-1 text-xs text-[var(--muted)]">
-          {assignment.notes ?? (assignment.confirmed ? "Confirmado" : "Sin confirmacion")}
+          {assignment.notes ?? (assignment.confirmed ? "Confirmado" : "Sin confirmación")}
         </p>
         <div className="mt-3 flex items-center justify-end gap-2 text-xs font-semibold text-[var(--muted)]">
           Editar
@@ -365,7 +366,7 @@ function TransmissionAssignmentRow({
     : "bg-[var(--background-soft)] text-[var(--muted)]";
 
   return (
-    <details className="group rounded-[18px] border border-[var(--border)] bg-[var(--surface)]">
+    <details className="panel-surface group border border-[var(--border)] bg-[var(--surface)]">
       <summary className="cursor-pointer list-none p-4 [&::-webkit-details-marker]:hidden">
         <div className="flex items-center gap-4">
           <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[var(--background-soft)] text-[var(--muted)]">
@@ -373,7 +374,7 @@ function TransmissionAssignmentRow({
           </div>
           <div className="min-w-0 flex-1">
             <p className="text-sm font-extrabold text-[var(--foreground)]">
-              {assignment.role.name}
+              {getRoleDisplayName(assignment.role.name)}
             </p>
             <p className="mt-1 text-xs text-[var(--muted)]">
               {assignment.person?.full_name ?? "Pendiente asignar"}
@@ -457,13 +458,13 @@ export default async function MatchDetailPage({
           href="/grid"
           className="font-medium text-[var(--muted)] transition hover:text-[var(--accent)]"
         >
-          Partidos
+          Producción
         </Link>
         <ChevronRight className="size-4 text-[#c9b7bb]" />
         <span className="font-semibold text-[var(--foreground)]">Detalle de Partido</span>
       </nav>
 
-      <section className="relative overflow-hidden rounded-[22px] border border-[var(--border)] bg-[var(--surface)] p-6 shadow-[0_10px_24px_rgba(28,13,16,0.04)]">
+      <section className="panel-surface relative overflow-hidden border border-[var(--border)] bg-[var(--surface)] p-6">
         <div className="absolute inset-y-0 right-0 w-72 bg-gradient-to-l from-[rgba(230,18,56,0.06)] to-transparent pointer-events-none" />
         <div className="relative z-10 flex flex-wrap justify-between gap-6">
           <div className="flex max-w-3xl flex-col gap-3">
@@ -531,7 +532,7 @@ export default async function MatchDetailPage({
               className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-[var(--accent)] px-5 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(230,18,56,0.18)] transition hover:bg-[var(--accent-strong)]"
             >
               <PencilLine className="size-4" />
-              Editar Asignaciones
+              Editar asignaciones
             </a>
           </div>
         </div>
@@ -540,7 +541,7 @@ export default async function MatchDetailPage({
       <PageMessage intent={intent} message={notice} />
 
       {conflicts.length ? (
-        <div className="rounded-[20px] border border-[#f0c8d1] bg-[#fff7f8] p-4">
+        <div className="panel-surface border border-[#f0c8d1] bg-[#fff7f8] p-4">
           <div className="flex items-start gap-3">
             <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[#fff0f3] text-[var(--accent)]">
               <ShieldAlert className="size-5" />
@@ -557,7 +558,7 @@ export default async function MatchDetailPage({
         </div>
       ) : null}
 
-      <details className="rounded-[20px] border border-[var(--border)] bg-[var(--surface)]">
+      <details className="panel-surface border border-[var(--border)] bg-[var(--surface)]">
         <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-5 py-4 [&::-webkit-details-marker]:hidden">
           <div>
             <p className="text-xs font-bold uppercase tracking-[0.28em] text-[var(--accent)]">
@@ -684,7 +685,7 @@ export default async function MatchDetailPage({
               </label>
               <label className="space-y-2">
                 <span className="text-xs font-bold uppercase tracking-[0.22em] text-[var(--muted)]">
-                  Duracion
+                  Duración
                 </span>
                 <Input
                   type="number"
@@ -808,7 +809,7 @@ export default async function MatchDetailPage({
                 ))}
               </div>
             ) : (
-              <div className="rounded-[18px] border border-dashed border-[var(--border)] bg-[var(--surface)] p-4 text-sm text-[var(--muted)]">
+              <div className="panel-surface border border-dashed border-[var(--border)] bg-[var(--surface)] p-4 text-sm text-[var(--muted)]">
                 No hay roles de cámara activos en este partido.
               </div>
             )}
@@ -836,7 +837,7 @@ export default async function MatchDetailPage({
                 ))}
               </div>
             ) : (
-              <div className="rounded-[18px] border border-dashed border-[var(--border)] bg-[var(--surface)] p-4 text-sm text-[var(--muted)]">
+              <div className="panel-surface border border-dashed border-[var(--border)] bg-[var(--surface)] p-4 text-sm text-[var(--muted)]">
                 Aún no hay datos cargados para transmisión.
               </div>
             )}

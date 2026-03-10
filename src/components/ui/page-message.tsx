@@ -19,7 +19,7 @@ export function PageMessage({
   return (
     <div
       className={cn(
-        "flex items-center gap-3 rounded-xl border px-4 py-3 text-sm",
+        "panel-surface flex items-center gap-3 border px-4 py-3 text-sm",
         success
           ? "border-[#cce8db] bg-[#effaf4] text-[#17654d]"
           : "border-[#f2d8ae] bg-[#fff8ea] text-[#9a5a0f]",

@@ -34,7 +34,7 @@ export function GroupActions({
         </div>
         <CopyButton value={message} label="Copiar grupo" />
       </div>
-      <div className="flex items-start gap-3 rounded-[20px] border border-[var(--border)] bg-[var(--background-soft)] p-4">
+      <div className="panel-surface flex items-start gap-3 border border-[var(--border)] bg-[var(--background-soft)] p-4">
         <div className="flex size-11 items-center justify-center rounded-2xl bg-[var(--surface)] text-[var(--accent)] shadow-sm">
           <UsersRound className="size-5" />
         </div>
@@ -51,7 +51,7 @@ export function GroupActions({
         {roster.map((contact) => (
           <div
             key={contact.assignmentId}
-            className="flex flex-col gap-3 rounded-[20px] border border-[var(--border)] bg-[var(--surface-muted)] p-4 sm:flex-row sm:items-center sm:justify-between"
+            className="panel-surface flex flex-col gap-3 border border-[var(--border)] bg-[var(--surface-muted)] p-4 sm:flex-row sm:items-center sm:justify-between"
           >
             <div>
               <p className="text-sm font-bold text-[var(--foreground)]">{contact.personName}</p>
@@ -70,7 +70,7 @@ export function GroupActions({
                 Abrir WhatsApp
               </Link>
             ) : (
-              <span className="text-sm text-[var(--muted)]">Sin telefono</span>
+              <span className="text-sm text-[var(--muted)]">Sin teléfono</span>
             )}
           </div>
         ))}
