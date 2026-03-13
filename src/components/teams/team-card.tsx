@@ -5,19 +5,22 @@ import {
   ExternalLink,
   Globe,
   Instagram,
+  Mail,
   MapPinned,
+  MessageCircle,
   ShieldAlert,
   UserRound,
 } from "lucide-react";
 
 import { TeamLogoMark } from "@/components/team-logo-mark";
+import type { TeamResponsibleContact } from "@/lib/team-responsibles";
 import {
   getTeamLeagueAccentColor,
   getTeamLeagueColorSet,
   splitTeamCompetitions,
   type TeamDirectoryItem,
 } from "@/lib/team-directory";
-import { cn } from "@/lib/utils";
+import { buildWhatsAppUrl, cn } from "@/lib/utils";
 
 function getLeagueBadgeStyle(competition: string): CSSProperties {
   const colors = getTeamLeagueColorSet(competition);
@@ -70,13 +73,17 @@ function TeamLinkIcon({
 export function TeamCard({
   team,
   activeLeague,
+  responsibleContact,
 }: {
   team: TeamDirectoryItem;
   activeLeague?: string;
+  responsibleContact?: TeamResponsibleContact | null;
 }) {
   const leagueBadges = splitTeamCompetitions(team.competition);
   const primaryLeague = activeLeague || leagueBadges[0] || team.competition;
   const hoverAccent = getTeamLeagueAccentColor(primaryLeague);
+  const responsibleLabel =
+    responsibleContact?.fullName ?? team.manager ?? "Sin responsable";
 
   return (
     <article
@@ -145,7 +152,27 @@ export function TeamCard({
             </div>
             <div className="flex items-center gap-2">
               <UserRound className="size-4 shrink-0" />
-              <span>Resp: {team.manager ?? "Sin responsable"}</span>
+              <span className="min-w-0 truncate">Resp: {responsibleLabel}</span>
+              {responsibleContact?.phone ? (
+                <a
+                  href={buildWhatsAppUrl(responsibleContact.phone)}
+                  target="_blank"
+                  rel="noreferrer"
+                  aria-label={`Escribir por WhatsApp a ${responsibleContact.fullName}`}
+                  className="inline-flex size-8 shrink-0 items-center justify-center rounded-full bg-[#ecfdf3] text-[#16a34a] transition hover:bg-[#dcfce7]"
+                >
+                  <MessageCircle className="size-4" />
+                </a>
+              ) : null}
+              {responsibleContact?.email ? (
+                <a
+                  href={`mailto:${responsibleContact.email}`}
+                  aria-label={`Escribir por correo a ${responsibleContact.fullName}`}
+                  className="inline-flex size-8 shrink-0 items-center justify-center rounded-full bg-[#eef2ff] text-[#4f46e5] transition hover:bg-[#e0e7ff]"
+                >
+                  <Mail className="size-4" />
+                </a>
+              ) : null}
             </div>
           </div>
         </div>

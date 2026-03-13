@@ -4,6 +4,7 @@ export const appEnv = {
   supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY ?? "",
   appTimezone: process.env.NEXT_PUBLIC_APP_TIMEZONE ?? "America/Bogota",
   appUrl: process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000",
+  allowGuestMiJornadaAccess: process.env.ALLOW_GUEST_MI_JORNADA === "true",
 };
 
 export const isSupabaseConfigured = Boolean(

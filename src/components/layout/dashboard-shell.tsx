@@ -1,14 +1,15 @@
 import Link from "next/link";
-import { Bell, LogOut, Settings2 } from "lucide-react";
+import { LogOut, Settings2 } from "lucide-react";
 
 import { signOutAction } from "@/app/actions/auth";
-import { DashboardHeaderUtility } from "@/components/layout/dashboard-header-search";
+import { DashboardAnnouncementBell } from "@/components/layout/dashboard-announcement-bell";
+import { DashboardFooterMeta } from "@/components/layout/dashboard-footer-meta";
 import { DashboardNav } from "@/components/layout/dashboard-nav";
 import { UserProfileChip } from "@/components/layout/user-profile-chip";
 import { SubmitButton } from "@/components/ui/submit-button";
-import { APP_NAME, APP_RELEASE_LABEL } from "@/lib/constants";
+import { APP_NAME } from "@/lib/constants";
+import type { AnnouncementSummary } from "@/lib/data/announcements";
 import { getAppRoleDisplayName } from "@/lib/display";
-import { getSystemStatus } from "@/lib/system-status";
 import type { UserContext } from "@/lib/types";
 
 function BasketMark() {
@@ -37,36 +38,37 @@ function BasketMark() {
 export function DashboardShell({
   children,
   user,
+  announcement,
 }: {
   children: React.ReactNode;
   user: UserContext | null;
+  announcement: AnnouncementSummary | null;
 }) {
   const displayName =
     user?.profile?.full_name?.trim() ||
     user?.email?.split("@")[0] ||
     "Usuario";
   const roleLabel = getAppRoleDisplayName(user?.role).toUpperCase();
-  const systemStatus = getSystemStatus(Boolean(user?.userId));
 
   return (
     <div className="min-h-screen bg-[var(--page-canvas)]">
       <div className="flex min-h-screen">
-        <aside className="sticky top-0 hidden h-screen w-72 shrink-0 flex-col overflow-y-auto border-r border-[var(--border)] bg-[var(--surface)] lg:flex">
-          <div className="border-b border-[var(--border)] px-6 py-7">
+        <aside className="sticky top-0 hidden h-screen w-72 shrink-0 flex-col overflow-y-auto border-r border-[#10203f] bg-[#07122b] lg:flex">
+          <div className="border-b border-[#10203f] px-6 py-7">
             <div className="flex items-center gap-4">
               <BasketMark />
               <div className="min-w-0">
-                <p className="text-[1.5rem] font-extrabold leading-none tracking-[-0.04em] text-[var(--foreground)]">
+                <p className="text-[1.5rem] font-extrabold leading-none tracking-[-0.04em] text-white">
                   BASKET
                 </p>
-                <p className="mt-1 text-[11px] font-black uppercase tracking-[0.32em] text-[var(--accent)]">
-                  Production
+                <p className="mt-1 text-[11px] font-black uppercase tracking-[0.28em] text-[#9eb0cc]">
+                  Novedades Portal
                 </p>
               </div>
             </div>
           </div>
 
-          <div className="flex flex-1 flex-col justify-between px-4 py-6">
+          <div className="flex flex-1 flex-col justify-between px-5 py-6">
             <DashboardNav />
           </div>
         </aside>
@@ -81,18 +83,13 @@ export function DashboardShell({
                     {APP_NAME}
                   </p>
                 </div>
-
-                <DashboardHeaderUtility />
               </div>
 
               <div className="ml-auto flex items-center gap-4 sm:gap-5">
-                <button className="relative flex size-11 items-center justify-center rounded-2xl bg-[var(--surface)] text-[#52627b] transition hover:bg-[var(--background-soft)] hover:text-[var(--foreground)]">
-                  <Bell className="size-5" />
-                  <span className="absolute right-3 top-2.5 size-2.5 rounded-full bg-[var(--accent)]" />
-                </button>
+                <DashboardAnnouncementBell announcement={announcement} />
                 <Link
                   href="/settings"
-                  className="flex size-11 items-center justify-center rounded-2xl bg-[var(--surface)] text-[#52627b] transition hover:bg-[var(--background-soft)] hover:text-[var(--foreground)]"
+                  className="hidden size-11 items-center justify-center rounded-2xl bg-[var(--surface)] text-[#52627b] transition hover:bg-[var(--background-soft)] hover:text-[var(--foreground)] sm:flex"
                   title="Configuración"
                 >
                   <Settings2 className="size-5" />
@@ -103,9 +100,18 @@ export function DashboardShell({
                   fullName={displayName}
                   email={user?.email ?? null}
                   roleLabel={roleLabel}
+                  mobileMenu
+                  className="sm:hidden"
+                />
+                <UserProfileChip
+                  userId={user?.userId ?? null}
+                  fullName={displayName}
+                  email={user?.email ?? null}
+                  roleLabel={roleLabel}
+                  className="hidden sm:flex"
                 />
                 {user?.userId ? (
-                  <form action={signOutAction}>
+                  <form action={signOutAction} className="hidden sm:block">
                     <SubmitButton
                       variant="ghost"
                       pendingLabel="Saliendo..."
@@ -120,35 +126,11 @@ export function DashboardShell({
           </header>
 
           <main className="min-w-0 flex-1 bg-[var(--page-canvas)] px-4 py-5 sm:px-6 lg:px-8">
-            <div className="mb-4 lg:hidden">
-              <DashboardNav mobile />
-            </div>
             {children}
           </main>
 
-          <footer className="border-t border-[var(--border)] bg-[var(--page-footer-bg)] px-4 py-8 backdrop-blur-sm sm:px-6 lg:px-8">
-            <div className="flex flex-col gap-4">
-              <p className="text-center text-[11px] font-black uppercase tracking-[0.28em] text-[#94a3b8]">
-                {APP_RELEASE_LABEL}
-              </p>
-              <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2">
-                {systemStatus.map((item) => (
-                  <span
-                    key={item.label}
-                    className="inline-flex items-center gap-2 text-xs font-medium text-[#64748b]"
-                  >
-                    <span
-                      className={
-                        item.tone === "success"
-                          ? "size-2 rounded-full bg-emerald-500"
-                          : "size-2 rounded-full bg-slate-400"
-                      }
-                    />
-                    {item.label}: {item.value}
-                  </span>
-                ))}
-              </div>
-            </div>
+          <footer className="border-t border-[var(--border)] bg-[var(--page-footer-bg)] px-4 py-6 backdrop-blur-sm sm:px-6 lg:px-8">
+            <DashboardFooterMeta userName={displayName} />
           </footer>
         </div>
       </div>

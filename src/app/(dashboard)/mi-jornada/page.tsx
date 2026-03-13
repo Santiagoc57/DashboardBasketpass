@@ -1,30 +1,22 @@
+import type { ReactNode } from "react";
 import Link from "next/link";
-import { format, parseISO } from "date-fns";
+import { addDays, format, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
-import {
-  CalendarDays,
-  ChevronRight,
-  Hash,
-  MessageCircleMore,
-  Mic2,
-  Radio,
-  ShieldUser,
-  Sparkles,
-  UserRound,
-  Video,
-} from "lucide-react";
+import { CalendarDays, ChevronLeft, ChevronRight, Hash, Sparkles, UserRound } from "lucide-react";
 
+import { SectionAiAssistant } from "@/components/ai/section-ai-assistant";
+import { MyDayAssignmentsPanel } from "@/components/collaborators/my-day-assignments-panel";
 import { SetupPanel } from "@/components/layout/setup-panel";
-import { TeamLogoMark } from "@/components/team-logo-mark";
-import { Card } from "@/components/ui/card";
-import { requireUserContext } from "@/lib/auth";
-import { getRoleDisplayName } from "@/lib/display";
-import { isSupabaseConfigured } from "@/lib/env";
+import { SectionPageHeader } from "@/components/layout/section-page-header";
+import { getUserContext } from "@/lib/auth";
 import {
   type CollaboratorAssignmentItem,
+  type CollaboratorGroupContact,
   getCollaboratorDayData,
 } from "@/lib/data/collaborators";
-import { buildWhatsAppUrl, cn, normalizeText } from "@/lib/utils";
+import { appEnv, isSupabaseConfigured } from "@/lib/env";
+import { getSettingsSnapshot } from "@/lib/settings";
+import { cn } from "@/lib/utils";
 
 type PageProps = {
   searchParams: Promise<{ date?: string }>;
@@ -52,202 +44,92 @@ function formatCompactMatchDate(dateValue: string) {
   }).toUpperCase();
 }
 
-function buildProductionId(matchId: string) {
-  const compact = matchId.replaceAll("-", "").toUpperCase();
-  return `PRD-${compact.slice(0, 4)}-${compact.slice(4, 8)}`;
+function formatAssignmentDateLabel(dateTimeValue: string) {
+  return capitalizeSentence(format(parseISO(dateTimeValue), "d MMM yyyy", { locale: es }));
 }
 
-const NAME_CONNECTORS = new Set([
-  "de",
-  "del",
-  "la",
-  "las",
-  "los",
-  "da",
-  "das",
-  "do",
-  "dos",
-  "van",
-  "von",
-  "y",
-]);
+function formatContentUpdatedLabel() {
+  const now = new Date();
+  const dateFormatter = new Intl.DateTimeFormat("es-CO", {
+    timeZone: appEnv.appTimezone,
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+  const timeFormatter = new Intl.DateTimeFormat("es-CO", {
+    timeZone: appEnv.appTimezone,
+    hour: "numeric",
+    minute: "2-digit",
+  });
+  const dateParts = dateFormatter.formatToParts(now);
+  const day = dateParts.find((part) => part.type === "day")?.value ?? "";
+  const month = dateParts.find((part) => part.type === "month")?.value ?? "";
+  const year = dateParts.find((part) => part.type === "year")?.value ?? "";
 
-function abbreviatePersonName(value: string | null | undefined) {
-  if (!value?.trim()) {
-    return "Sin asignar";
-  }
-
-  const parts = value.trim().split(/\s+/).filter(Boolean);
-
-  if (parts.length === 1) {
-    return capitalizeSentence(parts[0]);
-  }
-
-  const surname =
-    parts
-      .slice(1)
-      .find((part) => !NAME_CONNECTORS.has(normalizeText(part))) ?? parts[1];
-
-  return `${parts[0][0]?.toUpperCase() ?? ""}. ${capitalizeSentence(surname)}`;
+  return `${day} de ${month} de ${year}, ${timeFormatter.format(now)}`;
 }
 
-function abbreviateNameList(value: string | null | undefined) {
-  if (!value?.trim()) {
-    return "Sin asignar";
-  }
+function getTodayDateKey() {
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone: appEnv.appTimezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+  const parts = formatter.formatToParts(new Date());
+  const year = parts.find((part) => part.type === "year")?.value ?? "0000";
+  const month = parts.find((part) => part.type === "month")?.value ?? "01";
+  const day = parts.find((part) => part.type === "day")?.value ?? "01";
 
-  return value
-    .split("/")
-    .map((item) => abbreviatePersonName(item.trim()))
-    .join(" / ");
+  return `${year}-${month}-${day}`;
 }
 
-function AssignmentInfoItem({
-  icon: Icon,
+function buildDayHref(dateValue: string, offset: number) {
+  const nextDate = addDays(parseISO(`${dateValue}T00:00:00`), offset);
+  return `/mi-jornada?date=${format(nextDate, "yyyy-MM-dd")}`;
+}
+
+function DaySummaryCard({
   label,
   value,
-  className,
+  icon: Icon,
+  tone = "default",
+  valueClassName,
 }: {
+  label: ReactNode;
+  value: string | number;
   icon: typeof UserRound;
-  label: string;
-  value: string;
-  className?: string;
+  tone?: "default" | "accent";
+  valueClassName?: string;
 }) {
   return (
-    <div
-      className={cn(
-        "rounded-[18px] border border-[var(--border)] bg-[var(--surface)] px-4 py-3",
-        className,
-      )}
-    >
-      <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.2em] text-[#95a3ba]">
-        <Icon className="size-4 text-[var(--accent)]" />
-        {label}
+    <div className="rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--background-soft)] px-4 py-4">
+      <div className="flex items-start justify-between gap-3">
+        <p className="text-[11px] font-black uppercase tracking-[0.2em] text-[#95a3ba]">
+          {label}
+        </p>
+        <span
+          className={cn(
+            "inline-flex size-10 shrink-0 items-center justify-center rounded-[var(--panel-radius)] border",
+            tone === "accent"
+              ? "border-[#f4d4dc] bg-[#fff4f7] text-[var(--accent)]"
+              : "border-[var(--border)] bg-[var(--surface)] text-[#94a3b8]",
+          )}
+        >
+          <Icon className="size-4" />
+        </span>
       </div>
-      <p className="mt-2 text-sm font-semibold leading-snug text-[var(--foreground)]">
+      <p
+        className={cn(
+          "mt-4 text-[28px] font-black leading-none text-[var(--foreground)]",
+          typeof value === "string" && value.length > 18 && "text-base leading-tight",
+          tone === "accent" && "text-[var(--accent)]",
+          valueClassName,
+        )}
+      >
         {value}
       </p>
     </div>
-  );
-}
-
-function AssignmentCard({ assignment }: { assignment: CollaboratorAssignmentItem }) {
-  const groupHref = buildWhatsAppUrl(assignment.ownerPhone);
-  const canOpenGroup = Boolean(groupHref);
-  const compactDate = formatCompactMatchDate(assignment.kickoffAt.slice(0, 10));
-  const leagueLabel = assignment.competition ?? "Sin liga";
-  const roleLabel = getRoleDisplayName(assignment.roleName) || "Sin rol";
-  const productionCode = buildProductionId(assignment.matchId);
-  const responsibleLabel = abbreviatePersonName(
-    assignment.responsibleName ?? assignment.ownerName,
-  );
-
-  return (
-    <Card className="overflow-hidden rounded-[24px] border border-[var(--border)] bg-[var(--surface)] p-0 shadow-[0_16px_36px_rgba(28,13,16,0.06)]">
-      <div className="space-y-5 p-5">
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex flex-wrap gap-2">
-            <span className="rounded-[10px] bg-[var(--accent-soft)] px-3 py-1 text-[11px] font-black uppercase tracking-[0.18em] text-[var(--accent)]">
-              {leagueLabel}
-            </span>
-            {assignment.productionMode ? (
-              <span className="rounded-[10px] border border-[var(--border)] bg-[var(--surface)] px-3 py-1 text-[11px] font-black uppercase tracking-[0.18em] text-[#617187]">
-                {assignment.productionMode}
-              </span>
-            ) : null}
-          </div>
-
-          <div className="rounded-[14px] border border-[var(--border)] bg-[var(--background-soft)] px-4 py-2 text-center shadow-[0_10px_18px_rgba(31,41,55,0.05)]">
-            <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.18em] text-[#7d8da6]">
-              <CalendarDays className="size-3.5 text-[var(--accent)]" />
-              {compactDate}
-            </div>
-            <p className="mt-1 text-[28px] font-black leading-none text-[var(--accent)]">
-              {assignment.timeLabel}
-            </p>
-          </div>
-        </div>
-
-        <div className="space-y-4">
-          <div className="flex items-center gap-3">
-            <TeamLogoMark
-              teamName={assignment.homeTeam}
-              competition={assignment.competition}
-              className="size-11 rounded-full"
-              imageClassName="p-1.5"
-            />
-            <div className="flex-1">
-              <h2 className="text-[22px] font-black leading-tight tracking-tight text-[var(--foreground)]">
-                {assignment.homeTeam}{" "}
-                <span className="text-[var(--accent)]">vs</span>{" "}
-                {assignment.awayTeam}
-              </h2>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 text-sm font-semibold text-[#7c5f18]">
-            <ShieldUser className="size-4 text-[#f3a623]" />
-            Responsable: {responsibleLabel}
-          </div>
-        </div>
-
-        <div className="grid gap-4 border-t border-[var(--border)] pt-5 sm:grid-cols-2">
-          <AssignmentInfoItem
-            icon={Video}
-            label="Realizador"
-            value={abbreviatePersonName(assignment.realizerName)}
-          />
-          <AssignmentInfoItem
-            icon={Hash}
-            label="ID evento"
-            value={productionCode}
-          />
-          <AssignmentInfoItem
-            icon={Mic2}
-            label="Talento"
-            value={abbreviateNameList(assignment.talentLabel)}
-          />
-          <AssignmentInfoItem
-            icon={ShieldUser}
-            label="Tu rol"
-            value={roleLabel}
-          />
-          <AssignmentInfoItem
-            icon={Radio}
-            label="Sede"
-            value={assignment.venue ?? "Por definir"}
-            className="sm:col-span-2"
-          />
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-3 border-t border-[var(--border)] bg-[var(--background-soft)] p-4">
-        {canOpenGroup ? (
-          <Link
-            href={groupHref}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex h-12 items-center justify-center gap-2 rounded-[18px] bg-[#1faa52] px-4 text-sm font-black text-white shadow-[0_14px_28px_rgba(31,170,82,0.18)] transition hover:brightness-105"
-          >
-            <MessageCircleMore className="size-4" />
-            Grupo WhatsApp
-          </Link>
-        ) : (
-          <span className="inline-flex h-12 items-center justify-center gap-2 rounded-[18px] border border-[var(--border)] bg-[#eef7f0] px-4 text-sm font-black text-[#7ca488]">
-            <MessageCircleMore className="size-4" />
-            Grupo WhatsApp
-          </span>
-        )}
-
-        <Link
-          href={`/mi-jornada/${assignment.matchId}/reportar`}
-          className="inline-flex h-12 items-center justify-center gap-2 rounded-[18px] bg-[var(--accent)] px-4 text-sm font-black text-white shadow-[0_14px_28px_rgba(230,18,56,0.18)] transition hover:bg-[var(--accent-strong)]"
-        >
-          <Sparkles className="size-4" />
-          Reportar
-        </Link>
-      </div>
-    </Card>
   );
 }
 
@@ -255,6 +137,57 @@ function buildDemoAssignment(params: {
   date: string;
   collaboratorName: string;
 }): CollaboratorAssignmentItem {
+  const contacts: CollaboratorGroupContact[] = [
+    {
+      roleName: "Responsable",
+      roleCategory: "Coordinacion",
+      sortOrder: 10,
+      personName: params.collaboratorName,
+      phone: "573000000000",
+      email: "santiago.demo@basketproduction.pro",
+    },
+    {
+      roleName: "Realizador",
+      roleCategory: "Produccion",
+      sortOrder: 20,
+      personName: params.collaboratorName,
+      phone: "573000000000",
+      email: "santiago.demo@basketproduction.pro",
+    },
+    {
+      roleName: "Operador de Control",
+      roleCategory: "Produccion",
+      sortOrder: 30,
+      personName: "Mauro Ruiz Díaz",
+      phone: "573001112233",
+      email: "mauro.ruiz@basketproduction.pro",
+    },
+    {
+      roleName: "Soporte tecnico",
+      roleCategory: "Produccion",
+      sortOrder: 40,
+      personName: "Fary Leonardo Urriaga",
+      phone: "573001112244",
+      email: "fary.urriaga@basketproduction.pro",
+    },
+    {
+      roleName: "Productor",
+      roleCategory: "Produccion",
+      sortOrder: 50,
+      personName: "M. Casella",
+      phone: "573001112255",
+      email: "casella@basketproduction.pro",
+    },
+    {
+      roleName: "Relator",
+      roleCategory: "Talento",
+      sortOrder: 60,
+      personName: "Matias Díaz",
+      phone: "573001112266",
+      email: "matias.diaz@basketproduction.pro",
+    },
+  ];
+
   return {
     assignmentId: "demo-assignment",
     matchId: "demo-match-boca-atenas",
@@ -273,11 +206,20 @@ function buildDemoAssignment(params: {
     timezone: "America/Bogota",
     ownerName: params.collaboratorName,
     ownerPhone: "573000000000",
-    ownerEmail: null,
+    ownerEmail: "santiago.demo@basketproduction.pro",
     responsibleName: params.collaboratorName,
     realizerName: params.collaboratorName,
+    operatorControlName: "Mauro Ruiz Díaz",
+    supportTechName: "Fary Leonardo Urriaga",
     producerName: "M. Casella",
+    encoderName: "Encoder HD",
+    relatorName: "Matias Díaz",
+    cameraCount: 4,
     talentLabel: "L. Montero / G. Pérez",
+    commentaryPlan: "Relato principal con apoyo de comentario 1 en cierres de cuarto.",
+    transport: "Llegar 45 minutos antes. La sede suele abrir tarde.",
+    matchNotes: "Confirmar acceso a cabina y validar energía antes de entrar al aire.",
+    contacts,
     dateLabel: formatCompactMatchDate(params.date),
     timeLabel: "19:30",
   };
@@ -289,7 +231,9 @@ export default async function CollaboratorDayPage({ searchParams }: PageProps) {
   }
 
   const { date } = await searchParams;
-  const user = await requireUserContext();
+  const user = await getUserContext();
+  const guestMode = appEnv.allowGuestMiJornadaAccess && !user.userId;
+  const settings = await getSettingsSnapshot();
   const data = await getCollaboratorDayData({
     email: user.email,
     profileName: user.profile?.full_name ?? null,
@@ -297,203 +241,165 @@ export default async function CollaboratorDayPage({ searchParams }: PageProps) {
   });
 
   const selectedDate = date ?? new Date().toISOString().slice(0, 10);
-  const showDemoToday =
-    Boolean(data.person) && data.todayAssignments.length === 0;
+  const fallbackCollaboratorName =
+    user.profile?.full_name?.trim() || "Modo invitado";
+  const fallbackUpcomingDate = format(
+    addDays(parseISO(`${selectedDate}T00:00:00`), 1),
+    "yyyy-MM-dd",
+  );
+  const greetingName = capitalizeSentence(
+    data.person?.full_name?.trim() || fallbackCollaboratorName,
+  );
+  const showDemoToday = guestMode || !data.person || data.todayAssignments.length === 0;
   const todayAssignments = showDemoToday
     ? [
         buildDemoAssignment({
           date: selectedDate,
-          collaboratorName: data.person?.full_name ?? "Santiago Cordoba",
+          collaboratorName: data.person?.full_name ?? fallbackCollaboratorName,
         }),
       ]
     : data.todayAssignments;
+  const upcomingAssignments =
+    (guestMode || !data.person) && data.upcomingAssignments.length === 0
+      ? [
+          buildDemoAssignment({
+            date: fallbackUpcomingDate,
+            collaboratorName: fallbackCollaboratorName,
+          }),
+        ]
+      : data.upcomingAssignments;
   const totalToday = showDemoToday ? todayAssignments.length : data.summary.totalToday;
   const pendingToday = showDemoToday ? 1 : data.summary.pendingToday;
-
-  if (!data.person) {
-    return (
-      <div className="mx-auto flex max-w-3xl flex-col gap-6 pb-10">
-        <Card className="space-y-4 rounded-[22px] border-[#f2d8ae] bg-[#fffaf0] p-6">
-          <p className="text-xs font-black uppercase tracking-[0.28em] text-[#9a5a0f]">
-            Colaborador sin vínculo
-          </p>
-          <h1 className="text-3xl font-black tracking-tight text-[var(--foreground)]">
-            No encontramos tu persona operativa
-          </h1>
-          <p className="text-sm leading-7 text-[#7a6546]">
-            Para usar el portal móvil, tu usuario debe estar vinculado por correo o
-            nombre a la tabla `Personal`.
-          </p>
-          <div className="flex flex-wrap gap-3">
-            <Link
-              href="/people"
-              className="inline-flex h-11 items-center justify-center rounded-[18px] bg-[var(--accent)] px-4 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(230,18,56,0.18)] transition hover:bg-[var(--accent-strong)]"
-            >
-              Revisar Personal
-            </Link>
-            <Link
-              href="/grid"
-              className="inline-flex h-11 items-center justify-center rounded-[18px] border border-[var(--border)] bg-[var(--surface)] px-4 text-sm font-semibold text-[var(--foreground)] transition hover:bg-[var(--background-soft)]"
-            >
-              Abrir Producción
-            </Link>
-          </div>
-        </Card>
-      </div>
-    );
-  }
+  const isSelectedDateToday = selectedDate === getTodayDateKey();
+  const previousDateHref = buildDayHref(selectedDate, -1);
+  const nextDateHref = buildDayHref(selectedDate, 1);
+  const contentUpdatedLabel = formatContentUpdatedLabel();
+  const aiContext = [
+    ...todayAssignments.map((assignment) => ({
+      bloque: "Hoy",
+      partido: `${assignment.homeTeam} vs ${assignment.awayTeam}`,
+      liga: assignment.competition ?? "Sin liga",
+      fecha: formatSelectedDate(selectedDate),
+      hora: assignment.timeLabel,
+      sede: assignment.venue ?? "Sede por definir",
+      responsable: assignment.responsibleName ?? assignment.ownerName ?? "Sin asignar",
+      modo: assignment.productionMode ?? "Sin definir",
+      rol: assignment.roleName,
+      camaras: assignment.cameraCount,
+      pendiente: !assignment.confirmed,
+    })),
+    ...upcomingAssignments.map((assignment) => ({
+      bloque: "Próximamente",
+      partido: `${assignment.homeTeam} vs ${assignment.awayTeam}`,
+      liga: assignment.competition ?? "Sin liga",
+      fecha: formatAssignmentDateLabel(assignment.kickoffAt),
+      hora: assignment.timeLabel,
+      sede: assignment.venue ?? "Sede por definir",
+      responsable: assignment.responsibleName ?? assignment.ownerName ?? "Sin asignar",
+      modo: assignment.productionMode ?? "Sin definir",
+      rol: assignment.roleName,
+      camaras: assignment.cameraCount,
+      pendiente: !assignment.confirmed,
+    })),
+  ];
+  const dateControls = (
+    <div className="hidden items-center gap-3 md:flex md:justify-end">
+      <Link
+        href={previousDateHref}
+        aria-label="Ir al día anterior"
+        className="inline-flex size-[52px] shrink-0 items-center justify-center rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--surface)] text-[#617187] shadow-sm transition hover:border-[#f0d9de] hover:bg-[#fff7f8] hover:text-[var(--accent)]"
+      >
+        <ChevronLeft className="size-4" />
+      </Link>
+      <form
+        className="flex shrink-0 flex-wrap items-center gap-3 sm:flex-nowrap xl:flex-nowrap"
+        method="get"
+      >
+        <label className="flex min-w-[190px] items-center gap-3 rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--background-soft)] px-4 py-3 text-sm font-semibold text-[var(--foreground)]">
+          <CalendarDays className="size-4 text-[var(--accent)]" />
+          <input
+            type="date"
+            name="date"
+            defaultValue={selectedDate}
+            className="min-w-0 bg-transparent text-sm font-semibold outline-none"
+          />
+        </label>
+        <button
+          type="submit"
+          className="inline-flex h-[52px] items-center justify-center rounded-[var(--panel-radius)] bg-[var(--accent)] px-4 text-sm font-black text-white shadow-[0_14px_28px_rgba(230,18,56,0.18)] transition hover:bg-[var(--accent-strong)]"
+        >
+          Ver día
+        </button>
+        <Link
+          href={nextDateHref}
+          aria-label="Ir al día siguiente"
+          className="inline-flex size-[52px] items-center justify-center rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--surface)] text-[#617187] shadow-sm transition hover:border-[#f0d9de] hover:bg-[#fff7f8] hover:text-[var(--accent)]"
+        >
+          <ChevronRight className="size-4" />
+        </Link>
+        <SectionAiAssistant
+          section="Mi jornada"
+          title="Consulta tu jornada visible"
+          description="Pregunta por tus partidos visibles, horarios, responsables, ligas, sedes o modos de producción."
+          placeholder="Ej. ¿Qué partidos tengo hoy y quién es el responsable?"
+          contextLabel="Partidos visibles en Mi jornada"
+          context={aiContext}
+          guidance="Prioriza bloque visible, partido, liga, fecha, hora, sede, responsable, modo de producción, rol asignado, cámaras y si el partido está pendiente de reportar."
+          examples={[
+            "¿Qué partidos tengo hoy y a qué hora?",
+            "¿Quién es el responsable de Boca Juniors vs Atenas de Córdoba?",
+            "¿Qué partidos visibles están en modo Encoder?",
+          ]}
+          hasGeminiKey={settings.hasGeminiKey}
+          buttonVariant="icon"
+        />
+      </form>
+    </div>
+  );
 
   return (
-    <div className="mx-auto flex max-w-4xl flex-col gap-6 pb-10">
-      <section className="rounded-[24px] border border-[var(--border)] bg-[var(--surface)] p-5 shadow-[0_20px_40px_rgba(28,13,16,0.06)] sm:p-6">
-        <div className="flex flex-col gap-5">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-            <div className="space-y-2">
-              <p className="text-[11px] font-black uppercase tracking-[0.28em] text-[var(--accent)]">
-                Portal colaborador
-              </p>
-              <h1 className="text-[30px] font-black tracking-tight leading-[1.02] text-[var(--foreground)]">
-                Mi jornada
-              </h1>
-              <p className="max-w-2xl text-sm leading-7 text-[#617187]">
-                Revisa tus partidos del día, abre el grupo y reporta conexión,
-                pago, incidencias y speedtest desde el celular.
-              </p>
-            </div>
-
-            <form className="flex items-center gap-3" method="get">
-              <label className="flex min-w-[176px] items-center gap-3 rounded-[18px] border border-[var(--border)] bg-[var(--background-soft)] px-4 py-3 text-sm font-semibold text-[var(--foreground)]">
-                <CalendarDays className="size-4 text-[var(--accent)]" />
-                <input
-                  type="date"
-                  name="date"
-                  defaultValue={selectedDate}
-                  className="min-w-0 bg-transparent text-sm font-semibold outline-none"
-                />
-              </label>
-              <button
-                type="submit"
-                className="inline-flex h-12 items-center justify-center rounded-[18px] bg-[var(--accent)] px-4 text-sm font-black text-white shadow-[0_14px_28px_rgba(230,18,56,0.18)] transition hover:bg-[var(--accent-strong)]"
-              >
-                Ver día
-              </button>
-            </form>
-          </div>
-
-          <div className="grid gap-3 sm:grid-cols-4">
-            <div className="rounded-[18px] border border-[var(--border)] bg-[var(--background-soft)] px-4 py-3">
-              <p className="text-[11px] font-black uppercase tracking-[0.2em] text-[#95a3ba]">
-                Colaborador
-              </p>
-              <p className="mt-2 text-sm font-semibold text-[var(--foreground)]">
-                {abbreviatePersonName(data.person.full_name)}
-              </p>
-            </div>
-            <div className="rounded-[18px] border border-[var(--border)] bg-[var(--background-soft)] px-4 py-3">
-              <p className="text-[11px] font-black uppercase tracking-[0.2em] text-[#95a3ba]">
-                Día activo
-              </p>
-              <p className="mt-2 text-sm font-semibold text-[var(--foreground)]">
-                {formatSelectedDate(selectedDate)}
-              </p>
-            </div>
-            <div className="rounded-[18px] border border-[var(--border)] bg-[var(--background-soft)] px-4 py-3">
-              <p className="text-[11px] font-black uppercase tracking-[0.2em] text-[#95a3ba]">
-                Hoy
-              </p>
-              <p className="mt-2 text-[28px] font-black leading-none text-[var(--foreground)]">
-                {totalToday}
-              </p>
-            </div>
-            <div className="rounded-[18px] border border-[var(--border)] bg-[var(--background-soft)] px-4 py-3">
-              <p className="text-[11px] font-black uppercase tracking-[0.2em] text-[#95a3ba]">
-                Pendientes
-              </p>
-              <p className="mt-2 text-[28px] font-black leading-none text-[var(--accent)]">
-                {pendingToday}
-              </p>
-            </div>
-          </div>
-
-          {showDemoToday ? (
-            <div className="rounded-[18px] border border-[#d9dff2] bg-[#f7f9ff] px-4 py-3 text-sm font-semibold text-[#5e6f8c]">
-              No encontramos partidos reales para esta fecha. Te dejamos una{" "}
-              <span className="font-black text-[var(--accent)]">vista demo</span>{" "}
-              para que valides cómo se ve `Mi jornada`.
-            </div>
-          ) : null}
-        </div>
-      </section>
-
-      <section className="space-y-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-2xl font-black tracking-tight text-[var(--foreground)]">
-              Hoy
-            </h2>
-            <p className="mt-1 text-sm text-[#617187]">
-              Tus partidos asignados para la fecha seleccionada.
-            </p>
-          </div>
-          <span className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-1 text-[11px] font-black uppercase tracking-[0.18em] text-[#95a3ba]">
-            {todayAssignments.length} visibles
-          </span>
-        </div>
-
-        {todayAssignments.length ? (
-          <div className="grid gap-4 lg:grid-cols-2">
-            {todayAssignments.map((assignment) => (
-              <AssignmentCard
-                key={`${assignment.assignmentId}-${assignment.matchId}`}
-                assignment={assignment}
+    <div className="w-full max-w-none pb-10">
+      <MyDayAssignmentsPanel
+        hasLinkedPerson={Boolean(data.person)}
+        isSelectedDateToday={isSelectedDateToday}
+        selectedDate={selectedDate}
+        showDemoToday={showDemoToday}
+        todayAssignments={todayAssignments}
+        upcomingAssignments={upcomingAssignments}
+        topContent={
+          <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
+            <SectionPageHeader
+              title={(
+                <>
+                  <span className="hidden text-xs font-bold uppercase tracking-[0.32em] text-[var(--accent)] md:block">
+                    Hola bienvenido
+                  </span>
+                  <span className="block md:mt-2.5">{greetingName}</span>
+                </>
+              )}
+              description={contentUpdatedLabel}
+              className="order-1 gap-0 md:block"
+              contentClassName="text-left"
+              descriptionClassName="mt-3 block w-full max-w-none text-center text-xs font-bold uppercase tracking-[0.14em] text-[#95a3ba] md:mx-0 md:text-left md:text-sm md:font-medium md:normal-case md:tracking-normal"
+            />
+            <div className="order-3 md:order-2 md:justify-self-end">{dateControls}</div>
+            <div className="order-2 grid grid-cols-2 gap-3 md:order-3 md:col-span-2">
+              <DaySummaryCard label="Partidos asignados" value={totalToday} icon={Hash} />
+              <DaySummaryCard
+                label={
+                  <>
+                    <span className="md:hidden">Por reportar</span>
+                    <span className="hidden md:inline">Pendientes por reportar</span>
+                  </>
+                }
+                value={pendingToday}
+                icon={Sparkles}
+                tone="accent"
               />
-            ))}
-          </div>
-        ) : (
-          <Card className="space-y-3 rounded-[22px] p-6">
-            <p className="text-[11px] font-black uppercase tracking-[0.24em] text-[#95a3ba]">
-              Sin actividad hoy
-            </p>
-            <h3 className="text-2xl font-black tracking-tight text-[var(--foreground)]">
-              No tienes partidos asignados para esta fecha
-            </h3>
-            <p className="text-sm leading-7 text-[#617187]">
-              Prueba con otro día o revisa la sección de próximos partidos.
-            </p>
-          </Card>
-        )}
-      </section>
-
-      {data.upcomingAssignments.length ? (
-        <section className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-2xl font-black tracking-tight text-[var(--foreground)]">
-                Próximamente
-              </h2>
-              <p className="mt-1 text-sm text-[#617187]">
-                Siguientes compromisos ya vinculados a tu perfil.
-              </p>
             </div>
-            <Link
-              href="/grid"
-              className="inline-flex items-center gap-2 text-sm font-black text-[var(--accent)]"
-            >
-              Ver Producción
-              <ChevronRight className="size-4" />
-            </Link>
           </div>
-
-          <div className="grid gap-4 lg:grid-cols-2">
-            {data.upcomingAssignments.map((assignment) => (
-              <AssignmentCard
-                key={`${assignment.assignmentId}-${assignment.matchId}`}
-                assignment={assignment}
-              />
-            ))}
-          </div>
-        </section>
-      ) : null}
+        }
+      />
     </div>
   );
 }

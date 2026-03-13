@@ -26,25 +26,33 @@ import { cn } from "@/lib/utils";
 type IssueKey = "internet" | "img" | "ocr" | "overlays" | "grafica";
 type ToggleValue = "si" | "no";
 type ConnectionValue = "buena" | "inestable" | "mala";
-
-type SpeedtestExtraction = {
-  ping: string | null;
-  upload: string | null;
-  download: string | null;
-  provider: string | null;
-  locationServer: string | null;
-  dateTime: string | null;
-  note: string | null;
-};
+type TechnicalCaptureKind = "speedtest" | "ping" | "gpu";
+type ReadingState = "idle" | "loading" | "error" | "done";
 
 type DraftState = {
   connection: ConnectionValue;
   paid: ToggleValue;
   feedDetected: ToggleValue;
-  notes: string;
   problems: Record<IssueKey, boolean>;
-  attachmentName: string | null;
-  extraction: SpeedtestExtraction | null;
+  transmissionType: string;
+  signalLabel: string;
+  aptoLineal: ToggleValue;
+  testTime: string;
+  testCheck: ToggleValue;
+  startCheck: ToggleValue;
+  graphicsCheck: ToggleValue;
+  speedtestValue: string;
+  pingValue: string;
+  gpuValue: string;
+  technicalObservations: string;
+  buildingObservations: string;
+  generalObservations: string;
+  otherObservation: string;
+  stObservation: string;
+  clubObservation: string;
+  speedtestAttachmentName: string | null;
+  pingAttachmentName: string | null;
+  gpuAttachmentName: string | null;
   updatedAt: string;
 };
 
@@ -77,10 +85,26 @@ function buildDefaultDraft(): DraftState {
     connection: "buena",
     paid: "si",
     feedDetected: "si",
-    notes: "",
     problems: DEFAULT_PROBLEMS,
-    attachmentName: null,
-    extraction: null,
+    transmissionType: "",
+    signalLabel: "",
+    aptoLineal: "si",
+    testTime: "",
+    testCheck: "si",
+    startCheck: "si",
+    graphicsCheck: "si",
+    speedtestValue: "",
+    pingValue: "",
+    gpuValue: "",
+    technicalObservations: "",
+    buildingObservations: "",
+    generalObservations: "",
+    otherObservation: "",
+    stObservation: "",
+    clubObservation: "",
+    speedtestAttachmentName: null,
+    pingAttachmentName: null,
+    gpuAttachmentName: null,
     updatedAt: new Date().toISOString(),
   };
 }
@@ -91,10 +115,12 @@ function parseSavedDraft(raw: string | null): DraftState | null {
   }
 
   try {
-    const parsed = JSON.parse(raw) as DraftState;
+    const parsed = JSON.parse(raw) as Partial<DraftState> & { notes?: string };
     return {
       ...buildDefaultDraft(),
       ...parsed,
+      generalObservations:
+        parsed.generalObservations ?? parsed.notes ?? "",
       problems: {
         ...DEFAULT_PROBLEMS,
         ...(parsed.problems ?? {}),
@@ -152,7 +178,9 @@ export function CollaboratorReportForm({
 }: {
   assignment: CollaboratorAssignmentItem;
 }) {
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const speedtestInputRef = useRef<HTMLInputElement | null>(null);
+  const pingInputRef = useRef<HTMLInputElement | null>(null);
+  const gpuInputRef = useRef<HTMLInputElement | null>(null);
   const [draft, setDraft] = useState<DraftState>(() => {
     if (typeof window === "undefined") {
       return buildDefaultDraft();
@@ -163,10 +191,13 @@ export function CollaboratorReportForm({
       buildDefaultDraft()
     );
   });
-  const [readingState, setReadingState] = useState<"idle" | "loading" | "error" | "done">(
-    "idle",
-  );
-  const [readingMessage, setReadingMessage] = useState<string>("");
+  const [captureState, setCaptureState] = useState<
+    Record<TechnicalCaptureKind, { state: ReadingState; message: string }>
+  >({
+    speedtest: { state: "idle", message: "" },
+    ping: { state: "idle", message: "" },
+    gpu: { state: "idle", message: "" },
+  });
   const [saveMessage, setSaveMessage] = useState<string>("");
 
   const updateDraft = (updater: (previous: DraftState) => DraftState) => {
@@ -183,48 +214,76 @@ export function CollaboratorReportForm({
     setSaveMessage("Borrador guardado en este dispositivo.");
   };
 
-  const handleUploadCapture = async (file: File) => {
+  const handleUploadCapture = async (
+    kind: TechnicalCaptureKind,
+    file: File,
+  ) => {
     const formData = new FormData();
     formData.append("image", file);
+    formData.append("kind", kind);
 
-    setReadingState("loading");
-    setReadingMessage("Leyendo captura con IA...");
+    setCaptureState((previous) => ({
+      ...previous,
+      [kind]: {
+        state: "loading",
+        message: "Leyendo captura con IA...",
+      },
+    }));
+    updateDraft((previous) => ({
+      ...previous,
+      speedtestAttachmentName:
+        kind === "speedtest" ? file.name : previous.speedtestAttachmentName,
+      pingAttachmentName: kind === "ping" ? file.name : previous.pingAttachmentName,
+      gpuAttachmentName: kind === "gpu" ? file.name : previous.gpuAttachmentName,
+    }));
 
     try {
-      const response = await fetch("/api/ai/speedtest", {
+      const response = await fetch("/api/ai/metric-capture", {
         method: "POST",
         body: formData,
       });
 
       const payload = (await response.json()) as
-        | { extracted: SpeedtestExtraction }
+        | { value: string | null; note?: string | null }
         | { error?: string };
 
-      if (!response.ok || !("extracted" in payload)) {
-        setReadingState("error");
-        setReadingMessage(
-          "error" in payload ? (payload.error ?? "No pudimos leer la captura.") : "No pudimos leer la captura.",
-        );
-        updateDraft((previous) => ({
+      if (!response.ok || !("value" in payload)) {
+        setCaptureState((previous) => ({
           ...previous,
-          attachmentName: file.name,
+          [kind]: {
+            state: "error",
+            message:
+              "error" in payload
+                ? (payload.error ?? "No pudimos leer la captura.")
+                : "No pudimos leer la captura.",
+          },
         }));
         return;
       }
 
       updateDraft((previous) => ({
         ...previous,
-        attachmentName: file.name,
-        extraction: payload.extracted,
+        speedtestValue:
+          kind === "speedtest" ? (payload.value ?? "") : previous.speedtestValue,
+        pingValue: kind === "ping" ? (payload.value ?? "") : previous.pingValue,
+        gpuValue: kind === "gpu" ? (payload.value ?? "") : previous.gpuValue,
       }));
-      setReadingState("done");
-      setReadingMessage("Captura procesada. Puedes revisar y completar lo faltante.");
-    } catch {
-      setReadingState("error");
-      setReadingMessage("No pudimos procesar la captura en este momento.");
-      updateDraft((previous) => ({
+      setCaptureState((previous) => ({
         ...previous,
-        attachmentName: file.name,
+        [kind]: {
+          state: "done",
+          message: payload.value
+            ? "Lectura lista. Puedes ajustarla manualmente si hace falta."
+            : "No se pudo leer. Completa el valor manualmente.",
+        },
+      }));
+    } catch {
+      setCaptureState((previous) => ({
+        ...previous,
+        [kind]: {
+          state: "error",
+          message: "No pudimos procesar la captura en este momento.",
+        },
       }));
     }
   };
@@ -318,6 +377,113 @@ export function CollaboratorReportForm({
 
       <Card className="space-y-5 p-5">
         <h4 className="text-sm font-black uppercase tracking-[0.22em] text-[#95a3ba]">
+          Contexto del partido
+        </h4>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <label className="space-y-2">
+            <span className="text-[11px] font-black uppercase tracking-[0.2em] text-[#95a3ba]">
+              Tipo de transmisión
+            </span>
+            <input
+              type="text"
+              value={draft.transmissionType}
+              onChange={(event) =>
+                updateDraft((previous) => ({
+                  ...previous,
+                  transmissionType: event.target.value,
+                }))
+              }
+              placeholder="Ej. Encoder / Offtube"
+              className="h-12 w-full rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--background-soft)] px-4 text-sm font-medium text-[var(--foreground)] outline-none transition focus:border-[var(--accent)] focus:bg-[var(--surface)]"
+            />
+          </label>
+          <label className="space-y-2">
+            <span className="text-[11px] font-black uppercase tracking-[0.2em] text-[#95a3ba]">
+              Señal
+            </span>
+            <input
+              type="text"
+              value={draft.signalLabel}
+              onChange={(event) =>
+                updateDraft((previous) => ({
+                  ...previous,
+                  signalLabel: event.target.value,
+                }))
+              }
+              placeholder="Ej. BP / IMG / SPT"
+              className="h-12 w-full rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--background-soft)] px-4 text-sm font-medium text-[var(--foreground)] outline-none transition focus:border-[var(--accent)] focus:bg-[var(--surface)]"
+            />
+          </label>
+        </div>
+        <SegmentedToggle
+          label="Apto lineal"
+          value={draft.aptoLineal}
+          onChange={(value) =>
+            updateDraft((previous) => ({ ...previous, aptoLineal: value }))
+          }
+          options={[
+            { label: "Sí", value: "si" },
+            { label: "No", value: "no" },
+          ]}
+        />
+      </Card>
+
+      <Card className="space-y-5 p-5">
+        <h4 className="text-sm font-black uppercase tracking-[0.22em] text-[#95a3ba]">
+          Pruebas de salida
+        </h4>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <label className="space-y-2">
+            <span className="text-[11px] font-black uppercase tracking-[0.2em] text-[#95a3ba]">
+              Hora
+            </span>
+            <input
+              type="time"
+              value={draft.testTime}
+              onChange={(event) =>
+                updateDraft((previous) => ({ ...previous, testTime: event.target.value }))
+              }
+              className="h-12 w-full rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--background-soft)] px-4 text-sm font-medium text-[var(--foreground)] outline-none transition focus:border-[var(--accent)] focus:bg-[var(--surface)]"
+            />
+          </label>
+          <SegmentedToggle
+            label="Prueba"
+            value={draft.testCheck}
+            onChange={(value) =>
+              updateDraft((previous) => ({ ...previous, testCheck: value }))
+            }
+            options={[
+              { label: "Sí", value: "si" },
+              { label: "No", value: "no" },
+            ]}
+          />
+          <SegmentedToggle
+            label="Inicio"
+            value={draft.startCheck}
+            onChange={(value) =>
+              updateDraft((previous) => ({ ...previous, startCheck: value }))
+            }
+            options={[
+              { label: "Sí", value: "si" },
+              { label: "No", value: "no" },
+            ]}
+          />
+          <SegmentedToggle
+            label="Gráfica"
+            value={draft.graphicsCheck}
+            onChange={(value) =>
+              updateDraft((previous) => ({ ...previous, graphicsCheck: value }))
+            }
+            options={[
+              { label: "Sí", value: "si" },
+              { label: "No", value: "no" },
+            ]}
+          />
+        </div>
+      </Card>
+
+      <Card className="space-y-5 p-5">
+        <h4 className="text-sm font-black uppercase tracking-[0.22em] text-[#95a3ba]">
           Problemas detectados
         </h4>
         <div className="grid grid-cols-2 gap-3">
@@ -360,39 +526,90 @@ export function CollaboratorReportForm({
       <Card className="space-y-5 p-5">
         <div className="space-y-1">
           <h4 className="text-sm font-black uppercase tracking-[0.22em] text-[#95a3ba]">
-            Captura de speedtest
+            Bloque técnico
           </h4>
           <p className="text-sm text-[#617187]">
-            Sube la prueba y la IA intentará leer subida, ping y descarga automáticamente.
+            Primero sube speedtest, ping y GPU. La IA intentará leerlos y, si no puede, dejará una incógnita para que completes el dato manualmente.
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={() => fileInputRef.current?.click()}
-          className="flex w-full items-center justify-between gap-4 rounded-[var(--panel-radius)] border border-dashed border-[var(--border)] bg-[var(--background-soft)] px-4 py-4 text-left transition hover:border-[var(--accent)] hover:bg-[var(--surface)]"
-        >
-          <div className="flex items-center gap-3">
-            <span className="flex size-11 items-center justify-center rounded-[var(--panel-radius)] bg-[var(--surface)] text-[var(--accent)] shadow-sm">
-              <Upload className="size-5" />
-            </span>
-            <div>
-              <p className="text-sm font-bold text-[var(--foreground)]">
-                Subir captura de speedtest
-              </p>
-              <p className="text-sm text-[#617187]">
-                PNG, JPG o WEBP. {draft.attachmentName ? draft.attachmentName : "Lectura automática."}
-              </p>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <button
+            type="button"
+            onClick={() => speedtestInputRef.current?.click()}
+            className="flex items-center justify-between gap-4 rounded-[var(--panel-radius)] border border-dashed border-[var(--border)] bg-[var(--background-soft)] px-4 py-4 text-left transition hover:border-[var(--accent)] hover:bg-[var(--surface)]"
+          >
+            <div className="flex items-center gap-3">
+              <span className="flex size-11 items-center justify-center rounded-[var(--panel-radius)] bg-[var(--surface)] text-[var(--accent)] shadow-sm">
+                <Upload className="size-5" />
+              </span>
+              <div>
+                <p className="text-sm font-bold text-[var(--foreground)]">
+                  Speedtest
+                </p>
+                <p className="text-sm text-[#617187]">
+                  {draft.speedtestAttachmentName ?? "Subir captura"}
+                </p>
+              </div>
             </div>
-          </div>
-          {readingState === "loading" ? (
-            <Loader2 className="size-5 animate-spin text-[var(--accent)]" />
-          ) : (
-            <ImageIcon className="size-5 text-[var(--muted)]" />
-          )}
-        </button>
+            {captureState.speedtest.state === "loading" ? (
+              <Loader2 className="size-5 animate-spin text-[var(--accent)]" />
+            ) : (
+              <ImageIcon className="size-5 text-[var(--muted)]" />
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={() => pingInputRef.current?.click()}
+            className="flex items-center justify-between gap-4 rounded-[var(--panel-radius)] border border-dashed border-[var(--border)] bg-[var(--background-soft)] px-4 py-4 text-left transition hover:border-[var(--accent)] hover:bg-[var(--surface)]"
+          >
+            <div className="flex items-center gap-3">
+              <span className="flex size-11 items-center justify-center rounded-[var(--panel-radius)] bg-[var(--surface)] text-[var(--accent)] shadow-sm">
+                <Upload className="size-5" />
+              </span>
+              <div>
+                <p className="text-sm font-bold text-[var(--foreground)]">
+                  Ping
+                </p>
+                <p className="text-sm text-[#617187]">
+                  {draft.pingAttachmentName ?? "Subir captura"}
+                </p>
+              </div>
+            </div>
+            {captureState.ping.state === "loading" ? (
+              <Loader2 className="size-5 animate-spin text-[var(--accent)]" />
+            ) : (
+              <ImageIcon className="size-5 text-[var(--muted)]" />
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={() => gpuInputRef.current?.click()}
+            className="flex items-center justify-between gap-4 rounded-[var(--panel-radius)] border border-dashed border-[var(--border)] bg-[var(--background-soft)] px-4 py-4 text-left transition hover:border-[var(--accent)] hover:bg-[var(--surface)]"
+          >
+            <div className="flex items-center gap-3">
+              <span className="flex size-11 items-center justify-center rounded-[var(--panel-radius)] bg-[var(--surface)] text-[var(--accent)] shadow-sm">
+                <Upload className="size-5" />
+              </span>
+              <div>
+                <p className="text-sm font-bold text-[var(--foreground)]">
+                  GPU
+                </p>
+                <p className="text-sm text-[#617187]">
+                  {draft.gpuAttachmentName ?? "Subir captura"}
+                </p>
+              </div>
+            </div>
+            {captureState.gpu.state === "loading" ? (
+              <Loader2 className="size-5 animate-spin text-[var(--accent)]" />
+            ) : (
+              <ImageIcon className="size-5 text-[var(--muted)]" />
+            )}
+          </button>
+        </div>
+
         <input
-          ref={fileInputRef}
+          ref={speedtestInputRef}
           type="file"
           accept="image/png,image/jpeg,image/webp"
           className="hidden"
@@ -402,64 +619,260 @@ export function CollaboratorReportForm({
               return;
             }
 
-            void handleUploadCapture(file);
+            void handleUploadCapture("speedtest", file);
+            event.currentTarget.value = "";
+          }}
+        />
+        <input
+          ref={pingInputRef}
+          type="file"
+          accept="image/png,image/jpeg,image/webp"
+          className="hidden"
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            if (!file) {
+              return;
+            }
+
+            void handleUploadCapture("ping", file);
+            event.currentTarget.value = "";
+          }}
+        />
+        <input
+          ref={gpuInputRef}
+          type="file"
+          accept="image/png,image/jpeg,image/webp"
+          className="hidden"
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            if (!file) {
+              return;
+            }
+
+            void handleUploadCapture("gpu", file);
             event.currentTarget.value = "";
           }}
         />
 
-        {readingMessage ? (
-          <div
-            className={cn(
-              "rounded-[var(--panel-radius)] px-4 py-3 text-sm",
-              readingState === "error"
-                ? "border border-[#f3d4d8] bg-[#fff5f7] text-[#aa2945]"
-                : "border border-[#d7eadf] bg-[#f6fcf7] text-[#2d7555]",
-            )}
-          >
-            {readingMessage}
+        <div className="grid gap-3 sm:grid-cols-3">
+          <div className="rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--background-soft)] px-4 py-3">
+            <p className="text-[11px] font-black uppercase tracking-[0.2em] text-[#95a3ba]">
+              Speedtest
+            </p>
+            <p className="mt-2 text-sm font-bold">{draft.speedtestValue || "?"}</p>
+            {captureState.speedtest.message ? (
+              <p
+                className={cn(
+                  "mt-2 text-xs",
+                  captureState.speedtest.state === "error"
+                    ? "text-[#aa2945]"
+                    : "text-[#617187]",
+                )}
+              >
+                {captureState.speedtest.message}
+              </p>
+            ) : null}
           </div>
-        ) : null}
+          <div className="rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--background-soft)] px-4 py-3">
+            <p className="text-[11px] font-black uppercase tracking-[0.2em] text-[#95a3ba]">
+              Ping
+            </p>
+            <p className="mt-2 text-sm font-bold">{draft.pingValue || "?"}</p>
+            {captureState.ping.message ? (
+              <p
+                className={cn(
+                  "mt-2 text-xs",
+                  captureState.ping.state === "error"
+                    ? "text-[#aa2945]"
+                    : "text-[#617187]",
+                )}
+              >
+                {captureState.ping.message}
+              </p>
+            ) : null}
+          </div>
+          <div className="rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--background-soft)] px-4 py-3">
+            <p className="text-[11px] font-black uppercase tracking-[0.2em] text-[#95a3ba]">
+              GPU
+            </p>
+            <p className="mt-2 text-sm font-bold">{draft.gpuValue || "?"}</p>
+            {captureState.gpu.message ? (
+              <p
+                className={cn(
+                  "mt-2 text-xs",
+                  captureState.gpu.state === "error"
+                    ? "text-[#aa2945]"
+                    : "text-[#617187]",
+                )}
+              >
+                {captureState.gpu.message}
+              </p>
+            ) : null}
+          </div>
+        </div>
 
-        {draft.extraction ? (
-          <div className="grid gap-3 sm:grid-cols-3">
-            <div className="rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--background-soft)] px-4 py-3">
-              <p className="text-[11px] font-black uppercase tracking-[0.2em] text-[#95a3ba]">
-                Subida
-              </p>
-              <p className="mt-2 text-sm font-bold">{draft.extraction.upload ?? "Sin leer"}</p>
-            </div>
-            <div className="rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--background-soft)] px-4 py-3">
-              <p className="text-[11px] font-black uppercase tracking-[0.2em] text-[#95a3ba]">
-                Ping
-              </p>
-              <p className="mt-2 text-sm font-bold">{draft.extraction.ping ?? "Sin leer"}</p>
-            </div>
-            <div className="rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--background-soft)] px-4 py-3">
-              <p className="text-[11px] font-black uppercase tracking-[0.2em] text-[#95a3ba]">
-                Descarga
-              </p>
-              <p className="mt-2 text-sm font-bold">{draft.extraction.download ?? "Sin leer"}</p>
-            </div>
-          </div>
-        ) : null}
+        <div className="grid gap-4 sm:grid-cols-3">
+          <label className="space-y-2">
+            <span className="text-[11px] font-black uppercase tracking-[0.2em] text-[#95a3ba]">
+              Completar speedtest
+            </span>
+            <input
+              type="text"
+              value={draft.speedtestValue}
+              onChange={(event) =>
+                updateDraft((previous) => ({
+                  ...previous,
+                  speedtestValue: event.target.value,
+                }))
+              }
+              placeholder="Ej. 22.1 Mbps"
+              className="h-12 w-full rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--background-soft)] px-4 text-sm font-medium text-[var(--foreground)] outline-none transition focus:border-[var(--accent)] focus:bg-[var(--surface)]"
+            />
+          </label>
+          <label className="space-y-2">
+            <span className="text-[11px] font-black uppercase tracking-[0.2em] text-[#95a3ba]">
+              Completar ping
+            </span>
+            <input
+              type="text"
+              value={draft.pingValue}
+              onChange={(event) =>
+                updateDraft((previous) => ({
+                  ...previous,
+                  pingValue: event.target.value,
+                }))
+              }
+              placeholder="Ej. 60 ms"
+              className="h-12 w-full rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--background-soft)] px-4 text-sm font-medium text-[var(--foreground)] outline-none transition focus:border-[var(--accent)] focus:bg-[var(--surface)]"
+            />
+          </label>
+          <label className="space-y-2">
+            <span className="text-[11px] font-black uppercase tracking-[0.2em] text-[#95a3ba]">
+              Completar GPU
+            </span>
+            <input
+              type="text"
+              value={draft.gpuValue}
+              onChange={(event) =>
+                updateDraft((previous) => ({
+                  ...previous,
+                  gpuValue: event.target.value,
+                }))
+              }
+              placeholder="Ej. 40%"
+              className="h-12 w-full rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--background-soft)] px-4 text-sm font-medium text-[var(--foreground)] outline-none transition focus:border-[var(--accent)] focus:bg-[var(--surface)]"
+            />
+          </label>
+        </div>
       </Card>
 
-      <Card className="space-y-4 p-5">
+      <Card className="space-y-5 p-5">
         <div className="space-y-1">
           <h4 className="text-sm font-black uppercase tracking-[0.22em] text-[#95a3ba]">
-            Notas rápidas
+            Observaciones
           </h4>
           <p className="text-sm text-[#617187]">
-            Resume si hubo problemas, si el partido salió limpio o si falta algo por validar.
+            Separa las observaciones para que luego puedan reflejarse en reportes e incidencias.
           </p>
         </div>
-        <Textarea
-          placeholder="Ej. El speedtest salió correcto, pero el feed tardó en estabilizar. Pago pendiente de confirmar."
-          value={draft.notes}
-          onChange={(event) =>
-            updateDraft((previous) => ({ ...previous, notes: event.target.value }))
-          }
-        />
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2 sm:col-span-2">
+            <p className="text-[11px] font-black uppercase tracking-[0.2em] text-[#95a3ba]">
+              Observaciones técnicas
+            </p>
+            <Textarea
+              placeholder="Ej. Se cayó la cámara 1 en dos momentos y la VM tardó en responder."
+              value={draft.technicalObservations}
+              onChange={(event) =>
+                updateDraft((previous) => ({
+                  ...previous,
+                  technicalObservations: event.target.value,
+                }))
+              }
+            />
+          </div>
+          <div className="space-y-2">
+            <p className="text-[11px] font-black uppercase tracking-[0.2em] text-[#95a3ba]">
+              Observaciones edilicias
+            </p>
+            <Textarea
+              placeholder="Ej. El responsable no tenía PC ni router 4G disponible."
+              value={draft.buildingObservations}
+              onChange={(event) =>
+                updateDraft((previous) => ({
+                  ...previous,
+                  buildingObservations: event.target.value,
+                }))
+              }
+            />
+          </div>
+          <div className="space-y-2">
+            <p className="text-[11px] font-black uppercase tracking-[0.2em] text-[#95a3ba]">
+              Observaciones generales
+            </p>
+            <Textarea
+              placeholder="Ej. El realizador dio señal faltando una hora para el inicio."
+              value={draft.generalObservations}
+              onChange={(event) =>
+                updateDraft((previous) => ({
+                  ...previous,
+                  generalObservations: event.target.value,
+                }))
+              }
+            />
+          </div>
+          <label className="space-y-2">
+            <span className="text-[11px] font-black uppercase tracking-[0.2em] text-[#95a3ba]">
+              OTRO
+            </span>
+            <input
+              type="text"
+              value={draft.otherObservation}
+              onChange={(event) =>
+                updateDraft((previous) => ({
+                  ...previous,
+                  otherObservation: event.target.value,
+                }))
+              }
+              placeholder="Dato adicional"
+              className="h-12 w-full rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--background-soft)] px-4 text-sm font-medium text-[var(--foreground)] outline-none transition focus:border-[var(--accent)] focus:bg-[var(--surface)]"
+            />
+          </label>
+          <label className="space-y-2">
+            <span className="text-[11px] font-black uppercase tracking-[0.2em] text-[#95a3ba]">
+              ST
+            </span>
+            <input
+              type="text"
+              value={draft.stObservation}
+              onChange={(event) =>
+                updateDraft((previous) => ({
+                  ...previous,
+                  stObservation: event.target.value,
+                }))
+              }
+              placeholder="Dato ST"
+              className="h-12 w-full rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--background-soft)] px-4 text-sm font-medium text-[var(--foreground)] outline-none transition focus:border-[var(--accent)] focus:bg-[var(--surface)]"
+            />
+          </label>
+          <label className="space-y-2 sm:col-span-2">
+            <span className="text-[11px] font-black uppercase tracking-[0.2em] text-[#95a3ba]">
+              CLUB
+            </span>
+            <input
+              type="text"
+              value={draft.clubObservation}
+              onChange={(event) =>
+                updateDraft((previous) => ({
+                  ...previous,
+                  clubObservation: event.target.value,
+                }))
+              }
+              placeholder="Dato de club"
+              className="h-12 w-full rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--background-soft)] px-4 text-sm font-medium text-[var(--foreground)] outline-none transition focus:border-[var(--accent)] focus:bg-[var(--surface)]"
+            />
+          </label>
+        </div>
       </Card>
 
       <div className="sticky bottom-4 z-10 grid gap-3 rounded-[var(--panel-radius)] border border-[var(--border)] bg-[rgba(253,252,251,0.92)] p-3 shadow-[0_18px_42px_rgba(15,23,42,0.12)] backdrop-blur sm:grid-cols-[1fr_auto_auto]">

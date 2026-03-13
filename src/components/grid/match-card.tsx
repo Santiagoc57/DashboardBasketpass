@@ -1,4 +1,3 @@
-import Link from "next/link";
 import {
   CalendarDays,
   Clock3,
@@ -29,6 +28,8 @@ type SectionRow = {
   label: string;
   value: string;
   muted?: boolean;
+  compactValue?: boolean;
+  multiline?: boolean;
 };
 
 function formatGridDate(kickoffAt: string, timezone: string) {
@@ -65,24 +66,34 @@ function buildProductionRows(match: MatchListItem): SectionRow[] {
     "Responsable",
     match.owner?.full_name ?? null,
   );
-  const producer = getAssignmentValue(match, "Productor");
   const director = getAssignmentValue(match, "Realizador");
+  const control = getAssignmentValue(match, "Operador de Control");
+  const support = getAssignmentValue(match, "Soporte tecnico");
 
   return [
     {
       label: "Responsable en cancha",
       value: responsible.value,
       muted: responsible.muted,
-    },
-    {
-      label: "Productor",
-      value: producer.value,
-      muted: producer.muted,
+      compactValue: true,
     },
     {
       label: "Realizador",
       value: director.value,
       muted: director.muted,
+      compactValue: true,
+    },
+    {
+      label: "Operador de Control",
+      value: control.value,
+      muted: control.muted,
+      compactValue: true,
+    },
+    {
+      label: "Soporte tecnico",
+      value: support.value,
+      muted: support.muted,
+      compactValue: true,
     },
   ];
 }
@@ -100,6 +111,7 @@ function buildCategoryRows(
       label: assignment.role.name,
       value: assignment.person?.full_name ?? "TBD",
       muted: !assignment.person?.full_name,
+      compactValue: true,
     }));
 }
 
@@ -114,8 +126,29 @@ function buildNamedRows(
       label: roleName,
       value: item.value,
       muted: item.muted,
+      compactValue: true,
     };
   });
+}
+
+function buildObservationRows(match: MatchListItem): SectionRow[] {
+  const transport = match.transport?.trim() ?? "";
+  const notes = match.notes?.trim() ?? "";
+
+  return [
+    {
+      label: "Transporte",
+      value: transport || "Sin datos",
+      muted: !transport,
+      multiline: true,
+    },
+    {
+      label: "Observaciones",
+      value: notes || "Sin observaciones",
+      muted: !notes,
+      multiline: true,
+    },
+  ];
 }
 
 function getInitials(name: string) {
@@ -140,16 +173,22 @@ function getCompactPersonName(name: string) {
   return `${parts[0]?.[0]?.toUpperCase() ?? ""}. ${surnameCandidate}`;
 }
 
+function formatProductionModeLabel(mode: string | null | undefined) {
+  if (!mode) {
+    return "";
+  }
+
+  return mode === "Encoder" ? "ENCODER" : mode;
+}
+
 function Section({
   title,
   icon: Icon,
   rows,
-  actionHref,
 }: {
   title: string;
   icon: LucideIcon;
   rows: SectionRow[];
-  actionHref?: string;
 }) {
   return (
     <div className="flex h-full flex-col gap-4">
@@ -162,37 +201,32 @@ function Section({
 
       <div className="flex flex-1 flex-col gap-4">
         {rows.map((row) => {
-          const displayValue = row.muted
-            ? row.value
-            : getCompactPersonName(row.value);
+          const displayValue =
+            row.compactValue && !row.muted
+              ? getCompactPersonName(row.value)
+              : row.value;
 
           return (
             <div key={row.label} className="space-y-1">
-            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#a08f91]">
-              {getRoleDisplayName(row.label)}
-            </p>
-            <p
-              className={cn(
-                "text-sm font-bold text-[var(--foreground)]",
-                row.muted && "text-[var(--muted)] italic font-semibold",
-              )}
-            >
-              {displayValue}
-            </p>
+              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#a08f91]">
+                {getRoleDisplayName(row.label)}
+              </p>
+              <p
+                className={cn(
+                  "text-sm text-[var(--foreground)]",
+                  row.multiline ? "leading-6 font-medium whitespace-pre-line" : "font-bold",
+                  row.muted &&
+                    (row.multiline
+                      ? "text-[var(--muted)] italic"
+                      : "text-[var(--muted)] italic font-semibold"),
+                )}
+              >
+                {displayValue}
+              </p>
             </div>
           );
         })}
       </div>
-
-      {actionHref ? (
-        <Link
-          href={actionHref}
-          className="mt-auto inline-flex h-10 items-center justify-center gap-2 border border-[var(--border)] bg-[#f4f6f8] px-4 text-[11px] font-extrabold uppercase tracking-[0.18em] text-[#5f6874] transition hover:border-[#d9dde4] hover:bg-[#eceff4] hover:text-[var(--foreground)]"
-        >
-          <PencilLine className="size-3.5" />
-          Editar asignaciones
-        </Link>
-      ) : null}
     </div>
   );
 }
@@ -218,12 +252,7 @@ export function MatchCard({
     "Comentario 2",
     "Campo",
   ]);
-  const controlRows = buildNamedRows(match, [
-    "Operador de Control",
-    "Soporte tecnico",
-    "Encoder",
-    "Ingenieria",
-  ]);
+  const observationRows = buildObservationRows(match);
   const responsible = getAssignmentValue(
     match,
     "Responsable",
@@ -238,9 +267,6 @@ export function MatchCard({
   const venueLabel = match.venue ?? "Sede sin definir";
   const statusAccentClass =
     match.status === "Realizado" ? "bg-[#26b36a]" : "bg-[#d7dde7]";
-  const mapsHref = match.venue
-    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(match.venue)}`
-    : null;
   const detailsId = `match-card-${match.id}`;
 
   return (
@@ -254,81 +280,90 @@ export function MatchCard({
         <span
           aria-hidden="true"
           className={cn(
-            "pointer-events-none absolute left-[-14px] top-1/2 z-0 h-[116px] w-[30px] -translate-y-1/2 rounded-l-[18px] rounded-r-[12px] shadow-[inset_-1px_0_0_rgba(255,255,255,0.18),0_8px_24px_rgba(15,23,42,0.08)]",
+            "pointer-events-none absolute left-[-12px] top-1/2 z-0 h-[118px] w-[30px] -translate-y-1/2 rounded-l-[10px] rounded-r-[6px] shadow-[inset_-1px_0_0_rgba(255,255,255,0.16),0_8px_18px_rgba(15,23,42,0.06)]",
             statusAccentClass,
           )}
         />
         <div className="relative z-10 overflow-visible rounded-t-[10px] rounded-b-[10px]">
-          <div className="overflow-hidden rounded-t-[10px] rounded-b-[10px] flex flex-col xl:grid xl:grid-cols-[7rem_minmax(17.5rem,25rem)_repeat(4,minmax(10.25rem,1fr))] xl:items-stretch">
-          <div className="flex flex-col items-center justify-center gap-3 border-b border-[var(--border)] bg-[var(--surface)] px-4 py-5 text-center xl:border-b-0 xl:border-r">
+          <div className="overflow-hidden rounded-t-[10px] rounded-b-[10px] flex flex-col xl:grid xl:grid-cols-[6.5rem_minmax(12.5rem,17rem)_repeat(4,minmax(10rem,1fr))_4.75rem] xl:items-stretch 2xl:grid-cols-[7rem_minmax(17.5rem,25rem)_repeat(4,minmax(10.25rem,1fr))_4.75rem]">
+          <div className="relative z-10 flex flex-col items-center justify-center gap-3 border-b border-[var(--border)] bg-[var(--surface)] px-4 py-5 text-center xl:border-b-0 xl:border-r">
             <LeagueLogoMarkClient league={leagueLabel} className="h-16 w-16" />
             <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#70819b]">
               {leagueLabel}
             </p>
           </div>
 
-          <div className="flex min-w-0 items-center border-b border-[var(--border)] px-5 py-5 xl:border-b-0 xl:border-r xl:px-6">
-            <div className="mx-auto grid max-w-[20.5rem] items-center justify-center gap-3 sm:grid-cols-[8.5rem_2.25rem_8.5rem] sm:gap-4">
-              <div className="flex min-w-0 flex-col items-center text-center">
-                {canEdit ? (
-                  <QuickMatchFieldEditor
-                    field="homeTeam"
-                    value={match.home_team}
-                    matchId={match.id}
-                    redirectTo={redirectTo}
-                    title="Cambiar local"
-                    listId="grid-club-catalog"
-                    panelClassName="w-[19rem]"
-                  >
+          <div className="flex min-w-0 items-center border-b border-[var(--border)] px-5 py-5 xl:border-b-0 xl:border-r xl:px-4 2xl:px-6">
+            <div className="mx-auto w-full max-w-[16rem] 2xl:max-w-[20.5rem]">
+              <div className="grid items-center justify-center gap-2 sm:grid-cols-[minmax(0,1fr)_1.75rem_minmax(0,1fr)] sm:gap-3 2xl:gap-3 2xl:sm:grid-cols-[8.5rem_2.25rem_8.5rem] 2xl:sm:gap-4">
+                <div className="flex min-w-0 flex-col items-center text-center">
+                  {canEdit ? (
+                    <QuickMatchFieldEditor
+                      field="homeTeam"
+                      value={match.home_team}
+                      matchId={match.id}
+                      redirectTo={redirectTo}
+                      title="Cambiar local"
+                      listId="grid-club-catalog"
+                      panelClassName="w-[19rem]"
+                    >
+                      <TeamLogoMark
+                        teamName={match.home_team}
+                        competition={match.competition}
+                        className="size-12 rounded-full 2xl:size-14"
+                      />
+                    </QuickMatchFieldEditor>
+                  ) : (
                     <TeamLogoMark
                       teamName={match.home_team}
                       competition={match.competition}
-                      className="size-14 rounded-full"
+                      className="size-12 rounded-full 2xl:size-14"
                     />
-                  </QuickMatchFieldEditor>
-                ) : (
-                  <TeamLogoMark
-                    teamName={match.home_team}
-                    competition={match.competition}
-                    className="size-14 rounded-full"
-                  />
-                )}
-                <p className="mt-3 text-center text-[0.9rem] font-black leading-[1.08] tracking-[-0.03em] text-[var(--foreground)] xl:text-[0.98rem]">
-                  {match.home_team}
-                </p>
-              </div>
+                  )}
+                  <p className="mt-2 text-center text-[0.84rem] font-black leading-[1.04] tracking-[-0.03em] text-[var(--foreground)] 2xl:mt-3 2xl:text-[0.98rem]">
+                    {match.home_team}
+                  </p>
+                </div>
 
-              <span className="self-center justify-self-center text-base font-semibold uppercase tracking-[0.2em] text-[#93a0b2]">
-                vs
-              </span>
+                <span className="self-center justify-self-center text-sm font-semibold uppercase tracking-[0.18em] text-[#93a0b2] 2xl:text-base">
+                  vs
+                </span>
 
-              <div className="flex min-w-0 flex-col items-center text-center">
-                {canEdit ? (
-                  <QuickMatchFieldEditor
-                    field="awayTeam"
-                    value={match.away_team}
-                    matchId={match.id}
-                    redirectTo={redirectTo}
-                    title="Cambiar visitante"
-                    listId="grid-club-catalog"
-                    panelClassName="w-[19rem]"
-                  >
+                <div className="flex min-w-0 flex-col items-center text-center">
+                  {canEdit ? (
+                    <QuickMatchFieldEditor
+                      field="awayTeam"
+                      value={match.away_team}
+                      matchId={match.id}
+                      redirectTo={redirectTo}
+                      title="Cambiar visitante"
+                      listId="grid-club-catalog"
+                      panelClassName="w-[19rem]"
+                    >
+                      <TeamLogoMark
+                        teamName={match.away_team}
+                        competition={match.competition}
+                        className="size-12 rounded-full 2xl:size-14"
+                      />
+                    </QuickMatchFieldEditor>
+                  ) : (
                     <TeamLogoMark
                       teamName={match.away_team}
                       competition={match.competition}
-                      className="size-14 rounded-full"
+                      className="size-12 rounded-full 2xl:size-14"
                     />
-                  </QuickMatchFieldEditor>
-                ) : (
-                  <TeamLogoMark
-                    teamName={match.away_team}
-                    competition={match.competition}
-                    className="size-14 rounded-full"
-                  />
-                )}
-                <p className="mt-3 text-center text-[0.9rem] font-black leading-[1.08] tracking-[-0.03em] text-[var(--foreground)] xl:text-[0.98rem]">
-                  {match.away_team}
-                </p>
+                  )}
+                  <p className="mt-2 text-center text-[0.84rem] font-black leading-[1.04] tracking-[-0.03em] text-[var(--foreground)] 2xl:mt-3 2xl:text-[0.98rem]">
+                    {match.away_team}
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-4 flex items-center justify-center gap-2 text-center text-[12px] font-semibold text-[#94a3b8]">
+                <MapPin className="size-3.5 shrink-0" />
+                <span className="truncate" title={venueLabel}>
+                  {venueLabel}
+                </span>
               </div>
             </div>
           </div>
@@ -390,7 +425,7 @@ export function MatchCard({
             <div className="flex items-center gap-2">
               <Mic2 className="size-3.5 text-[#a7b4c8]" />
               <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-[#a7b4c8]">
-                Talento en Aire
+                Relatos
               </p>
             </div>
             <div className="flex items-center gap-3">
@@ -473,17 +508,17 @@ export function MatchCard({
                       inputType="select"
                       options={[...PRODUCTION_MODE_OPTIONS]}
                     >
-                      <span>{match.production_mode}</span>
+                      <span>{formatProductionModeLabel(match.production_mode)}</span>
                     </QuickMatchFieldEditor>
                   ) : (
-                    match.production_mode
+                    formatProductionModeLabel(match.production_mode)
                   )}
                 </span>
               </div>
             </div>
           </div>
 
-          <div className="grid gap-4 border-b border-[var(--border)] px-5 py-5 xl:border-b-0 xl:px-6 xl:pr-16">
+          <div className="grid gap-4 border-b border-[var(--border)] px-5 py-5 xl:border-b-0 xl:px-6">
             <div>
               <p className="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] text-[#a7b4c8]">
                 <CalendarDays className="size-3.5 text-[#a7b4c8]" />
@@ -503,45 +538,22 @@ export function MatchCard({
               </p>
             </div>
           </div>
+
+          <div className="flex items-center justify-end border-t border-[var(--border)] px-4 py-4 xl:justify-center xl:border-l xl:border-t-0 xl:px-0 xl:py-0">
+            <MatchCardActions
+              canEdit={canEdit}
+              detailsId={detailsId}
+              match={match}
+              people={people}
+              redirectTo={redirectTo}
+            />
+          </div>
           </div>
 
-          <MatchCardActions
-            canEdit={canEdit}
-            detailsId={detailsId}
-            match={match}
-            people={people}
-            redirectTo={redirectTo}
-            className="absolute right-0 top-1/2 z-20 -translate-y-1/2 translate-x-1/2"
-          />
         </div>
       </summary>
 
       <div className="overflow-hidden rounded-b-[10px] border-t border-[var(--border)] bg-[#fffefd] px-5 py-5 sm:px-6">
-        <div className="mb-5 flex flex-col gap-3 border-b border-[var(--border)] pb-4 text-sm text-[var(--muted)] md:flex-row md:items-center md:justify-between">
-          <div className="flex flex-wrap items-center gap-3">
-            <span className="inline-flex items-center gap-2">
-              {venueLabel}
-              {mapsHref ? (
-                <a
-                  href={mapsHref}
-                  target="_blank"
-                  rel="noreferrer"
-                  title="Abrir en Google Maps"
-                  className="inline-flex items-center justify-center rounded-full border border-[var(--border)] bg-[var(--surface)] p-1 text-[#72829a] transition hover:border-[rgba(230,18,56,0.18)] hover:text-[var(--accent)]"
-                >
-                  <MapPin className="size-3.5" />
-                </a>
-              ) : null}
-            </span>
-          </div>
-          <Link
-            href={`/match/${match.id}`}
-            className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-[var(--accent)] transition hover:text-[var(--accent-strong)]"
-          >
-            Abrir detalle del partido
-          </Link>
-        </div>
-
         <div className="grid gap-6 xl:grid-cols-4">
           <Section
             title="Producción y Dirección"
@@ -555,10 +567,9 @@ export function MatchCard({
             rows={talentRows}
           />
           <Section
-            title="Control & Soporte"
-            icon={ShieldUser}
-            rows={controlRows}
-            actionHref={`/match/${match.id}`}
+            title="Observaciones / Transporte"
+            icon={PencilLine}
+            rows={observationRows}
           />
         </div>
       </div>

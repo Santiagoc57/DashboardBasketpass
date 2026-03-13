@@ -1,4 +1,7 @@
-import { AlertTriangle, CheckCircle2 } from "lucide-react";
+"use client";
+
+import { useEffect, useState } from "react";
+import { AlertTriangle, CheckCircle2, X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
@@ -9,7 +12,25 @@ export function PageMessage({
   intent?: string | null;
   message?: string | null;
 }) {
-  if (!message) {
+  const [visible, setVisible] = useState(Boolean(message));
+
+  useEffect(() => {
+    setVisible(Boolean(message));
+  }, [message]);
+
+  useEffect(() => {
+    if (!message) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setVisible(false);
+    }, 4500);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [message]);
+
+  if (!message || !visible) {
     return null;
   }
 
@@ -26,7 +47,15 @@ export function PageMessage({
       )}
     >
       <Icon className="size-4 shrink-0" />
-      <span>{message}</span>
+      <span className="flex-1">{message}</span>
+      <button
+        type="button"
+        onClick={() => setVisible(false)}
+        aria-label="Cerrar mensaje"
+        className="inline-flex size-7 items-center justify-center rounded-full transition hover:bg-black/5"
+      >
+        <X className="size-4" />
+      </button>
     </div>
   );
 }

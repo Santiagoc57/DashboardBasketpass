@@ -23,6 +23,7 @@ export async function upsertPersonAction(formData: FormData) {
     email: maybeNull(String(formData.get("email") ?? "")),
     notes: buildPersonNotesMeta({
       role: maybeNull(String(formData.get("roleName") ?? "")),
+      city: maybeNull(String(formData.get("city") ?? "")),
       coverage: maybeNull(String(formData.get("coverageTeams") ?? "")),
       notes: maybeNull(String(formData.get("notes") ?? "")),
     }),
@@ -81,6 +82,35 @@ export async function deletePersonAction(formData: FormData) {
     });
   } catch (error) {
     rethrowNavigationError(error);
+    redirectWithNotice({
+      redirectTo,
+      intent: "error",
+      notice: ensureErrorMessage(error),
+    });
+  }
+}
+
+export async function togglePersonActiveAction(formData: FormData) {
+  await requireEditor();
+
+  const personId = String(formData.get("personId") ?? "").trim();
+  const nextActive = String(formData.get("active") ?? "") === "on";
+
+  try {
+    const supabase = await createSupabaseServerClient();
+    const result = await supabase
+      .from("people")
+      .update({ active: nextActive })
+      .eq("id", personId);
+
+    if (result.error) {
+      throw result.error;
+    }
+
+    revalidatePath("/people");
+  } catch (error) {
+    rethrowNavigationError(error);
+    const redirectTo = getRedirectTarget(formData, "/people");
     redirectWithNotice({
       redirectTo,
       intent: "error",

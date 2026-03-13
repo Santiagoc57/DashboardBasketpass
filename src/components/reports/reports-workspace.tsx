@@ -7,20 +7,21 @@ import {
   BarChart3,
   Bot,
   CalendarDays,
+  Circle,
   CircleCheckBig,
   CircleX,
   ChevronDown,
   ChevronUp,
-  CircleDot,
   Clock3,
   Download,
   Eye,
   FileText,
   Filter,
+  Gauge,
   GripVertical,
+  History,
   MapPin,
   Pencil,
-  PlusCircle,
   Search,
   ShieldAlert,
   Sparkles,
@@ -28,6 +29,7 @@ import {
 } from "lucide-react";
 
 import { SectionAiAssistant } from "@/components/ai/section-ai-assistant";
+import { IncidentsWorkspace } from "@/components/incidents/incidents-workspace";
 import { LeagueLogoMarkClient } from "@/components/league-logo-mark-client";
 import { ClientTeamLogoMark } from "@/components/team-logo-mark-client";
 import { SectionPageHeader } from "@/components/layout/section-page-header";
@@ -41,12 +43,14 @@ import type {
   ReportRecord,
   ReportSeverity,
 } from "@/lib/reports";
+import type { IncidentRecord } from "@/lib/incidents";
 import { getTeamLeagueColorSet } from "@/lib/team-directory";
 import { cn } from "@/lib/utils";
 
 type ReportSortKey =
   | "league"
   | "id"
+  | "idBp"
   | "date"
   | "match"
   | "responsible"
@@ -55,11 +59,13 @@ type ReportSortKey =
   | "severity";
 type SortDirection = "asc" | "desc";
 type ReportPeriodMode = "day" | "week" | "month";
-type ReportView = "summary" | "control";
+type ReportView = "summary" | "control" | "incidents";
+type ReportDrawerTab = "details" | "activity";
 type IncidentChartMetric = "count" | "rate";
 type ReportControlColumn =
   | "league"
   | "id"
+  | "idBp"
   | "date"
   | "match"
   | "responsible"
@@ -69,9 +75,9 @@ type ReportControlColumn =
   | "action";
 type ReportRankingColumn =
   | "responsible"
-  | "effectiveness"
-  | "reports"
-  | "alerts";
+  | "role"
+  | "assignments"
+  | "reports";
 
 const REPORT_CONTROL_COLUMNS_STORAGE_KEY =
   "basket-production.reports.control-columns";
@@ -80,6 +86,7 @@ const REPORT_RANKING_COLUMNS_STORAGE_KEY =
 const DEFAULT_REPORT_CONTROL_COLUMNS: ReportControlColumn[] = [
   "league",
   "id",
+  "idBp",
   "date",
   "match",
   "responsible",
@@ -90,15 +97,16 @@ const DEFAULT_REPORT_CONTROL_COLUMNS: ReportControlColumn[] = [
 ];
 const DEFAULT_REPORT_RANKING_COLUMNS: ReportRankingColumn[] = [
   "responsible",
-  "effectiveness",
+  "role",
+  "assignments",
   "reports",
-  "alerts",
 ];
 const REPORT_CONTROL_COLUMN_SORT_KEY: Partial<
   Record<ReportControlColumn, ReportSortKey>
 > = {
   league: "league",
   id: "id",
+  idBp: "idBp",
   date: "date",
   match: "match",
   responsible: "responsible",
@@ -106,6 +114,76 @@ const REPORT_CONTROL_COLUMN_SORT_KEY: Partial<
   feed: "feed",
   severity: "severity",
 };
+const REPORT_CONTROL_COLUMN_WIDTH_WEIGHT: Record<ReportControlColumn, number> = {
+  league: 1,
+  id: 1.2,
+  idBp: 1.3,
+  date: 1,
+  match: 2.8,
+  responsible: 1.8,
+  paid: 0.9,
+  feed: 0.9,
+  severity: 1.2,
+  action: 0.5,
+};
+const REPORT_CONTROL_COMPACT_COLUMN_WIDTH_WEIGHT: Record<
+  ReportControlColumn,
+  number
+> = {
+  league: 0.85,
+  id: 1,
+  idBp: 1,
+  date: 0.9,
+  match: 2.8,
+  responsible: 1.1,
+  paid: 0.8,
+  feed: 0.8,
+  severity: 1,
+  action: 0.45,
+};
+
+const REPORT_EXPORT_COLUMNS = [
+  {
+    label: "ID FEED",
+    value: (report: ReportRecord) => report.id_feed,
+  },
+  {
+    label: "ID BP",
+    value: (report: ReportRecord) => report.id_bp,
+  },
+  {
+    label: "DÍA",
+    value: (report: ReportRecord) => report.event_date,
+  },
+  {
+    label: "HORA",
+    value: (report: ReportRecord) => report.event_time,
+  },
+  {
+    label: "PARTIDO",
+    value: (report: ReportRecord) => report.match_label,
+  },
+  {
+    label: "PROBLEMA",
+    value: (report: ReportRecord) => report.problem,
+  },
+  {
+    label: "GRAVEDAD",
+    value: (report: ReportRecord) => report.severity,
+  },
+  {
+    label: "¿FEED DETECTÓ?",
+    value: (report: ReportRecord) => (report.feed_detected ? "Sí" : "No"),
+  },
+  {
+    label: "CONTROL",
+    value: (report: ReportRecord) => report.responsible_name,
+  },
+  {
+    label: "¿SE PAGÓ?",
+    value: (report: ReportRecord) => (report.paid ? "Sí" : "No"),
+  },
+] as const;
 
 function normalizeReportControlColumns(
   value: unknown,
@@ -300,6 +378,135 @@ function getReportLeagueAccentColor(league: string) {
   return "#64748b";
 }
 
+function escapeHtml(value: string) {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function sanitizeFileSegment(value: string) {
+  return value
+    .normalize("NFD")
+    .replaceAll(/[\u0300-\u036f]/g, "")
+    .replaceAll(/[^a-zA-Z0-9]+/g, "-")
+    .replaceAll(/^-+|-+$/g, "")
+    .toLowerCase();
+}
+
+function downloadBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+function hexToRgb(hex: string) {
+  const normalized = hex.replace("#", "");
+  const safeHex =
+    normalized.length === 3
+      ? normalized
+          .split("")
+          .map((value) => `${value}${value}`)
+          .join("")
+      : normalized;
+
+  const value = Number.parseInt(safeHex, 16);
+
+  if (Number.isNaN(value)) {
+    return { red: 100, green: 116, blue: 139 };
+  }
+
+  return {
+    red: (value >> 16) & 255,
+    green: (value >> 8) & 255,
+    blue: value & 255,
+  };
+}
+
+function groupReportsByLeague(reports: ReportRecord[]) {
+  const groups = new Map<string, ReportRecord[]>();
+
+  reports.forEach((report) => {
+    const currentGroup = groups.get(report.league) ?? [];
+    currentGroup.push(report);
+    groups.set(report.league, currentGroup);
+  });
+
+  return Array.from(groups.entries()).map(([league, items]) => ({
+    league,
+    items,
+  }));
+}
+
+function buildReportsExcelDocument(
+  reportGroups: ReturnType<typeof groupReportsByLeague>,
+  periodLabel: string,
+) {
+  const headerRow = REPORT_EXPORT_COLUMNS.map(
+    (column) =>
+      `<th style="border:1px solid #dbe4f0;background:#0f172a;color:#ffffff;padding:10px 12px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:0.08em;text-align:left;">${escapeHtml(
+        column.label,
+      )}</th>`,
+  ).join("");
+
+  const sections = reportGroups
+    .map(({ league, items }) => {
+      const accent = getReportLeagueAccentColor(league);
+      const rows = items
+        .map((report, rowIndex) => {
+          const background = rowIndex % 2 === 0 ? "#ffffff" : "#f8fafc";
+          const cells = REPORT_EXPORT_COLUMNS.map((column) => {
+            const value = escapeHtml(column.value(report));
+            const forceText =
+              column.label === "ID FEED" || column.label === "ID BP"
+                ? "mso-number-format:'\\@';"
+                : "";
+
+            return `<td style="border:1px solid #dbe4f0;background:${background};padding:9px 12px;font-size:12px;color:#0f172a;vertical-align:top;${forceText}">${value}</td>`;
+          }).join("");
+
+          return `<tr>${cells}</tr>`;
+        })
+        .join("");
+
+      return `
+        <table style="width:100%;border-collapse:collapse;margin:0 0 20px 0;font-family:Arial,sans-serif;">
+          <tr>
+            <td colspan="${REPORT_EXPORT_COLUMNS.length}" style="border:1px solid ${accent};background:${accent};color:#ffffff;padding:12px 14px;font-size:14px;font-weight:800;letter-spacing:0.06em;text-transform:uppercase;">
+              ${escapeHtml(league)}
+            </td>
+          </tr>
+          <tr>${headerRow}</tr>
+          ${rows}
+        </table>
+      `;
+    })
+    .join("");
+
+  return `<!DOCTYPE html>
+<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="ProgId" content="Excel.Sheet" />
+    <title>Control de reportes</title>
+  </head>
+  <body style="margin:16px;background:#f8fafc;font-family:Arial,sans-serif;">
+    <div style="margin-bottom:16px;">
+      <div style="font-size:18px;font-weight:800;color:#0f172a;">Control de reportes</div>
+      <div style="font-size:12px;color:#64748b;">Periodo exportado: ${escapeHtml(periodLabel)}</div>
+    </div>
+    ${sections}
+  </body>
+</html>`;
+}
+
 function buildChartLinePath(
   values: number[],
   width: number,
@@ -343,6 +550,15 @@ function getHomeTeamFromMatchLabel(matchLabel: string) {
   return homeTeam?.trim() || matchLabel;
 }
 
+function splitMatchLabel(matchLabel: string) {
+  const [homeTeam, awayTeam] = matchLabel.split(/\s+vs\s+/i);
+
+  return {
+    homeTeam: homeTeam?.trim() || matchLabel,
+    awayTeam: awayTeam?.trim() || matchLabel,
+  };
+}
+
 function formatCompactReportDate(value: string) {
   const date = parseSpanishShortDate(value);
   const day = String(date.getDate()).padStart(2, "0");
@@ -377,6 +593,41 @@ function getReportRowTone(severity: ReportSeverity) {
       return {
         active: "bg-[#eefaf3] shadow-[inset_4px_0_0_0_#10b981]",
         hover: "hover:bg-[#f6fcf8]",
+      };
+  }
+}
+
+function getSeverityDistributionMeta(severity: ReportSeverity) {
+  switch (severity) {
+    case "Crítica":
+      return {
+        barClassName: "bg-[#a12ad6]",
+        icon: ShieldAlert,
+        iconClassName: "text-[#a12ad6]",
+      };
+    case "Alta":
+      return {
+        barClassName: "bg-[#e44b68]",
+        icon: AlertTriangle,
+        iconClassName: "text-[#e44b68]",
+      };
+    case "Media":
+      return {
+        barClassName: "bg-[#e7c247]",
+        icon: Gauge,
+        iconClassName: "text-[#b78611]",
+      };
+    case "Baja":
+      return {
+        barClassName: "bg-[#d8e2ef]",
+        icon: Circle,
+        iconClassName: "text-[#94a3b8]",
+      };
+    default:
+      return {
+        barClassName: "bg-[#10b981]",
+        icon: CircleCheckBig,
+        iconClassName: "text-[#10b981]",
       };
   }
 }
@@ -417,14 +668,28 @@ function SortHeader({
   );
 }
 
-function getActivityToneClass(tone: ReportActivity["tone"]) {
+function getReportActivityTone(tone: ReportActivity["tone"]) {
   switch (tone) {
-    case "success":
-      return "bg-[#10b981]";
     case "accent":
-      return "bg-[var(--accent)]";
+      return {
+        dot: "bg-[var(--accent)] ring-[rgba(230,18,56,0.16)]",
+        badge: "bg-[#fff3f6] text-[var(--accent)]",
+      };
+    case "warning":
+      return {
+        dot: "bg-[#f59e0b] ring-[rgba(245,158,11,0.16)]",
+        badge: "bg-[#fff7ed] text-[#d97706]",
+      };
+    case "success":
+      return {
+        dot: "bg-[#16a34a] ring-[rgba(22,163,74,0.16)]",
+        badge: "bg-[#f0fdf4] text-[#15803d]",
+      };
     default:
-      return "bg-[#f59e0b]";
+      return {
+        dot: "bg-[#cfd6df] ring-[rgba(148,163,184,0.16)]",
+        badge: "bg-[#f4f7fb] text-[#617187]",
+      };
   }
 }
 
@@ -541,47 +806,24 @@ function getEstimatedCycleMinutes(report: ReportRecord) {
   return minutes;
 }
 
-function getReportEffectiveness(report: ReportRecord) {
-  let score = 100;
-
-  switch (report.severity) {
-    case "Crítica":
-      score -= 36;
-      break;
-    case "Alta":
-      score -= 24;
-      break;
-    case "Media":
-      score -= 14;
-      break;
-    case "Baja":
-      score -= 6;
-      break;
-    default:
-      break;
-  }
-
-  if (!report.feed_detected) {
-    score -= 8;
-  }
-
-  if (!report.paid) {
-    score -= 10;
-  }
-
-  return Math.max(42, score);
-}
-
 export function ReportsWorkspace({
   reports,
   activities,
+  incidents,
   hasGeminiKey,
 }: {
   reports: ReportRecord[];
   activities: ReportActivity[];
+  incidents: IncidentRecord[];
   hasGeminiKey: boolean;
 }) {
   const [activeView, setActiveView] = useState<ReportView>("summary");
+  const [incidentsHeaderActionsPortalTarget, setIncidentsHeaderActionsPortalTarget] =
+    useState<HTMLDivElement | null>(null);
+  const [incidentsDrawerPortalTarget, setIncidentsDrawerPortalTarget] =
+    useState<HTMLDivElement | null>(null);
+  const [selectedEmbeddedIncidentId, setSelectedEmbeddedIncidentId] =
+    useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [leagueFilter, setLeagueFilter] = useState("Todas las ligas");
   const latestReportDate = useMemo(() => {
@@ -605,6 +847,10 @@ export function ReportsWorkspace({
   const [incidentChartLimit, setIncidentChartLimit] = useState<5 | 10>(5);
   const [sortBy, setSortBy] = useState<ReportSortKey>("severity");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
+  const [rankingSortBy, setRankingSortBy] =
+    useState<ReportRankingColumn>("reports");
+  const [rankingSortDirection, setRankingSortDirection] =
+    useState<SortDirection>("desc");
   const [columnOrder, setColumnOrder] = useState<ReportControlColumn[]>(() => {
     if (typeof window === "undefined") {
       return DEFAULT_REPORT_CONTROL_COLUMNS;
@@ -656,6 +902,19 @@ export function ReportsWorkspace({
   const [dragOverRankingColumn, setDragOverRankingColumn] =
     useState<ReportRankingColumn | null>(null);
   const [selectedReportId, setSelectedReportId] = useState<string | null>(null);
+  const [reportDrawerTab, setReportDrawerTab] =
+    useState<ReportDrawerTab>("details");
+  const [isExporting, setIsExporting] = useState(false);
+  const [showAllLeagueDistribution, setShowAllLeagueDistribution] = useState(false);
+  const [showAllSeverityDistribution, setShowAllSeverityDistribution] =
+    useState(false);
+  const [showAllVenueRecurrence, setShowAllVenueRecurrence] = useState(false);
+
+  useEffect(() => {
+    if (activeView !== "incidents") {
+      setSelectedEmbeddedIncidentId(null);
+    }
+  }, [activeView]);
 
   function handleSort(nextSortBy: ReportSortKey) {
     if (sortBy === nextSortBy) {
@@ -665,6 +924,22 @@ export function ReportsWorkspace({
 
     setSortBy(nextSortBy);
     setSortDirection(nextSortBy === "severity" ? "desc" : "asc");
+  }
+
+  function handleRankingSort(nextSortBy: ReportRankingColumn) {
+    if (rankingSortBy === nextSortBy) {
+      setRankingSortDirection((current) =>
+        current === "asc" ? "desc" : "asc",
+      );
+      return;
+    }
+
+    setRankingSortBy(nextSortBy);
+    setRankingSortDirection(
+      nextSortBy === "reports" || nextSortBy === "assignments"
+        ? "desc"
+        : "asc",
+    );
   }
 
   function handleColumnDragStart(column: ReportControlColumn) {
@@ -1090,8 +1365,7 @@ export function ReportsWorkspace({
 
     return Array.from(leagueMap.entries())
       .map(([league, count]) => ({ league, count }))
-      .sort((left, right) => right.count - left.count)
-      .slice(0, 5);
+      .sort((left, right) => right.count - left.count);
   }, [baseFilteredReports]);
 
   const severityDistribution = useMemo(() => {
@@ -1166,38 +1440,78 @@ export function ReportsWorkspace({
           }
           return right.severities[severity] - left.severities[severity];
         }, 0);
-      })
-      .slice(0, 6);
+      });
   }, [baseFilteredReports]);
+
+  const visibleLeagueDistribution = showAllLeagueDistribution
+    ? leagueDistribution.slice(0, 10)
+    : leagueDistribution.slice(0, 3);
+  const visibleSeverityDistribution = showAllSeverityDistribution
+    ? severityDistribution
+    : severityDistribution.slice(0, 3);
+  const visibleVenueRecurrence = showAllVenueRecurrence
+    ? venueRecurrence.slice(0, 10)
+    : venueRecurrence.slice(0, 3);
+  const canExpandLeagueDistribution = leagueDistribution.length > 3;
+  const canExpandSeverityDistribution = severityDistribution.length > 3;
+  const canExpandVenueRecurrence = venueRecurrence.length > 3;
 
   const responsibleRanking = useMemo(() => {
     const aggregate = new Map<
       string,
-      { responsible: string; reports: number; incidents: number; scoreTotal: number }
+      {
+        responsible: string;
+        role: string;
+        reports: number;
+        assignmentIds: Set<string>;
+      }
     >();
 
     baseFilteredReports.forEach((report) => {
       const current = aggregate.get(report.responsible_name) ?? {
         responsible: report.responsible_name,
+        role: "Responsable",
         reports: 0,
-        incidents: 0,
-        scoreTotal: 0,
+        assignmentIds: new Set<string>(),
       };
 
       current.reports += 1;
-      current.incidents += report.severity === "Sin incidencia" ? 0 : 1;
-      current.scoreTotal += getReportEffectiveness(report);
+      current.assignmentIds.add(report.id_bp);
       aggregate.set(report.responsible_name, current);
     });
 
     return Array.from(aggregate.values())
       .map((item) => ({
         ...item,
-        effectiveness: Math.round((item.scoreTotal / item.reports) * 10) / 10,
+        assignments: item.assignmentIds.size,
       }))
-      .sort((left, right) => right.effectiveness - left.effectiveness)
+      .sort((left, right) => {
+        const directionFactor = rankingSortDirection === "asc" ? 1 : -1;
+
+        if (rankingSortBy === "responsible") {
+          return (
+            left.responsible.localeCompare(right.responsible, "es", {
+              sensitivity: "base",
+            }) * directionFactor
+          );
+        }
+
+        if (rankingSortBy === "role") {
+          return (
+            left.role.localeCompare(right.role, "es", {
+              sensitivity: "base",
+            }) * directionFactor
+          );
+        }
+
+        if (rankingSortBy === "assignments") {
+          return (left.assignments - right.assignments) * directionFactor;
+        }
+
+        return (left.reports - right.reports) * directionFactor;
+      })
       .slice(0, 5);
-  }, [baseFilteredReports]);
+  }, [baseFilteredReports, rankingSortBy, rankingSortDirection]);
 
   const summaryInsights = useMemo(() => {
     const leadingLeague = leagueDistribution[0];
@@ -1215,7 +1529,7 @@ export function ReportsWorkspace({
         ? `${summaryMetrics.unpaidCount} reportes siguen sin pago confirmado y requieren seguimiento administrativo.`
         : "No hay pagos pendientes en el periodo visible.",
       busiestResponsible
-        ? `${busiestResponsible} lidera el volumen de cierres con la mejor efectividad visible del periodo.`
+        ? `${busiestResponsible} lidera el volumen de cierres dentro del periodo visible.`
         : "Sin datos suficientes para calcular el ranking de responsables.",
       criticalLeagueName && summaryMetrics.criticalCount
         ? `${criticalLeagueName} concentra la mayor urgencia con ${summaryMetrics.criticalCount} cierres críticos.`
@@ -1245,6 +1559,15 @@ export function ReportsWorkspace({
       if (sortBy === "id") {
         return (
           left.id_feed.localeCompare(right.id_feed, "es", {
+            numeric: true,
+            sensitivity: "base",
+          }) * directionFactor
+        );
+      }
+
+      if (sortBy === "idBp") {
+        return (
+          left.id_bp.localeCompare(right.id_bp, "es", {
             numeric: true,
             sensitivity: "base",
           }) * directionFactor
@@ -1310,42 +1633,40 @@ export function ReportsWorkspace({
 
   const selectedReport =
     sortedReports.find((report) => report.id_feed === selectedReportId) ?? null;
-
-  const selectedReportOperations = selectedReport
-    ? [
-        {
-          label: "Gravedad",
-          value: selectedReport.severity,
-          icon: ShieldAlert,
-          tone:
-            selectedReport.severity === "Sin incidencia"
-              ? "text-[#11915a] bg-[#eaf9f0]"
-              : selectedReport.severity === "Crítica"
-                ? "text-[var(--accent)] bg-[#fff1f5]"
-                : selectedReport.severity === "Alta"
-                  ? "text-[#dc2626] bg-[#fff4f2]"
-                  : selectedReport.severity === "Media"
-                    ? "text-[#b78611] bg-[#fff8e8]"
-                    : "text-[#70819b] bg-[#f4f7fb]",
-        },
-        {
-          label: "Feed detectó",
-          value: selectedReport.feed_detected ? "Sí" : "No",
-          icon: selectedReport.feed_detected ? CircleCheckBig : CircleX,
-          tone: selectedReport.feed_detected
-            ? "text-[#11915a] bg-[#eaf9f0]"
-            : "text-[#e44b68] bg-[#fff3f6]",
-        },
-        {
-          label: "Estado financiero",
-          value: selectedReport.paid ? "Pagado" : "No pagado",
-          icon: selectedReport.paid ? CircleCheckBig : CircleX,
-          tone: selectedReport.paid
-            ? "text-[#11915a] bg-[#eaf9f0]"
-            : "text-[#e44b68] bg-[#fff3f6]",
-        },
-      ]
-    : [];
+  const selectedReportTeams = selectedReport
+    ? splitMatchLabel(selectedReport.match_label)
+    : null;
+  const selectedReportSeverityTone = selectedReport
+    ? selectedReport.severity === "Sin incidencia"
+      ? {
+          panel: "border-[#cde9d7] bg-[#f4fcf7]",
+          label: "text-[#17945b]",
+          value: "text-[#167447]",
+        }
+      : selectedReport.severity === "Crítica"
+        ? {
+            panel: "border-[#edd7fb] bg-[#fbf5ff]",
+            label: "text-[#a12ad6]",
+            value: "text-[#7f1fb2]",
+          }
+        : selectedReport.severity === "Alta"
+          ? {
+              panel: "border-[#ffd6df] bg-[#fff4f6]",
+              label: "text-[#cf2246]",
+              value: "text-[#b51f3e]",
+            }
+          : selectedReport.severity === "Media"
+            ? {
+                panel: "border-[#f4e1a6] bg-[#fffdf2]",
+                label: "text-[#b78611]",
+                value: "text-[#9b730b]",
+              }
+            : {
+                panel: "border-[#f3e7b8] bg-[#fffef8]",
+                label: "text-[#b79734]",
+                value: "text-[#8f7a2f]",
+              }
+    : null;
 
   const renderReportControlHeader = (column: ReportControlColumn) => {
     const sortableKey = REPORT_CONTROL_COLUMN_SORT_KEY[column];
@@ -1396,7 +1717,9 @@ export function ReportsWorkspace({
                 column === "league"
                   ? "LIGA"
                   : column === "id"
-                    ? "ID"
+                    ? "ID FEED"
+                    : column === "idBp"
+                      ? "ID BP"
                     : column === "date"
                       ? "FECHA"
                       : column === "match"
@@ -1424,6 +1747,21 @@ export function ReportsWorkspace({
     );
   };
 
+  const reportColumnWidths = useMemo(() => {
+    const weights = selectedReport
+      ? REPORT_CONTROL_COMPACT_COLUMN_WIDTH_WEIGHT
+      : REPORT_CONTROL_COLUMN_WIDTH_WEIGHT;
+    const totalWeight = columnOrder.reduce(
+      (sum, column) => sum + weights[column],
+      0,
+    );
+
+    return columnOrder.reduce<Record<ReportControlColumn, string>>((acc, column) => {
+      acc[column] = `${(((weights[column] / totalWeight) * 100)).toFixed(2)}%`;
+      return acc;
+    }, {} as Record<ReportControlColumn, string>);
+  }, [columnOrder, selectedReport]);
+
   const renderReportControlCell = (report: ReportRecord, column: ReportControlColumn) => {
     const editable = report.severity !== "Sin incidencia";
 
@@ -1445,6 +1783,14 @@ export function ReportsWorkspace({
             </span>
           </td>
         );
+      case "idBp":
+        return (
+          <td key={column} className="px-6 py-5">
+            <span className="inline-flex rounded-full border border-[#d7e2f6] bg-[#f4f8ff] px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-[#2b6be7]">
+              {report.id_bp}
+            </span>
+          </td>
+        );
       case "date":
         return (
           <td key={column} className="px-6 py-5">
@@ -1455,25 +1801,29 @@ export function ReportsWorkspace({
         );
       case "match":
         return (
-          <td key={column} className="px-8 py-5">
+          <td
+            key={column}
+            className={selectedReport ? "px-5 py-5" : "px-8 py-5"}
+          >
             <MatchSummaryCell
               matchLabel={report.match_label}
               competition={report.competition}
               metaTime={report.event_time}
+              compact={Boolean(selectedReport)}
             />
           </td>
         );
       case "responsible":
         return (
           <td key={column} className="px-6 py-5">
-            <div className="flex items-center gap-3">
+            <div className="flex min-w-0 items-center gap-3">
               <HoverAvatarBadge
                 initials={getInitials(report.responsible_name)}
                 roleLabel="Responsable"
                 tone="accent"
                 size="sm"
               />
-              <span className="text-sm font-semibold text-[var(--foreground)]">
+              <span className="min-w-0 flex-1 truncate text-sm font-semibold text-[var(--foreground)]">
                 {report.responsible_name}
               </span>
             </div>
@@ -1531,23 +1881,21 @@ export function ReportsWorkspace({
       !!draggedRankingColumn &&
       draggedRankingColumn !== column &&
       dragOverRankingColumn === column;
-    const isRightAligned = column === "alerts";
 
     const label =
       column === "responsible"
         ? "Responsable"
-        : column === "effectiveness"
-          ? "Efectividad"
-          : column === "reports"
-            ? "Reportes"
-            : "Alertas";
+        : column === "role"
+          ? "Rol"
+        : column === "assignments"
+          ? "Asignaciones"
+          : "Reportes";
 
     return (
       <th
         key={column}
         className={cn(
           "px-2 pb-4 transition-colors",
-          isRightAligned && "text-right",
           isDropTarget && "bg-[#f8fafc]",
         )}
         onDragOver={(event) => {
@@ -1560,12 +1908,15 @@ export function ReportsWorkspace({
         }}
       >
         <div
-          className={cn(
-            "flex items-center gap-2",
-            isRightAligned ? "justify-end" : "justify-between",
-          )}
+          className="flex items-center justify-between gap-2"
         >
-          <span>{label}</span>
+          <SortHeader
+            label={label}
+            active={rankingSortBy === column}
+            direction={rankingSortDirection}
+            onClick={() => handleRankingSort(column)}
+            align="left"
+          />
           <button
             type="button"
             draggable
@@ -1606,39 +1957,24 @@ export function ReportsWorkspace({
             </div>
           </td>
         );
-      case "effectiveness":
+      case "role":
         return (
           <td key={column} className="px-2 py-4">
-            <div className="flex items-center gap-3">
-              <span className="text-sm font-black text-[var(--foreground)]">
-                {item.effectiveness}%
-              </span>
-              <div className="h-1.5 w-20 overflow-hidden rounded-full bg-[#edf1f6]">
-                <div
-                  className={cn(
-                    "h-full rounded-full",
-                    item.effectiveness >= 98
-                      ? "bg-[#10b981]"
-                      : item.effectiveness >= 95
-                        ? "bg-[var(--accent)]"
-                        : "bg-[#f59e0b]",
-                  )}
-                  style={{ width: `${item.effectiveness}%` }}
-                />
-              </div>
-            </div>
+            <span className="inline-flex rounded-full border border-[#d7e2f6] bg-[#f4f8ff] px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-[#617187]">
+              {item.role}
+            </span>
+          </td>
+        );
+      case "assignments":
+        return (
+          <td key={column} className="px-2 py-4 text-sm font-medium text-[#617187]">
+            {item.assignments}
           </td>
         );
       case "reports":
         return (
           <td key={column} className="px-2 py-4 text-sm font-medium text-[#617187]">
             {item.reports}
-          </td>
-        );
-      case "alerts":
-        return (
-          <td key={column} className="px-2 py-4 text-right text-sm font-bold text-[#617187]">
-            {item.incidents}
           </td>
         );
       default:
@@ -1659,6 +1995,9 @@ export function ReportsWorkspace({
       : periodMode === "week"
         ? weekOptions.map(({ value, label }) => ({ value, label }))
         : monthOptions;
+  const activePeriodLabel =
+    activePeriodOptions.find((option) => option.value === activePeriodValue)?.label ??
+    activePeriodValue;
 
   const reportsBlockTitle =
     leagueFilter !== "Todas las ligas" ? leagueFilter : "Control de reportes";
@@ -1666,6 +2005,131 @@ export function ReportsWorkspace({
     activeView === "control" && leagueFilter !== "Todas las ligas"
       ? getReportLeagueCanvasTone(leagueFilter)
       : null;
+
+  async function exportVisibleReports(sourceReports: ReportRecord[]) {
+    if (!sourceReports.length || isExporting) {
+      return;
+    }
+
+    setIsExporting(true);
+
+    try {
+      const reportGroups = groupReportsByLeague(sourceReports);
+      const fileBaseName = [
+        "reportes",
+        sanitizeFileSegment(
+          leagueFilter !== "Todas las ligas" ? leagueFilter : "todas-las-ligas",
+        ),
+        sanitizeFileSegment(activePeriodLabel),
+      ]
+        .filter(Boolean)
+        .join("-");
+
+      const excelDocument = buildReportsExcelDocument(
+        reportGroups,
+        activePeriodLabel,
+      );
+
+      downloadBlob(
+        new Blob([excelDocument], {
+          type: "application/vnd.ms-excel;charset=utf-8",
+        }),
+        `${fileBaseName}.xls`,
+      );
+
+      const [{ jsPDF }, { default: autoTable }] = await Promise.all([
+        import("jspdf"),
+        import("jspdf-autotable"),
+      ]);
+
+      const pdfDocument = new jsPDF({
+        orientation: "landscape",
+        unit: "pt",
+        format: "a4",
+      });
+      const pageWidth = pdfDocument.internal.pageSize.getWidth();
+      const pageHeight = pdfDocument.internal.pageSize.getHeight();
+      const marginX = 32;
+      const contentWidth = pageWidth - marginX * 2;
+      let currentY = 32;
+
+      pdfDocument.setFont("helvetica", "bold");
+      pdfDocument.setFontSize(16);
+      pdfDocument.setTextColor(15, 23, 42);
+      pdfDocument.text("Control de reportes", marginX, currentY);
+      currentY += 18;
+
+      pdfDocument.setFont("helvetica", "normal");
+      pdfDocument.setFontSize(10);
+      pdfDocument.setTextColor(100, 116, 139);
+      pdfDocument.text(`Periodo exportado: ${activePeriodLabel}`, marginX, currentY);
+      currentY += 20;
+
+      reportGroups.forEach(({ league, items }, index) => {
+        if (index > 0 && currentY > pageHeight - 160) {
+          pdfDocument.addPage();
+          currentY = 32;
+        }
+
+        const accent = hexToRgb(getReportLeagueAccentColor(league));
+        pdfDocument.setFillColor(accent.red, accent.green, accent.blue);
+        pdfDocument.rect(marginX, currentY, contentWidth, 24, "F");
+        pdfDocument.setFont("helvetica", "bold");
+        pdfDocument.setFontSize(11);
+        pdfDocument.setTextColor(255, 255, 255);
+        pdfDocument.text(league, marginX + 10, currentY + 16);
+
+        autoTable(pdfDocument, {
+          startY: currentY + 24,
+          margin: { left: marginX, right: marginX },
+          head: [REPORT_EXPORT_COLUMNS.map((column) => column.label)],
+          body: items.map((report) =>
+            REPORT_EXPORT_COLUMNS.map((column) => column.value(report)),
+          ),
+          theme: "grid",
+          styles: {
+            font: "helvetica",
+            fontSize: 8,
+            cellPadding: 5,
+            textColor: [15, 23, 42],
+            lineColor: [219, 228, 240],
+            lineWidth: 0.5,
+            overflow: "linebreak",
+            valign: "top",
+          },
+          headStyles: {
+            fillColor: [15, 23, 42],
+            textColor: [255, 255, 255],
+            fontStyle: "bold",
+          },
+          alternateRowStyles: {
+            fillColor: [248, 250, 252],
+          },
+          columnStyles: {
+            0: { cellWidth: 60 },
+            1: { cellWidth: 82 },
+            2: { cellWidth: 64 },
+            3: { cellWidth: 44 },
+            4: { cellWidth: 128 },
+            5: { cellWidth: 160 },
+            6: { cellWidth: 58 },
+            7: { cellWidth: 66 },
+            8: { cellWidth: 68 },
+            9: { cellWidth: 48 },
+          },
+        });
+
+        currentY =
+          (pdfDocument as { lastAutoTable?: { finalY: number } }).lastAutoTable
+            ?.finalY ?? currentY + 48;
+        currentY += 20;
+      });
+
+      pdfDocument.save(`${fileBaseName}.pdf`);
+    } finally {
+      setIsExporting(false);
+    }
+  }
 
   useEffect(() => {
     const root = document.documentElement;
@@ -1686,7 +2150,7 @@ export function ReportsWorkspace({
 
   const periodSelector = (
     <>
-      <div className="flex items-center gap-1 rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--surface)] p-1 shadow-sm">
+      <div className="flex h-12 items-center gap-1 rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--background-soft)] p-1 shadow-sm">
         {([
           ["day", "Día"],
           ["week", "Semana"],
@@ -1697,10 +2161,10 @@ export function ReportsWorkspace({
             type="button"
             onClick={() => setPeriodMode(value)}
             className={cn(
-              "rounded-[calc(var(--panel-radius)-2px)] px-4 py-2 text-sm font-bold transition",
+              "inline-flex h-full items-center rounded-[calc(var(--panel-radius)-4px)] px-4 text-sm font-bold transition",
               periodMode === value
-                ? "bg-[var(--accent)] text-white shadow-[0_10px_20px_rgba(230,18,56,0.18)]"
-                : "text-[#617187] hover:bg-[#fafbfd]",
+                ? "bg-[var(--surface)] text-[var(--foreground)] shadow-sm"
+                : "text-[var(--muted)] hover:text-[var(--foreground)]",
             )}
           >
             {label}
@@ -1757,13 +2221,6 @@ export function ReportsWorkspace({
         </select>
         <ChevronDown className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-[#94a3b8]" />
       </div>
-      <button
-        type="button"
-        className="inline-flex h-12 items-center gap-2 rounded-[var(--panel-radius)] bg-[var(--accent)] px-5 text-sm font-extrabold text-white shadow-[0_14px_28px_rgba(230,18,56,0.18)] transition hover:bg-[var(--accent-strong)]"
-      >
-        <Download className="size-4" />
-        Exportar
-      </button>
       <SectionAiAssistant
         section="Reportes"
         title="Consulta el resumen actual"
@@ -1780,6 +2237,16 @@ export function ReportsWorkspace({
         hasGeminiKey={hasGeminiKey}
         buttonVariant="icon"
       />
+      <button
+        type="button"
+        onClick={() => void exportVisibleReports(baseFilteredReports)}
+        disabled={!baseFilteredReports.length || isExporting}
+        aria-label={isExporting ? "Exportando reportes" : "Exportar reportes"}
+        title={isExporting ? "Exportando reportes" : "Exportar reportes"}
+        className="inline-flex size-12 items-center justify-center rounded-[var(--panel-radius)] bg-[var(--accent)] text-white shadow-[0_14px_28px_rgba(230,18,56,0.18)] transition hover:bg-[var(--accent-strong)]"
+      >
+        <Download className="size-4" />
+      </button>
     </>
   );
 
@@ -1790,83 +2257,545 @@ export function ReportsWorkspace({
         <input
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          placeholder="Buscar ID feed, liga o responsable..."
+          placeholder="Buscar ID feed, ID BP, liga o responsable..."
           className="w-full bg-transparent text-sm font-medium text-[var(--foreground)] outline-none placeholder:text-[#94a3b8]"
         />
       </label>
-      <SectionAiAssistant
-        section="Reportes"
-        title="Consulta los reportes visibles"
-        description="Pregunta por gravedad, responsables, pagos, detección de feed o cierres pendientes usando solo los reportes visibles."
-        placeholder="Ej. ¿Qué reportes tienen gravedad alta o crítica y quién es el responsable?"
-        contextLabel="Reportes visibles en la tabla actual"
-        context={aiContext}
-        guidance="Prioriza gravedad, responsable, pago, detección de feed, partido, liga y problema. Si preguntan por pendientes, usa los reportes visibles con incidencia."
-        examples={[
-          "¿Qué reportes tienen Sin incidencia?",
-          "¿Qué responsable lleva más cierres críticos?",
-          "¿Qué partidos siguen con problemas de pago?",
-        ]}
-        hasGeminiKey={hasGeminiKey}
-        buttonVariant="icon"
-      />
-      <button
-        type="button"
-        title="La carga persistida llegará con el módulo de reportes conectado a base de datos."
-        className="inline-flex h-[52px] items-center gap-2 rounded-[var(--panel-radius)] bg-[var(--accent)] px-6 text-sm font-extrabold text-white shadow-[0_14px_28px_rgba(230,18,56,0.18)] transition hover:bg-[var(--accent-strong)]"
-      >
-        <PlusCircle className="size-4" />
-        Nuevo reporte
-      </button>
+      <div className="flex shrink-0 items-center gap-3">
+        <button
+          type="button"
+          onClick={() => void exportVisibleReports(sortedReports)}
+          disabled={!sortedReports.length || isExporting}
+          aria-label={isExporting ? "Exportando reportes" : "Exportar reportes"}
+          title={isExporting ? "Exportando reportes" : "Exportar reportes"}
+          className="inline-flex size-[52px] items-center justify-center rounded-[var(--panel-radius)] bg-[var(--accent)] text-white shadow-[0_14px_28px_rgba(230,18,56,0.18)] transition hover:bg-[var(--accent-strong)]"
+        >
+          <Download className="size-4" />
+        </button>
+        <SectionAiAssistant
+          section="Reportes"
+          title="Consulta los reportes visibles"
+          description="Pregunta por gravedad, responsables, pagos, detección de feed o cierres pendientes usando solo los reportes visibles."
+          placeholder="Ej. ¿Qué reportes tienen gravedad alta o crítica y quién es el responsable?"
+          contextLabel="Reportes visibles en la tabla actual"
+          context={aiContext}
+          guidance="Prioriza gravedad, responsable, pago, detección de feed, partido, liga y problema. Si preguntan por pendientes, usa los reportes visibles con incidencia."
+          examples={[
+            "¿Qué reportes tienen Sin incidencia?",
+            "¿Qué responsable lleva más cierres críticos?",
+            "¿Qué partidos siguen con problemas de pago?",
+          ]}
+          hasGeminiKey={hasGeminiKey}
+          buttonVariant="icon"
+        />
+      </div>
     </>
   );
 
   const summaryTitle =
-    activeView === "summary" ? "Resumen de reportes" : "Control operativo";
+    activeView === "summary"
+      ? "Resumen de operaciones"
+      : activeView === "control"
+        ? "Reportes"
+        : "Incidencias";
 
   const summaryDescription =
     activeView === "summary"
       ? "Panel ejecutivo de control, calidad y seguimiento financiero de cierres audiovisuales."
-      : undefined;
+      : activeView === "control"
+        ? "Revisa cierres, responsables, pagos y detección de feed del corte visible."
+        : "Sigue incidencias, severidad, pruebas y observaciones del periodo visible."
+
+  const headerActions =
+    activeView === "summary" ? (
+      summaryActions
+    ) : activeView === "control" ? (
+      <div className="flex flex-wrap items-center gap-3 md:justify-end">
+        {controlActions}
+      </div>
+    ) : (
+      <div ref={setIncidentsHeaderActionsPortalTarget} />
+    );
+
+  const tabsNavigation = (
+    <div className="flex items-center gap-8 border-b border-[#edf1f6]">
+      <button
+        type="button"
+        onClick={() => setActiveView("summary")}
+        className={cn(
+          "flex items-center gap-2 border-b-2 pb-3 text-sm font-extrabold transition",
+          activeView === "summary"
+            ? "border-[var(--accent)] text-[var(--accent)]"
+            : "border-transparent text-[#94a3b8] hover:text-[#617187]",
+        )}
+      >
+        <BarChart3 className="size-4" />
+        Resumen
+      </button>
+      <button
+        type="button"
+        onClick={() => setActiveView("control")}
+        className={cn(
+          "flex items-center gap-2 border-b-2 pb-3 text-sm font-bold transition",
+          activeView === "control"
+            ? "border-[var(--accent)] text-[var(--accent)]"
+            : "border-transparent text-[#94a3b8] hover:text-[#617187]",
+        )}
+      >
+        <Filter className="size-4" />
+        Reportes
+      </button>
+      <button
+        type="button"
+        onClick={() => setActiveView("incidents")}
+        className={cn(
+          "flex items-center gap-2 border-b-2 pb-3 text-sm font-bold transition",
+          activeView === "incidents"
+            ? "border-[var(--accent)] text-[var(--accent)]"
+            : "border-transparent text-[#94a3b8] hover:text-[#617187]",
+        )}
+      >
+        <AlertTriangle className="size-4" />
+        Incidencias
+      </button>
+    </div>
+  );
+
+  const controlWorkspaceContent = (
+    <div className="flex min-w-0 flex-col gap-8">
+      <section className="grid gap-6 sm:grid-cols-2 xl:grid-cols-4">
+        <MetricCard
+          title="Total partidos"
+          value={controlMetrics.totalMatches}
+          chip={`${controlMetrics.leagueCount} ligas activas`}
+          chipTone="success"
+          barClassName="bg-[var(--accent)]"
+          barWidth={70}
+        />
+        <MetricCard
+          title="Sin incidencia"
+          value={controlMetrics.noIncident}
+          chip={controlMetrics.noIncident ? "Estable" : "Sin casos"}
+          chipTone="success"
+          barClassName="bg-[#10b981]"
+          barWidth={controlMetrics.noIncidentPercent}
+        />
+        <MetricCard
+          title="Con incidencia"
+          value={controlMetrics.withIncident}
+          chip={`${controlMetrics.withIncidentPercent}%`}
+          chipTone="accent"
+          barClassName="bg-[var(--accent)]"
+          barWidth={controlMetrics.withIncidentPercent}
+          highlight
+        />
+        <MetricCard
+          title="Cierres críticos"
+          value={controlMetrics.criticalClosures}
+          chip={controlMetrics.criticalClosures ? "Atención" : "Controlado"}
+          chipTone="warning"
+          barClassName="bg-[#f59e0b]"
+          barWidth={controlMetrics.criticalPercent}
+        />
+      </section>
+
+      <section className="space-y-6">
+        <SectionTableCard
+          title={reportsBlockTitle}
+          icon={FileText}
+          badge={
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="relative">
+                <select
+                  value={leagueFilter}
+                  onChange={(event) => setLeagueFilter(event.target.value)}
+                  className="h-10 appearance-none rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--surface)] px-4 pr-9 text-sm font-bold text-[#617187] outline-none transition hover:bg-[#fafbfd]"
+                >
+                  {leagueOptions.map((league) => (
+                    <option key={league} value={league}>
+                      {league}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-[#94a3b8]" />
+              </div>
+
+              <div className="flex h-10 items-center gap-1 rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--background-soft)] p-1 shadow-sm">
+                {([
+                  ["day", "Día"],
+                  ["week", "Semana"],
+                  ["month", "Mes"],
+                ] as const).map(([value, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setPeriodMode(value)}
+                    className={cn(
+                      "inline-flex h-full items-center rounded-[calc(var(--panel-radius)-4px)] px-3 text-sm font-bold transition",
+                      periodMode === value
+                        ? "bg-[var(--surface)] text-[var(--foreground)] shadow-sm"
+                        : "text-[var(--muted)] hover:text-[var(--foreground)]",
+                    )}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="relative">
+                <CalendarDays className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[var(--accent)]" />
+                <select
+                  value={activePeriodValue}
+                  onChange={(event) => {
+                    const value = event.target.value;
+
+                    if (periodMode === "day") {
+                      setSelectedDayKey(value);
+                      return;
+                    }
+
+                    if (periodMode === "week") {
+                      setSelectedWeekKey(value);
+                      return;
+                    }
+
+                    setSelectedMonthKey(value);
+                  }}
+                  className="h-10 appearance-none rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--surface)] pl-10 pr-10 text-sm font-bold text-[#617187] outline-none transition hover:bg-[#fafbfd]"
+                >
+                  {activePeriodOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-[#94a3b8]" />
+              </div>
+            </div>
+          }
+          footer={
+            <>
+              <p className="text-xs font-black uppercase tracking-[0.14em] text-[#617187]">
+                Mostrando {queryFilteredReports.length} de {reports.length} reportes
+              </p>
+              <div className="flex gap-1">
+                <button className="inline-flex size-9 items-center justify-center rounded-lg border border-[var(--border)] bg-white text-[#94a3b8]">
+                  1
+                </button>
+                <button className="inline-flex size-9 items-center justify-center rounded-lg border border-[var(--border)] bg-[#fafbfd] text-[#94a3b8]">
+                  2
+                </button>
+                <button className="inline-flex size-9 items-center justify-center rounded-lg border border-[var(--border)] bg-[#fafbfd] text-[#94a3b8]">
+                  3
+                </button>
+              </div>
+            </>
+          }
+        >
+          {queryFilteredReports.length ? (
+            <div className="min-w-0 overflow-x-auto">
+              <table className="min-w-full table-fixed text-left">
+                <colgroup>
+                  {columnOrder.map((column) => (
+                    <col
+                      key={column}
+                      style={{ width: reportColumnWidths[column] }}
+                    />
+                  ))}
+                </colgroup>
+                <thead>
+                  <tr className="bg-[#fafbfd] text-[11px] font-black uppercase tracking-[0.18em] text-[#94a3b8]">
+                    {columnOrder.map((column) =>
+                      renderReportControlHeader(column),
+                    )}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#edf1f6]">
+                  {sortedReports.map((report) => {
+                    const editable = report.severity !== "Sin incidencia";
+                    const selected = selectedReport?.id_feed === report.id_feed;
+                    const rowTone = getReportRowTone(report.severity);
+
+                    return (
+                      <tr
+                        key={report.id_feed}
+                        onClick={() => {
+                          setSelectedReportId(report.id_feed);
+                          setReportDrawerTab("details");
+                        }}
+                        className={cn(
+                          "cursor-pointer transition",
+                          selected
+                            ? rowTone.active
+                            : editable
+                              ? rowTone.hover
+                              : "opacity-80 hover:bg-[#fafbfd]",
+                        )}
+                      >
+                        {columnOrder.map((column) =>
+                          renderReportControlCell(report, column),
+                        )}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="p-8">
+              <EmptyState
+                title="No encontramos reportes con esa búsqueda"
+                description="Prueba con otro ID, responsable o liga para volver al tablero completo de cierres."
+              />
+            </div>
+          )}
+        </SectionTableCard>
+      </section>
+    </div>
+  );
+
+  const selectedReportDrawer = selectedReport ? (
+    <aside className="min-w-0 self-start xl:sticky xl:top-24">
+      <div className="panel-surface fixed inset-x-4 bottom-4 top-20 z-40 flex flex-col overflow-hidden border border-[var(--border)] bg-[var(--surface)] xl:static xl:h-[calc(100vh-8rem)] xl:w-full">
+        <div className="border-b border-[var(--border)] p-6">
+          <div className="mb-4 flex items-center justify-between gap-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="inline-flex rounded-full border border-[#f3cfd8] bg-[#fff3f6] px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-[var(--accent)]">
+                {selectedReport.id_bp}
+              </span>
+              <span
+                style={{
+                  backgroundColor: getTeamLeagueColorSet(selectedReport.league).soft,
+                  color: getTeamLeagueColorSet(selectedReport.league).accent,
+                }}
+                className="inline-flex rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em]"
+              >
+                {selectedReport.league}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedReportId(null);
+                setReportDrawerTab("details");
+              }}
+              aria-label="Cerrar detalle de reporte"
+              className="inline-flex size-10 items-center justify-center rounded-full bg-[var(--background-soft)] text-[#94a3b8]"
+            >
+              <X className="size-4" />
+            </button>
+          </div>
+
+          <div className="space-y-1">
+            <p className="text-[1.6rem] font-black leading-[1.05] tracking-[-0.04em] text-[var(--foreground)]">
+              {selectedReportTeams?.homeTeam}
+            </p>
+            <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-[1.6rem] font-black leading-[1.05] tracking-[-0.04em] text-[var(--foreground)]">
+              <span className="text-[var(--accent)]">VS</span>
+              <span>{selectedReportTeams?.awayTeam}</span>
+            </div>
+          </div>
+
+          <div className="mt-4 flex items-center gap-4 text-sm text-[#70819b]">
+            <span className="inline-flex items-center gap-2">
+              <CalendarDays className="size-4 text-[#b1b8c5]" />
+              {selectedReport.event_date}
+            </span>
+            <span className="inline-flex items-center gap-2">
+              <Clock3 className="size-4 text-[#b1b8c5]" />
+              {selectedReport.event_time}
+            </span>
+          </div>
+          <div className="mt-2 inline-flex items-start gap-2 text-sm text-[#70819b]">
+            <MapPin className="mt-0.5 size-4 shrink-0 text-[#b1b8c5]" />
+            <span>{selectedReport.venue}</span>
+          </div>
+        </div>
+
+        <div className="border-b border-[var(--border)] px-6">
+          <div className="grid grid-cols-2 gap-2 border-b border-[var(--border)]/60">
+            <button
+              type="button"
+              onClick={() => setReportDrawerTab("details")}
+              className={cn(
+                "inline-flex min-w-0 items-center justify-center gap-1.5 border-b-2 px-1 pb-4 pt-3 text-[10px] font-black uppercase tracking-[0.12em] transition",
+                reportDrawerTab === "details"
+                  ? "border-[var(--accent)] text-[var(--accent)]"
+                  : "border-transparent text-[#94a3b8] hover:text-[#617187]",
+              )}
+            >
+              <Eye className="size-3.5 shrink-0" />
+              <span className="truncate">Detalle</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setReportDrawerTab("activity")}
+              className={cn(
+                "inline-flex min-w-0 items-center justify-center gap-1.5 border-b-2 px-1 pb-4 pt-3 text-[10px] font-black uppercase tracking-[0.12em] transition",
+                reportDrawerTab === "activity"
+                  ? "border-[var(--accent)] text-[var(--accent)]"
+                  : "border-transparent text-[#94a3b8] hover:text-[#617187]",
+              )}
+            >
+              <History className="size-3.5 shrink-0" />
+              <span className="truncate">Log</span>
+            </button>
+          </div>
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6 xl:max-h-none">
+          {reportDrawerTab === "details" ? (
+            <div className="space-y-8">
+              <section className="space-y-4">
+                <h4 className="text-[11px] font-black uppercase tracking-[0.18em] text-[#94a3b8]">
+                  Resumen operativo
+                </h4>
+                <div className="grid gap-3">
+                  <div
+                    className={cn(
+                      "panel-radius border p-4",
+                      selectedReportSeverityTone?.panel,
+                    )}
+                  >
+                    <p
+                      className={cn(
+                        "text-[10px] font-black uppercase tracking-[0.16em]",
+                        selectedReportSeverityTone?.label,
+                      )}
+                    >
+                      Nivel actual
+                    </p>
+                    <p
+                      className={cn(
+                        "mt-2 text-sm font-black",
+                        selectedReportSeverityTone?.value,
+                      )}
+                    >
+                      {selectedReport.severity}
+                    </p>
+                  </div>
+
+                  <div className="panel-radius border border-[var(--border)] bg-white p-4">
+                    <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#94a3b8]">
+                      Responsable
+                    </p>
+                    <div className="mt-3 flex items-center gap-3">
+                      <HoverAvatarBadge
+                        initials={getInitials(selectedReport.responsible_name)}
+                        roleLabel="Responsable"
+                        tone="accent"
+                        size="md"
+                      />
+                      <p className="text-sm font-bold text-[var(--foreground)]">
+                        {selectedReport.responsible_name}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="panel-radius border border-[var(--border)] bg-white p-4">
+                      <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#94a3b8]">
+                        Feed detectó
+                      </p>
+                      <p className="mt-2 text-sm font-bold text-[var(--foreground)]">
+                        {selectedReport.feed_detected ? "Sí" : "No"}
+                      </p>
+                    </div>
+                    <div className="panel-radius border border-[var(--border)] bg-white p-4">
+                      <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#94a3b8]">
+                        Estado financiero
+                      </p>
+                      <p className="mt-2 text-sm font-bold text-[var(--foreground)]">
+                        {selectedReport.paid ? "Pagado" : "No pagado"}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </section>
+            </div>
+          ) : (
+            <section className="space-y-5">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <History className="size-4 text-[var(--accent)]" />
+                  <h4 className="text-[11px] font-black uppercase tracking-[0.18em] text-[#94a3b8]">
+                    Actividad
+                  </h4>
+                </div>
+                <span className="rounded-full bg-[var(--background-soft)] px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-[#7d8ca1]">
+                  {activities.slice(0, 3).length} eventos
+                </span>
+              </div>
+
+              {activities.length ? (
+                <div className="space-y-4 border-l border-[var(--border)] pl-5">
+                  {activities.slice(0, 3).map((activity) => {
+                    const tone = getReportActivityTone(activity.tone);
+
+                    return (
+                      <div key={activity.id} className="relative">
+                        <div className="absolute -left-[27px] top-1 bg-[var(--surface)] p-1">
+                          <div
+                            className={cn(
+                              "size-3 rounded-full ring-4",
+                              tone.dot,
+                            )}
+                          />
+                        </div>
+
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="text-sm font-bold text-[var(--foreground)]">
+                              {activity.title}
+                            </p>
+                            <p className="mt-2 text-xs leading-5 text-[#70819b]">
+                              {activity.detail}
+                            </p>
+                          </div>
+                          <span
+                            className={cn(
+                              "shrink-0 rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.14em]",
+                              tone.badge,
+                            )}
+                          >
+                            {activity.timestamp}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="rounded-[10px] border border-dashed border-[var(--border)] bg-[var(--background-soft)] p-4 text-sm text-[#617187]">
+                  Todavía no hay actividad registrada para este reporte.
+                </div>
+              )}
+            </section>
+          )}
+        </div>
+      </div>
+    </aside>
+  ) : null;
+  const hasEmbeddedIncidentDrawer = activeView === "incidents" && Boolean(selectedEmbeddedIncidentId);
+  const hasNonSummaryDrawer = activeView === "control"
+    ? Boolean(selectedReportDrawer)
+    : hasEmbeddedIncidentDrawer;
 
   return (
-    <div className="flex min-h-[42rem] flex-col gap-8 transition-colors">
-      <SectionPageHeader
-        title={summaryTitle}
-        description={summaryDescription}
-        actions={activeView === "summary" ? summaryActions : controlActions}
-      />
-
-      <div className="flex items-center gap-8 border-b border-[#edf1f6]">
-        <button
-          type="button"
-          onClick={() => setActiveView("summary")}
-          className={cn(
-            "flex items-center gap-2 border-b-2 pb-3 text-sm font-extrabold transition",
-            activeView === "summary"
-              ? "border-[var(--accent)] text-[var(--accent)]"
-              : "border-transparent text-[#94a3b8] hover:text-[#617187]",
-          )}
-        >
-          <BarChart3 className="size-4" />
-          Resumen
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveView("control")}
-          className={cn(
-            "flex items-center gap-2 border-b-2 pb-3 text-sm font-bold transition",
-            activeView === "control"
-              ? "border-[var(--accent)] text-[var(--accent)]"
-              : "border-transparent text-[#94a3b8] hover:text-[#617187]",
-          )}
-        >
-          <Filter className="size-4" />
-          Control operativo
-        </button>
-      </div>
-
+    <div
+      className={cn(
+        "flex min-h-[42rem] flex-col transition-colors",
+        activeView === "summary" ? "gap-4" : "gap-3",
+      )}
+    >
       {activeView === "summary" ? (
+        <>
+          <SectionPageHeader
+            title={summaryTitle}
+            description={summaryDescription}
+            actions={headerActions}
+          />
+          {tabsNavigation}
         <div className="space-y-8">
           <section className="grid gap-8 xl:grid-cols-[minmax(0,1.7fr)_minmax(320px,1fr)]">
             <div className="space-y-8">
@@ -1921,7 +2850,7 @@ export function ReportsWorkspace({
                     </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-3">
-                    <div className="flex items-center gap-1 rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--surface)] p-1 shadow-sm">
+                    <div className="flex h-10 items-center gap-1 rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--background-soft)] p-1 shadow-sm">
                       {([
                         ["count", "Cantidad"],
                         ["rate", "Tasa %"],
@@ -1931,27 +2860,27 @@ export function ReportsWorkspace({
                           type="button"
                           onClick={() => setIncidentChartMetric(value)}
                           className={cn(
-                            "rounded-[calc(var(--panel-radius)-2px)] px-3 py-1.5 text-xs font-bold transition",
+                            "inline-flex h-full items-center rounded-[calc(var(--panel-radius)-4px)] px-3 text-xs font-bold transition",
                             incidentChartMetric === value
-                              ? "bg-[var(--accent)] text-white shadow-[0_10px_20px_rgba(230,18,56,0.18)]"
-                              : "text-[#617187] hover:bg-[#fafbfd]",
+                              ? "bg-[var(--surface)] text-[var(--foreground)] shadow-sm"
+                              : "text-[var(--muted)] hover:text-[var(--foreground)]",
                           )}
                         >
                           {label}
                         </button>
                       ))}
                     </div>
-                    <div className="flex items-center gap-1 rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--surface)] p-1 shadow-sm">
+                    <div className="flex h-10 items-center gap-1 rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--background-soft)] p-1 shadow-sm">
                       {([5, 10] as const).map((limit) => (
                         <button
                           key={limit}
                           type="button"
                           onClick={() => setIncidentChartLimit(limit)}
                           className={cn(
-                            "rounded-[calc(var(--panel-radius)-2px)] px-3 py-1.5 text-xs font-bold transition",
+                            "inline-flex h-full items-center rounded-[calc(var(--panel-radius)-4px)] px-3 text-xs font-bold transition",
                             incidentChartLimit === limit
-                              ? "bg-[var(--accent)] text-white shadow-[0_10px_20px_rgba(230,18,56,0.18)]"
-                              : "text-[#617187] hover:bg-[#fafbfd]",
+                              ? "bg-[var(--surface)] text-[var(--foreground)] shadow-sm"
+                              : "text-[var(--muted)] hover:text-[var(--foreground)]",
                           )}
                         >
                           Top {limit}
@@ -1961,7 +2890,7 @@ export function ReportsWorkspace({
                   </div>
                 </div>
 
-                <div className="rounded-[var(--panel-radius)] bg-[#fcfdff] p-6">
+                <div className="rounded-[var(--panel-radius)] bg-transparent p-6">
                   {incidentLeagueChart.series.length ? (
                     <div className="space-y-6">
                       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
@@ -1988,7 +2917,7 @@ export function ReportsWorkspace({
                         ))}
                       </div>
 
-                      <div className="h-[320px] rounded-[var(--panel-radius)] bg-white px-4 py-4">
+                      <div className="h-[320px] rounded-[var(--panel-radius)] bg-white px-2 py-4">
                         <svg viewBox="0 0 720 260" className="h-full w-full overflow-visible">
                           {[0, 0.25, 0.5, 0.75, 1].map((ratio) => {
                             const y = 20 + 180 * ratio;
@@ -1996,8 +2925,8 @@ export function ReportsWorkspace({
                             return (
                               <line
                                 key={ratio}
-                                x1="18"
-                                x2="702"
+                                x1="12"
+                                x2="714"
                                 y1={y}
                                 y2={y}
                                 stroke="#edf1f6"
@@ -2010,13 +2939,13 @@ export function ReportsWorkspace({
                             const values = item.points.map((point) => point.value);
                             const path = buildChartLinePath(
                               values,
-                              684,
+                              702,
                               180,
                               incidentLeagueChart.maxValue,
                             );
 
                             return (
-                              <g key={item.league} transform="translate(18 20)">
+                              <g key={item.league} transform="translate(12 20)">
                                 <path
                                   d={path}
                                   fill="none"
@@ -2029,8 +2958,8 @@ export function ReportsWorkspace({
                                 {values.map((value, index) => {
                                   const x =
                                     values.length === 1
-                                      ? 684 / 2
-                                      : (684 / Math.max(values.length - 1, 1)) * index;
+                                      ? 702 / 2
+                                      : (702 / Math.max(values.length - 1, 1)) * index;
                                   const y =
                                     180 -
                                     (value / Math.max(incidentLeagueChart.maxValue, 1)) * 180;
@@ -2055,7 +2984,7 @@ export function ReportsWorkspace({
                             const x =
                               labels.length === 1
                                 ? 360
-                                : 18 + (684 / Math.max(labels.length - 1, 1)) * index;
+                                : 12 + (702 / Math.max(labels.length - 1, 1)) * index;
 
                             return (
                               <text
@@ -2101,105 +3030,187 @@ export function ReportsWorkspace({
               </article>
             </div>
 
-            <article className="panel-surface border border-[var(--border)] bg-[var(--surface)] p-8">
+            <article className="panel-surface border border-[var(--border)] bg-[var(--surface)] px-8 pb-8 pt-6">
               <h3 className="text-2xl font-black text-[var(--foreground)]">
-                Distribución general
+                Resumen de reportes
               </h3>
-              <div className="mt-8 space-y-6">
-                <div className="space-y-4">
+              <div className="mt-6 space-y-4.5">
+                <div className="space-y-3.5">
                   <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#94a3b8]">
                     Por liga
                   </p>
-                  {leagueDistribution.map((item) => {
+                  {(() => {
                     const maxCount = Math.max(
-                      ...leagueDistribution.map((entry) => entry.count),
+                      ...visibleLeagueDistribution.map((entry) => entry.count),
                       1,
                     );
 
-                    return (
-                      <div key={item.league} className="space-y-2">
-                        <div className="flex items-center justify-between gap-4 text-sm font-bold">
-                          <span className="text-[#617187]">{item.league}</span>
-                          <span className="text-[var(--foreground)]">
-                            {item.count} reportes
-                          </span>
-                        </div>
-                        <div className="h-2 overflow-hidden rounded-full bg-[#edf1f6]">
-                          <div
-                            className="h-full rounded-full bg-[#1f2937]"
-                            style={{ width: `${(item.count / maxCount) * 100}%` }}
+                    return visibleLeagueDistribution.map((item) => (
+                      <div
+                        key={item.league}
+                        className="grid grid-cols-[2.75rem_minmax(0,1fr)] items-center gap-x-3.5"
+                      >
+                        <div className="flex h-full items-center justify-center">
+                          <LeagueLogoMarkClient
+                            league={item.league}
+                            className="size-9"
                           />
                         </div>
-                      </div>
-                    );
-                  })}
-                </div>
-
-                <div className="border-t border-[#edf1f6] pt-6">
-                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#94a3b8]">
-                    Gravedad
-                  </p>
-                  <div className="mt-4 space-y-4">
-                    {severityDistribution.map((item) => {
-                      const barClassName =
-                        item.severity === "Crítica"
-                          ? "bg-[#a12ad6]"
-                          : item.severity === "Alta"
-                            ? "bg-[#e44b68]"
-                            : item.severity === "Media"
-                              ? "bg-[#e7c247]"
-                              : item.severity === "Baja"
-                                ? "bg-[#d8e2ef]"
-                                : "bg-[#10b981]";
-
-                      return (
-                        <div key={item.severity} className="space-y-2">
-                          <div className="flex items-center justify-between text-sm font-bold">
-                            <span className="text-[#617187]">{item.severity}</span>
-                            <span className="text-[var(--foreground)]">
-                              {item.percentage}%
+                        <div className="min-w-0 flex-1">
+                          <div className="mb-1.5 flex items-center justify-between gap-3 text-sm font-bold leading-tight">
+                            <span className="truncate text-[#617187]">{item.league}</span>
+                            <span className="shrink-0 text-[var(--foreground)]">
+                              {item.count} reportes
                             </span>
                           </div>
-                          <div className="h-2 overflow-hidden rounded-full bg-[#edf1f6]">
+                          <div className="h-2.5 overflow-hidden rounded-full bg-[#edf1f6]">
                             <div
-                              className={cn("h-full rounded-full", barClassName)}
-                              style={{ width: `${item.percentage}%` }}
+                              className="h-full rounded-full bg-[#1f2937]"
+                              style={{ width: `${(item.count / maxCount) * 100}%` }}
                             />
+                          </div>
+                        </div>
+                      </div>
+                    ));
+                  })()}
+                  {leagueDistribution.length ? (
+                    <div className="relative py-[0.25rem]">
+                      <div className="absolute inset-x-0 top-1/2 border-t border-[#edf1f6]" />
+                      <div className="relative flex justify-center">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            canExpandLeagueDistribution
+                              ? setShowAllLeagueDistribution((current) => !current)
+                              : undefined
+                          }
+                          disabled={!canExpandLeagueDistribution}
+                          className={cn(
+                            "inline-flex size-7 items-center justify-center rounded-full border bg-white shadow-sm transition",
+                            canExpandLeagueDistribution
+                              ? "border-[#d9e1eb] text-[var(--accent)] hover:border-[#efc2cb] hover:bg-[#fff6f8] hover:text-[var(--accent)]"
+                              : "cursor-default border-[#e5eaf1] text-[#b8c2d0]",
+                          )}
+                          aria-expanded={showAllLeagueDistribution}
+                          aria-label={
+                            showAllLeagueDistribution
+                              ? "Mostrar menos ligas"
+                              : "Mostrar más ligas"
+                          }
+                        >
+                          {showAllLeagueDistribution ? (
+                            <ChevronUp className="size-3.5" />
+                          ) : (
+                            <ChevronDown className="size-3.5" />
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+
+                <div className="pt-0.5">
+                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#94a3b8]">
+                    Por gravedad
+                  </p>
+                  <div className="mt-3.5 space-y-3.5">
+                    {visibleSeverityDistribution.map((item) => {
+                      const {
+                        barClassName,
+                        icon: SeverityIcon,
+                        iconClassName,
+                      } = getSeverityDistributionMeta(item.severity);
+
+                      return (
+                        <div
+                          key={item.severity}
+                          className="grid grid-cols-[2.75rem_minmax(0,1fr)] items-center gap-x-3.5"
+                        >
+                          <div className="flex h-full items-center justify-center">
+                            <SeverityIcon
+                              className={cn("size-[1.35rem] shrink-0", iconClassName)}
+                            />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="mb-1.5 flex items-center justify-between gap-3 text-sm font-bold leading-tight">
+                              <span className="truncate text-[#617187]">{item.severity}</span>
+                              <span className="text-[var(--foreground)]">
+                                {item.percentage}%
+                              </span>
+                            </div>
+                            <div className="h-2.5 overflow-hidden rounded-full bg-[#edf1f6]">
+                              <div
+                                className={cn("h-full rounded-full", barClassName)}
+                                style={{ width: `${item.percentage}%` }}
+                              />
+                            </div>
                           </div>
                         </div>
                       );
                     })}
+                    {canExpandSeverityDistribution ? (
+                      <div className="relative py-[0.25rem]">
+                        <div className="absolute inset-x-0 top-1/2 border-t border-[#edf1f6]" />
+                        <div className="relative flex justify-center">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setShowAllSeverityDistribution((current) => !current)
+                            }
+                            className="inline-flex size-7 items-center justify-center rounded-full border border-[#d9e1eb] bg-white text-[var(--accent)] shadow-sm transition hover:border-[#efc2cb] hover:bg-[#fff6f8] hover:text-[var(--accent)]"
+                            aria-expanded={showAllSeverityDistribution}
+                            aria-label={
+                              showAllSeverityDistribution
+                                ? "Mostrar menos rubros de gravedad"
+                                : "Mostrar más rubros de gravedad"
+                            }
+                          >
+                            {showAllSeverityDistribution ? (
+                              <ChevronUp className="size-3.5" />
+                            ) : (
+                              <ChevronDown className="size-3.5" />
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
                 </div>
 
-                <div className="border-t border-[#edf1f6] pt-6">
+                <div className="pt-0">
                   <div className="flex items-center justify-between gap-3">
                     <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#94a3b8]">
-                      Reincidencia por sede
+                      Por sede
                     </p>
                     <span className="text-[10px] font-black uppercase tracking-[0.14em] text-[#94a3b8]">
-                      Top {venueRecurrence.length}
+                      Top {Math.min(venueRecurrence.length, showAllVenueRecurrence ? 10 : 3)}
                     </span>
                   </div>
-                  <div className="mt-4 space-y-4">
-                    {venueRecurrence.length ? (
-                      venueRecurrence.map((item) => (
-                        <div key={item.venue} className="flex items-center gap-3">
-                          <div title={item.venue}>
+                  <div className="mt-3.5 space-y-3.5">
+                    {visibleVenueRecurrence.length ? (
+                      visibleVenueRecurrence.map((item) => (
+                        <div
+                          key={item.venue}
+                          className="grid grid-cols-[2.75rem_minmax(0,1fr)] items-center gap-x-3.5"
+                        >
+                          <div
+                            title={item.venue}
+                            className="flex h-full items-center justify-center"
+                          >
                             <ClientTeamLogoMark
                               teamName={item.teamName}
                               competition={item.competition}
-                              className="size-11 rounded-[12px] border-transparent bg-transparent shadow-none"
+                              className="size-9 rounded-[12px] border-transparent bg-transparent shadow-none"
                               imageClassName="object-contain p-0.5"
                               initialsClassName="text-[10px] tracking-[0.12em] text-[#70819b]"
                             />
                           </div>
                           <div className="min-w-0 flex-1">
-                            <div className="mb-2 flex items-center justify-between gap-3">
-                              <span className="truncate text-xs font-bold text-[#617187]">
-                                {item.teamName}
+                            <div className="mb-1.5 flex items-center justify-between gap-3 leading-tight">
+                              <span className="truncate text-sm font-bold text-[#617187]">
+                                {item.venue}
                               </span>
-                              <span className="shrink-0 text-xs font-black text-[var(--foreground)]">
+                              <span className="shrink-0 text-sm font-black text-[var(--foreground)]">
                                 {item.total}
                               </span>
                             </div>
@@ -2245,6 +3256,30 @@ export function ReportsWorkspace({
                         No hay reincidencias por sede en el periodo visible.
                       </p>
                     )}
+                    {canExpandVenueRecurrence ? (
+                      <div className="relative py-[0.25rem]">
+                        <div className="absolute inset-x-0 top-1/2 border-t border-[#edf1f6]" />
+                        <div className="relative flex justify-center">
+                          <button
+                            type="button"
+                            onClick={() => setShowAllVenueRecurrence((current) => !current)}
+                            className="inline-flex size-7 items-center justify-center rounded-full border border-[#d9e1eb] bg-white text-[var(--accent)] shadow-sm transition hover:border-[#efc2cb] hover:bg-[#fff6f8] hover:text-[var(--accent)]"
+                            aria-expanded={showAllVenueRecurrence}
+                            aria-label={
+                              showAllVenueRecurrence
+                                ? "Mostrar menos sedes"
+                                : "Mostrar más sedes"
+                            }
+                          >
+                            {showAllVenueRecurrence ? (
+                              <ChevronUp className="size-3.5" />
+                            ) : (
+                              <ChevronDown className="size-3.5" />
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
                 </div>
               </div>
@@ -2255,7 +3290,7 @@ export function ReportsWorkspace({
             <article className="panel-surface border border-[var(--border)] bg-[var(--surface)] p-8">
               <div className="mb-6 flex items-center justify-between">
                 <h3 className="text-2xl font-black text-[var(--foreground)]">
-                  Ranking de responsables
+                  Reportes por personal
                 </h3>
                 <span className="text-[10px] font-black uppercase tracking-[0.16em] text-[#11915a]">
                   Top performance
@@ -2311,357 +3346,38 @@ export function ReportsWorkspace({
             </div>
           </section>
         </div>
+        </>
       ) : (
         <div
           className={cn(
-            "grid gap-8 transition-colors",
-            selectedReport
-              ? "xl:grid-cols-[minmax(0,1fr)_420px]"
+            "grid gap-6 transition-colors",
+            hasNonSummaryDrawer
+              ? "xl:grid-cols-[minmax(0,1fr)_390px]"
               : "grid-cols-1",
           )}
         >
-          <div className="flex min-w-0 flex-col gap-10">
-            <section className="grid gap-6 sm:grid-cols-2 xl:grid-cols-4">
-              <MetricCard
-                title="Total partidos"
-                value={controlMetrics.totalMatches}
-                chip={`${controlMetrics.leagueCount} ligas activas`}
-                chipTone="success"
-                barClassName="bg-[var(--accent)]"
-                barWidth={70}
+          <div className="flex min-w-0 flex-col gap-3">
+            <SectionPageHeader
+              title={summaryTitle}
+              description={summaryDescription}
+              actions={headerActions}
+            />
+            {tabsNavigation}
+            {activeView === "control" ? (
+              <div className="-mt-1">{controlWorkspaceContent}</div>
+            ) : (
+              <IncidentsWorkspace
+                incidents={incidents}
+                hasGeminiKey={hasGeminiKey}
+                embedded
+                headerActionsPortalTarget={incidentsHeaderActionsPortalTarget}
+                drawerPortalTarget={incidentsDrawerPortalTarget}
+                onSelectedIdChange={setSelectedEmbeddedIncidentId}
               />
-              <MetricCard
-                title="Sin incidencia"
-                value={controlMetrics.noIncident}
-                chip={controlMetrics.noIncident ? "Estable" : "Sin casos"}
-                chipTone="success"
-                barClassName="bg-[#10b981]"
-                barWidth={controlMetrics.noIncidentPercent}
-              />
-              <MetricCard
-                title="Con incidencia"
-                value={controlMetrics.withIncident}
-                chip={`${controlMetrics.withIncidentPercent}%`}
-                chipTone="accent"
-                barClassName="bg-[var(--accent)]"
-                barWidth={controlMetrics.withIncidentPercent}
-                highlight
-              />
-              <MetricCard
-                title="Cierres críticos"
-                value={controlMetrics.criticalClosures}
-                chip={controlMetrics.criticalClosures ? "Atención" : "Controlado"}
-                chipTone="warning"
-                barClassName="bg-[#f59e0b]"
-                barWidth={controlMetrics.criticalPercent}
-              />
-            </section>
-
-            <section className="space-y-6">
-              <SectionTableCard
-                title={reportsBlockTitle}
-                icon={FileText}
-                badge={
-                  <div className="flex flex-wrap items-center gap-3">
-                    <div className="relative">
-                      <select
-                        value={leagueFilter}
-                        onChange={(event) => setLeagueFilter(event.target.value)}
-                        className="h-10 appearance-none rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--surface)] px-4 pr-9 text-sm font-bold text-[#617187] outline-none transition hover:bg-[#fafbfd]"
-                      >
-                        {leagueOptions.map((league) => (
-                          <option key={league} value={league}>
-                            {league}
-                          </option>
-                        ))}
-                      </select>
-                      <ChevronDown className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-[#94a3b8]" />
-                    </div>
-
-                    <div className="flex items-center gap-1 rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--surface)] p-1">
-                      {([
-                        ["day", "Día"],
-                        ["week", "Semana"],
-                        ["month", "Mes"],
-                      ] as const).map(([value, label]) => (
-                        <button
-                          key={value}
-                          type="button"
-                          onClick={() => setPeriodMode(value)}
-                          className={cn(
-                            "rounded-[calc(var(--panel-radius)-2px)] px-3 py-2 text-sm font-bold transition",
-                            periodMode === value
-                              ? "bg-[var(--accent)] text-white shadow-[0_8px_20px_rgba(230,18,56,0.14)]"
-                              : "text-[#617187] hover:bg-[#fafbfd]",
-                          )}
-                        >
-                          {label}
-                        </button>
-                      ))}
-                    </div>
-
-                    <div className="relative">
-                      <CalendarDays className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[var(--accent)]" />
-                      <select
-                        value={activePeriodValue}
-                        onChange={(event) => {
-                          const value = event.target.value;
-
-                          if (periodMode === "day") {
-                            setSelectedDayKey(value);
-                            return;
-                          }
-
-                          if (periodMode === "week") {
-                            setSelectedWeekKey(value);
-                            return;
-                          }
-
-                          setSelectedMonthKey(value);
-                        }}
-                        className="h-10 appearance-none rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--surface)] pl-10 pr-10 text-sm font-bold text-[#617187] outline-none transition hover:bg-[#fafbfd]"
-                      >
-                        {activePeriodOptions.map((option) => (
-                          <option key={option.value} value={option.value}>
-                            {option.label}
-                          </option>
-                        ))}
-                      </select>
-                      <ChevronDown className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-[#94a3b8]" />
-                    </div>
-                  </div>
-                }
-                footer={
-                  <>
-                    <p className="text-xs font-black uppercase tracking-[0.14em] text-[#617187]">
-                      Mostrando {queryFilteredReports.length} de {reports.length} reportes
-                    </p>
-                    <div className="flex gap-1">
-                      <button className="inline-flex size-9 items-center justify-center rounded-lg border border-[var(--border)] bg-white text-[#94a3b8]">
-                        1
-                      </button>
-                      <button className="inline-flex size-9 items-center justify-center rounded-lg border border-[var(--border)] bg-[#fafbfd] text-[#94a3b8]">
-                        2
-                      </button>
-                      <button className="inline-flex size-9 items-center justify-center rounded-lg border border-[var(--border)] bg-[#fafbfd] text-[#94a3b8]">
-                        3
-                      </button>
-                    </div>
-                  </>
-                }
-              >
-                {queryFilteredReports.length ? (
-                  <div className="overflow-x-auto">
-                    <table className="min-w-full text-left">
-                      <thead>
-                        <tr className="bg-[#fafbfd] text-[11px] font-black uppercase tracking-[0.18em] text-[#94a3b8]">
-                          {columnOrder.map((column) =>
-                            renderReportControlHeader(column),
-                          )}
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-[#edf1f6]">
-                        {sortedReports.map((report) => {
-                          const editable = report.severity !== "Sin incidencia";
-                          const selected = selectedReport?.id_feed === report.id_feed;
-                          const rowTone = getReportRowTone(report.severity);
-
-                          return (
-                            <tr
-                              key={report.id_feed}
-                              onClick={() => setSelectedReportId(report.id_feed)}
-                              className={cn(
-                                "cursor-pointer transition",
-                                selected
-                                  ? rowTone.active
-                                  : editable
-                                    ? rowTone.hover
-                                    : "opacity-80 hover:bg-[#fafbfd]",
-                              )}
-                            >
-                              {columnOrder.map((column) =>
-                                renderReportControlCell(report, column),
-                              )}
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                ) : (
-                  <div className="p-8">
-                    <EmptyState
-                      title="No encontramos reportes con esa búsqueda"
-                      description="Prueba con otro ID, responsable o liga para volver al tablero completo de cierres."
-                    />
-                  </div>
-                )}
-              </SectionTableCard>
-            </section>
+            )}
           </div>
-
-          {selectedReport ? (
-            <aside className="panel-surface fixed inset-x-4 bottom-4 top-24 z-40 flex flex-col overflow-hidden border border-[var(--border)] bg-[var(--surface)] xl:sticky xl:top-0 xl:self-start xl:h-[calc(100vh-8rem)] xl:w-full">
-              <div className="border-b border-[var(--border)] p-6">
-                <div className="mb-4 flex items-center justify-between">
-                  <span className="inline-flex rounded-full bg-[var(--accent)] px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-white">
-                    Detalle de reporte
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedReportId(null)}
-                    aria-label="Cerrar detalle de reporte"
-                    className="inline-flex size-9 items-center justify-center rounded-full bg-[var(--background-soft)] text-[#94a3b8]"
-                  >
-                    <X className="size-4" />
-                  </button>
-                </div>
-
-                <div className="mb-4 flex flex-wrap items-center gap-2">
-                  <span className="inline-flex rounded-full border border-[#f3cfd8] bg-[#fff3f6] px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-[var(--accent)]">
-                    {selectedReport.id_bp}
-                  </span>
-                  <span
-                    style={{
-                      backgroundColor: getTeamLeagueColorSet(selectedReport.league).soft,
-                      color: getTeamLeagueColorSet(selectedReport.league).accent,
-                    }}
-                    className="inline-flex rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em]"
-                  >
-                    {selectedReport.league}
-                  </span>
-                </div>
-
-                <h3 className="text-[2rem] font-black leading-[1.05] tracking-[-0.04em] text-[var(--foreground)]">
-                  {selectedReport.match_label}
-                </h3>
-
-                <div className="mt-4 flex items-center gap-4 text-sm text-[#70819b]">
-                  <span className="inline-flex items-center gap-2">
-                    <CalendarDays className="size-4 text-[#b1b8c5]" />
-                    {selectedReport.event_date}
-                  </span>
-                  <span className="inline-flex items-center gap-2">
-                    <Clock3 className="size-4 text-[#b1b8c5]" />
-                    {selectedReport.event_time}
-                  </span>
-                </div>
-                <div className="mt-2 inline-flex items-start gap-2 text-sm text-[#70819b]">
-                  <MapPin className="mt-0.5 size-4 shrink-0 text-[#b1b8c5]" />
-                  <span>{selectedReport.venue}</span>
-                </div>
-              </div>
-
-              <div className="min-h-0 flex-1 space-y-8 overflow-y-auto p-6 xl:max-h-[calc(100vh-14rem)]">
-                <section className="space-y-4">
-                  <h4 className="text-[11px] font-black uppercase tracking-[0.18em] text-[#94a3b8]">
-                    Resumen operativo
-                  </h4>
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 xl:grid-cols-1">
-                    {selectedReportOperations.map((item) => {
-                      const Icon = item.icon;
-
-                      return (
-                        <div
-                          key={item.label}
-                          className="panel-radius border border-[var(--border)] bg-[var(--background-soft)] p-4"
-                        >
-                          <div className="flex items-center gap-2">
-                            <span
-                              className={cn(
-                                "inline-flex size-8 items-center justify-center rounded-full",
-                                item.tone,
-                              )}
-                            >
-                              <Icon className="size-4" />
-                            </span>
-                            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#94a3b8]">
-                              {item.label}
-                            </p>
-                          </div>
-                          <p className="mt-3 text-sm font-bold text-[var(--foreground)]">
-                            {item.value}
-                          </p>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </section>
-
-                <section className="space-y-4">
-                  <h4 className="text-[11px] font-black uppercase tracking-[0.18em] text-[#94a3b8]">
-                    Problema principal
-                  </h4>
-                  <div className="panel-radius border border-[var(--border)] bg-[var(--background-soft)] p-4">
-                    <div className="flex items-start gap-3">
-                      <span className="inline-flex size-9 items-center justify-center rounded-full bg-[#fff3f6] text-[var(--accent)]">
-                        <AlertTriangle className="size-4" />
-                      </span>
-                      <div className="space-y-2">
-                        <p className="text-sm font-bold text-[var(--foreground)]">
-                          {selectedReport.problem}
-                        </p>
-                        <p className="text-xs leading-6 text-[#70819b]">
-                          {selectedReport.technical_notes}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                </section>
-
-                <section className="space-y-4">
-                  <h4 className="text-[11px] font-black uppercase tracking-[0.18em] text-[#94a3b8]">
-                    IDs operativos
-                  </h4>
-                  <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
-                    <div className="panel-radius border border-[var(--border)] bg-white p-4">
-                      <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#94a3b8]">
-                        ID feed
-                      </p>
-                      <p className="mt-2 font-mono text-sm font-bold text-[var(--foreground)]">
-                        {selectedReport.id_feed}
-                      </p>
-                    </div>
-                    <div className="panel-radius border border-[var(--border)] bg-white p-4">
-                      <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#94a3b8]">
-                        Competencia
-                      </p>
-                      <p className="mt-2 text-sm font-bold text-[var(--foreground)]">
-                        {selectedReport.competition}
-                      </p>
-                    </div>
-                  </div>
-                </section>
-
-                <section className="space-y-4">
-                  <h4 className="text-[11px] font-black uppercase tracking-[0.18em] text-[#94a3b8]">
-                    Actividad reciente
-                  </h4>
-                  <div className="space-y-4">
-                    {activities.slice(0, 3).map((activity) => (
-                      <div key={activity.id} className="flex items-start gap-4">
-                        <span
-                          className={cn(
-                            "mt-1.5 size-2 rounded-full",
-                            getActivityToneClass(activity.tone),
-                          )}
-                        />
-                        <div className="space-y-1">
-                          <p className="text-sm font-bold text-[var(--foreground)]">
-                            {activity.title}
-                          </p>
-                          <p className="text-xs text-[#70819b]">{activity.detail}</p>
-                          <p className="inline-flex items-center gap-1 text-xs font-medium text-[#94a3b8]">
-                            <CircleDot className="size-3" />
-                            {activity.timestamp}
-                          </p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </section>
-              </div>
-            </aside>
+          {activeView === "control" ? selectedReportDrawer : hasEmbeddedIncidentDrawer ? (
+            <div ref={setIncidentsDrawerPortalTarget} className="min-w-0 self-start" />
           ) : null}
         </div>
       )}

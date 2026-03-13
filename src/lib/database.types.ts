@@ -20,6 +20,37 @@ export interface Database {
     };
     Functions: Record<string, never>;
     Tables: {
+      announcements: {
+        Relationships: [];
+        Row: {
+          id: string;
+          title: string;
+          body: string;
+          active: boolean;
+          created_at: string;
+          updated_at: string;
+          created_by: string | null;
+          updated_by: string | null;
+        };
+        Insert: {
+          id?: string;
+          title: string;
+          body: string;
+          active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+          created_by?: string | null;
+          updated_by?: string | null;
+        };
+        Update: {
+          title?: string;
+          body?: string;
+          active?: boolean;
+          updated_at?: string;
+          created_by?: string | null;
+          updated_by?: string | null;
+        };
+      };
       profiles: {
         Relationships: [];
         Row: {
@@ -257,6 +288,7 @@ export interface Database {
 
 export type AppRole = Database["public"]["Enums"]["app_role"];
 export type MatchStatus = Database["public"]["Enums"]["match_status"];
+export type AnnouncementRow = Database["public"]["Tables"]["announcements"]["Row"];
 export type MatchRow = Database["public"]["Tables"]["matches"]["Row"];
 export type PersonRow = Database["public"]["Tables"]["people"]["Row"];
 export type RoleRow = Database["public"]["Tables"]["roles"]["Row"];

@@ -9,6 +9,7 @@ import {
   rethrowNavigationError,
 } from "@/app/actions/helpers";
 import { requireUserContext } from "@/lib/auth";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 import {
   GEMINI_API_KEY_COOKIE,
   GEMINI_MODEL_COOKIE,
@@ -22,6 +23,13 @@ function isAllowedValue<T extends readonly string[]>(value: string, options: T) 
 }
 
 const isSecureCookie = process.env.NODE_ENV === "production";
+const ANNOUNCEMENT_REVALIDATE_PATHS = [
+  "/settings",
+  "/mi-jornada",
+  "/grid",
+  "/reports",
+  "/incidents",
+];
 
 export async function saveGeminiSettingsAction(formData: FormData) {
   const redirectTo = getRedirectTarget(formData, "/settings");
@@ -99,6 +107,103 @@ export async function savePreferencesAction(formData: FormData) {
       redirectTo,
       intent: "error",
       notice: "No pudimos guardar tus preferencias.",
+    });
+  }
+}
+
+export async function saveAnnouncementAction(formData: FormData) {
+  const redirectTo = getRedirectTarget(formData, "/settings");
+  const user = await requireUserContext();
+
+  if (user.role !== "admin") {
+    redirectWithNotice({
+      redirectTo,
+      intent: "error",
+      notice: "Solo un administrador puede publicar comunicados generales.",
+    });
+  }
+
+  try {
+    const supabase = await createSupabaseServerClient();
+    const announcementId = String(formData.get("announcementId") ?? "").trim();
+    const title = String(formData.get("announcementTitle") ?? "").trim();
+    const body = String(formData.get("announcementBody") ?? "").trim();
+    const active = formData.get("announcementActive") === "on";
+
+    if (!title || !body) {
+      redirectWithNotice({
+        redirectTo,
+        intent: "error",
+        notice: "El comunicado necesita título y mensaje.",
+      });
+    }
+
+    let persistedAnnouncementId = announcementId;
+
+    if (announcementId) {
+      const updateResult = await supabase
+        .from("announcements")
+        .update({
+          title,
+          body,
+          active,
+        })
+        .eq("id", announcementId)
+        .select("id")
+        .single();
+
+      if (updateResult.error) {
+        throw updateResult.error;
+      }
+
+      persistedAnnouncementId = updateResult.data.id;
+    } else {
+      const insertResult = await supabase
+        .from("announcements")
+        .insert({
+          title,
+          body,
+          active,
+        })
+        .select("id")
+        .single();
+
+      if (insertResult.error) {
+        throw insertResult.error;
+      }
+
+      persistedAnnouncementId = insertResult.data.id;
+    }
+
+    if (active) {
+      const deactivateOthers = await supabase
+        .from("announcements")
+        .update({ active: false })
+        .eq("active", true)
+        .neq("id", persistedAnnouncementId);
+
+      if (deactivateOthers.error) {
+        throw deactivateOthers.error;
+      }
+    }
+
+    ANNOUNCEMENT_REVALIDATE_PATHS.forEach((path) => {
+      revalidatePath(path);
+    });
+
+    redirectWithNotice({
+      redirectTo,
+      intent: "success",
+      notice: active
+        ? "Comunicado general publicado."
+        : "Comunicado guardado sin publicar.",
+    });
+  } catch (error) {
+    rethrowNavigationError(error);
+    redirectWithNotice({
+      redirectTo,
+      intent: "error",
+      notice: "No pudimos guardar el comunicado general.",
     });
   }
 }

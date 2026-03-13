@@ -16,7 +16,8 @@ export type TeamDirectoryItem = {
 const LEAGUE_URL = "https://www.laliganacional.com.ar/";
 
 export const TEAM_DIRECTORY_TAB_ORDER = [
-  "Liga Nacional / Liga Próximo",
+  "Liga Nacional",
+  "Liga Próximo",
   "Liga Argentina",
   "Liga Federal",
   "Liga Femenina",
@@ -116,11 +117,14 @@ function buildTeamDirectory() {
   );
 
   return entries.sort((left, right) => {
+    const leftPrimaryLeague = splitTeamCompetitions(left.competition)[0] ?? left.competition;
+    const rightPrimaryLeague =
+      splitTeamCompetitions(right.competition)[0] ?? right.competition;
     const leagueIndexLeft = TEAM_DIRECTORY_TAB_ORDER.indexOf(
-      left.competition as (typeof TEAM_DIRECTORY_TAB_ORDER)[number],
+      leftPrimaryLeague as (typeof TEAM_DIRECTORY_TAB_ORDER)[number],
     );
     const leagueIndexRight = TEAM_DIRECTORY_TAB_ORDER.indexOf(
-      right.competition as (typeof TEAM_DIRECTORY_TAB_ORDER)[number],
+      rightPrimaryLeague as (typeof TEAM_DIRECTORY_TAB_ORDER)[number],
     );
 
     if (leagueIndexLeft !== leagueIndexRight) {
@@ -136,8 +140,8 @@ function buildTeamDirectory() {
 
 export const TEAM_DIRECTORY = buildTeamDirectory();
 
-export const TEAM_DIRECTORY_LEAGUES = Array.from(
-  new Set(TEAM_DIRECTORY.map((team) => team.competition)),
+export const TEAM_DIRECTORY_LEAGUES = TEAM_DIRECTORY_TAB_ORDER.filter((league) =>
+  TEAM_DIRECTORY.some((team) => splitTeamCompetitions(team.competition).includes(league)),
 );
 
 function normalizeLeagueName(value: string) {
@@ -253,7 +257,9 @@ export function getTeamCompetitionByName(teamName?: string | null) {
 }
 
 const LEAGUE_SHORT_LABELS: Record<string, string> = {
-  "Liga Nacional / Liga Próximo": "Nacional / Próximo",
+  "Liga Nacional": "Liga Nacional",
+  "Liga Próximo": "Liga Próximo",
+  "Liga Nacional / Liga Próximo": "Liga Nacional / Liga Próximo",
   "Liga Argentina": "Liga Argentina",
   "Liga Federal": "Liga Federal",
   "Liga Femenina": "Liga Femenina",
@@ -268,7 +274,7 @@ export function getTeamDirectoryData(params?: {
   const league = params?.league?.trim() ?? "";
 
   return TEAM_DIRECTORY.filter((team) => {
-    if (league && team.competition !== league) {
+    if (league && !splitTeamCompetitions(team.competition).includes(league)) {
       return false;
     }
 
@@ -290,7 +296,9 @@ export function getTeamDirectoryData(params?: {
 
 export function getTeamDirectoryTabs() {
   const counts = TEAM_DIRECTORY.reduce<Map<string, number>>((map, team) => {
-    map.set(team.competition, (map.get(team.competition) ?? 0) + 1);
+    splitTeamCompetitions(team.competition).forEach((league) => {
+      map.set(league, (map.get(league) ?? 0) + 1);
+    });
     return map;
   }, new Map());
 

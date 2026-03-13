@@ -40,18 +40,22 @@ export type IncidentRecord = {
   speedtestAttachment?: {
     fileName: string;
     fileSizeLabel: string;
+    previewUrl?: string;
   } | null;
   pingAttachment?: {
     fileName: string;
     fileSizeLabel: string;
+    previewUrl?: string;
   } | null;
   gpuAttachment?: {
     fileName: string;
     fileSizeLabel: string;
+    previewUrl?: string;
   } | null;
   venueImages?: Array<{
     fileName: string;
     fileSizeLabel: string;
+    previewUrl?: string;
   }>;
   observations: string;
   reporter: string;

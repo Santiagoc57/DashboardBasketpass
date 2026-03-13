@@ -19,7 +19,7 @@ type MatchCardActionsProps = {
 };
 
 const controlClassName =
-  "inline-flex size-10 items-center justify-center rounded-full border border-[#d7dde7] bg-[#f4f6fa] text-[var(--accent)] transition hover:border-[rgba(230,18,56,0.24)] hover:bg-[#fff3f6]";
+  "inline-flex size-10 items-center justify-center rounded-full border border-[#d7dde7] bg-[#f4f6fa] text-[#16181d] transition hover:border-[rgba(230,18,56,0.24)] hover:bg-[#fff3f6] hover:text-[var(--accent)]";
 
 export function MatchCardActions({
   canEdit,
@@ -67,19 +67,17 @@ export function MatchCardActions({
         className,
       )}
     >
-      {canEdit ? (
-        <CreateMatchModal
-          people={people}
-          redirectTo={redirectTo}
-          canEdit={canEdit}
-          initialDate={formatMatchDate(match.kickoff_at, match.timezone, "yyyy-MM-dd")}
-          match={match}
-          triggerVariant="icon"
-          triggerLabel="Editar partido"
-          triggerIcon={<PencilLine className="size-4" />}
-          triggerClassName={cn(controlClassName, "shadow-none")}
-        />
-      ) : null}
+      <CreateMatchModal
+        people={people}
+        redirectTo={redirectTo}
+        canEdit={canEdit}
+        initialDate={formatMatchDate(match.kickoff_at, match.timezone, "yyyy-MM-dd")}
+        match={match}
+        triggerVariant="icon"
+        triggerLabel="Editar partido"
+        triggerIcon={<PencilLine className="size-4" />}
+        triggerClassName={cn(controlClassName, "shadow-none")}
+      />
 
       <button
         type="button"
@@ -87,7 +85,8 @@ export function MatchCardActions({
         onClick={toggleDetails}
         className={cn(
           controlClassName,
-          isOpen && "rotate-180 border-[rgba(230,18,56,0.24)] bg-[#fff3f6]",
+          isOpen &&
+            "rotate-180 border-[rgba(230,18,56,0.24)] bg-[#fff3f6] text-[var(--accent)]",
         )}
       >
         <ChevronDown className="size-4" />

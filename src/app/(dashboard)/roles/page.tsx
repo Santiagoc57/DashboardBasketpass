@@ -41,6 +41,7 @@ export default async function RolesPage({ searchParams }: PageProps) {
     <div className="space-y-10">
       <SectionPageHeader
         title="Roles"
+        description="Administra categorías, orden y disponibilidad de los roles del sistema."
         actions={
           <SectionAiAssistant
             section="Roles"

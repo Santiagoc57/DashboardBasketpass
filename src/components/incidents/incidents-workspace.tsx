@@ -1,32 +1,30 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   AlertTriangle,
   ArrowUpDown,
   CheckCircle2,
+  CircleX,
+  Cpu,
   ChevronDown,
   ChevronUp,
   Clock3,
+  Download,
   Eye,
   FileText,
-  Filter,
-  GripVertical,
   Gauge,
+  GripVertical,
   History,
   Image as ImageIcon,
-  LoaderCircle,
   MapPin,
   Palette,
-  Paperclip,
-  Plus,
-  Radio,
   ScanText,
   Search,
-  ShieldAlert,
   Sparkles,
   Upload,
-  UserRound,
   Wifi,
   X,
 } from "lucide-react";
@@ -46,33 +44,22 @@ import type {
 import { getTeamLeagueColorSet } from "@/lib/team-directory";
 import { cn } from "@/lib/utils";
 
-type SpeedtestProofExtraction = {
-  ping: string | null;
-  upload: string | null;
-  download: string | null;
-  provider: string | null;
-  locationServer: string | null;
-  dateTime: string | null;
-  note: string | null;
-};
-
-type SpeedtestProofState = {
-  fileName: string;
-  fileSizeLabel: string;
-  extracted: SpeedtestProofExtraction | null;
-  error: string | null;
-  parsing: boolean;
-};
-
 type IncidentAttachment = {
   fileName: string;
   fileSizeLabel: string;
+  previewUrl?: string;
 };
 
 type IncidentEvidenceState = {
   pingAttachment?: IncidentAttachment | null;
   gpuAttachment?: IncidentAttachment | null;
   venueImages?: IncidentAttachment[];
+};
+
+type IncidentEvidencePreview = {
+  title: string;
+  fileName: string;
+  src: string;
 };
 
 type IncidentSortKey =
@@ -124,6 +111,180 @@ const INCIDENT_CONTROL_COLUMN_SORT_KEY: Record<
   issue: "issue",
   updated: "updated",
 };
+const INCIDENT_CONTROL_COLUMN_WIDTH_WEIGHT: Record<IncidentControlColumn, number> = {
+  league: 0.95,
+  id: 1.05,
+  date: 0.95,
+  match: 3,
+  severity: 1.15,
+  operator: 1.5,
+  streamer: 1.5,
+  issue: 1,
+  updated: 0.8,
+};
+const INCIDENT_CONTROL_COMPACT_COLUMN_WIDTH_WEIGHT: Record<
+  IncidentControlColumn,
+  number
+> = {
+  league: 0.8,
+  id: 0.95,
+  date: 0.85,
+  match: 2.9,
+  severity: 1,
+  operator: 1.05,
+  streamer: 1.05,
+  issue: 0.8,
+  updated: 0.75,
+};
+
+function formatIncidentExportDate(value: string) {
+  const date = parseIncidentEventDate(value);
+  const day = String(date.getDate()).padStart(2, "0");
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const year = String(date.getFullYear());
+
+  return `${day}/${month}/${year}`;
+}
+
+function formatIncidentExportBoolean(value: boolean) {
+  return value ? "SI" : "NO";
+}
+
+function formatIncidentExportCheck(value: string) {
+  return getBinaryIncidentCheckState(value).label === "Sí" ? "SI" : "NO";
+}
+
+function getIncidentProblemValue(incident: IncidentRecord, label: string) {
+  return formatIncidentExportBoolean(
+    incident.problems.some((problem) => problem.label === label && problem.active),
+  );
+}
+
+const INCIDENT_EXPORT_COLUMNS = [
+  {
+    label: "ID",
+    value: (incident: IncidentRecord) => incident.id,
+  },
+  {
+    label: "Liga",
+    value: (incident: IncidentRecord) => getIncidentLeagueLabel(incident.competition),
+  },
+  {
+    label: "Fecha",
+    value: (incident: IncidentRecord) => formatIncidentExportDate(incident.eventDate),
+  },
+  {
+    label: "Hora",
+    value: (incident: IncidentRecord) => getIncidentTimeLabel(incident.updatedAt),
+  },
+  {
+    label: "Local",
+    value: (incident: IncidentRecord) =>
+      splitIncidentMatchLabel(incident.matchLabel).homeTeam,
+  },
+  {
+    label: "Visitante",
+    value: (incident: IncidentRecord) =>
+      splitIncidentMatchLabel(incident.matchLabel).awayTeam,
+  },
+  {
+    label: "Operador Control",
+    value: (incident: IncidentRecord) => incident.operatorControl,
+  },
+  {
+    label: "Streamer",
+    value: (incident: IncidentRecord) => incident.streamer,
+  },
+  {
+    label: "Gravedad",
+    value: (incident: IncidentRecord) => incident.severity,
+  },
+  {
+    label: "Observaciones Técnicas",
+    value: (incident: IncidentRecord) => incident.observations,
+  },
+  {
+    label: "Observaciones Edilicias",
+    value: () => "",
+  },
+  {
+    label: "Observaciones Generales",
+    value: (incident: IncidentRecord) => incident.mainIssue,
+  },
+  {
+    label: "OTRO",
+    value: () => "-",
+  },
+  {
+    label: "ST",
+    value: () => "-",
+  },
+  {
+    label: "CLUB",
+    value: () => "-",
+  },
+  {
+    label: "Speedtest",
+    value: (incident: IncidentRecord) => incident.speedtest,
+  },
+  {
+    label: "PING",
+    value: (incident: IncidentRecord) => incident.ping,
+  },
+  {
+    label: "GPU",
+    value: (incident: IncidentRecord) => incident.gpuLoad,
+  },
+  {
+    label: "Hora Prueba",
+    value: (incident: IncidentRecord) => incident.testTime,
+  },
+  {
+    label: "Prueba",
+    value: (incident: IncidentRecord) => formatIncidentExportCheck(incident.testCheck),
+  },
+  {
+    label: "Inicio",
+    value: (incident: IncidentRecord) => formatIncidentExportCheck(incident.startCheck),
+  },
+  {
+    label: "Gráfica",
+    value: (incident: IncidentRecord) => formatIncidentExportCheck(incident.graphicsCheck),
+  },
+  {
+    label: "Problema Internet",
+    value: (incident: IncidentRecord) => getIncidentProblemValue(incident, "Problema Internet"),
+  },
+  {
+    label: "Problema IMG",
+    value: (incident: IncidentRecord) => getIncidentProblemValue(incident, "Problema IMG"),
+  },
+  {
+    label: "OCR",
+    value: (incident: IncidentRecord) => getIncidentProblemValue(incident, "OCR"),
+  },
+  {
+    label: "Overlays (GES)",
+    value: (incident: IncidentRecord) => getIncidentProblemValue(incident, "Overlays (GES)"),
+  },
+  {
+    label: "Tipo de transmisión",
+    value: (incident: IncidentRecord) => incident.transmissionType,
+  },
+  {
+    label: "Envíos de señal",
+    value: (incident: IncidentRecord) => incident.signalDelivery,
+  },
+  {
+    label: "Imágenes",
+    value: (incident: IncidentRecord) =>
+      formatIncidentExportBoolean((incident.venueImages?.length ?? 0) > 0),
+  },
+  {
+    label: "Apto Lineal",
+    value: (incident: IncidentRecord) => formatIncidentExportBoolean(incident.aptoLineal),
+  },
+] as const;
 
 function normalizeIncidentControlColumns(
   value: unknown,
@@ -233,17 +394,142 @@ function splitIncidentMatchLabel(matchLabel: string) {
   };
 }
 
-function splitMetricValue(value: string) {
-  const match = value.trim().match(/^([\d.,]+)\s*(.*)$/);
+function escapeHtml(value: string) {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
 
-  if (!match) {
-    return { amount: value, unit: "" };
+function sanitizeFileSegment(value: string) {
+  return value
+    .normalize("NFD")
+    .replaceAll(/[\u0300-\u036f]/g, "")
+    .replaceAll(/[^a-zA-Z0-9]+/g, "-")
+    .replaceAll(/^-+|-+$/g, "")
+    .toLowerCase();
+}
+
+function downloadBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+function hexToRgb(hex: string) {
+  const normalized = hex.replace("#", "");
+  const safeHex =
+    normalized.length === 3
+      ? normalized
+          .split("")
+          .map((value) => `${value}${value}`)
+          .join("")
+      : normalized;
+  const value = Number.parseInt(safeHex, 16);
+
+  if (Number.isNaN(value)) {
+    return { red: 100, green: 116, blue: 139 };
   }
 
   return {
-    amount: match[1] ?? value,
-    unit: match[2]?.trim() ?? "",
+    red: (value >> 16) & 255,
+    green: (value >> 8) & 255,
+    blue: value & 255,
   };
+}
+
+function getIncidentLeagueAccentColor(league: string) {
+  return getTeamLeagueColorSet(league).accent;
+}
+
+function groupIncidentsByLeague(incidents: IncidentRecord[]) {
+  const groups = new Map<string, IncidentRecord[]>();
+
+  incidents.forEach((incident) => {
+    const league = getIncidentLeagueLabel(incident.competition);
+    const currentGroup = groups.get(league) ?? [];
+    currentGroup.push(incident);
+    groups.set(league, currentGroup);
+  });
+
+  return Array.from(groups.entries()).map(([league, items]) => ({
+    league,
+    items,
+  }));
+}
+
+function buildIncidentsExcelDocument(
+  incidentGroups: ReturnType<typeof groupIncidentsByLeague>,
+) {
+  const documentTitle =
+    incidentGroups.length === 1
+      ? incidentGroups[0]?.league ?? "Incidencias"
+      : "Todas las incidencias";
+  const headerRow = INCIDENT_EXPORT_COLUMNS.map(
+    (column) =>
+      `<th style="border:1px solid #dbe4f0;background:#0f172a;color:#ffffff;padding:10px 12px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:0.08em;text-align:left;">${escapeHtml(
+        column.label,
+      )}</th>`,
+  ).join("");
+
+  const sections = incidentGroups
+    .map(({ league, items }) => {
+      const accent = getIncidentLeagueAccentColor(league);
+      const leagueHeader =
+        incidentGroups.length > 1
+          ? `
+          <tr>
+            <td colspan="${INCIDENT_EXPORT_COLUMNS.length}" style="border:1px solid ${accent};background:${accent};color:#ffffff;padding:12px 14px;font-size:14px;font-weight:800;letter-spacing:0.06em;text-transform:uppercase;">
+              ${escapeHtml(league)}
+            </td>
+          </tr>
+        `
+          : "";
+      const rows = items
+        .map((incident, rowIndex) => {
+          const background = rowIndex % 2 === 0 ? "#ffffff" : "#f8fafc";
+          const cells = INCIDENT_EXPORT_COLUMNS.map((column) => {
+            const value = escapeHtml(column.value(incident));
+            const forceText = column.label === "ID" ? "mso-number-format:'\\@';" : "";
+
+            return `<td style="border:1px solid #dbe4f0;background:${background};padding:9px 12px;font-size:12px;color:#0f172a;vertical-align:top;${forceText}">${value}</td>`;
+          }).join("");
+
+          return `<tr>${cells}</tr>`;
+        })
+        .join("");
+
+      return `
+        <table style="width:100%;border-collapse:collapse;margin:0 0 20px 0;font-family:Arial,sans-serif;">
+          ${leagueHeader}
+          <tr>${headerRow}</tr>
+          ${rows}
+        </table>
+      `;
+    })
+    .join("");
+
+  return `<!DOCTYPE html>
+<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="ProgId" content="Excel.Sheet" />
+    <title>${escapeHtml(documentTitle)}</title>
+  </head>
+  <body style="margin:16px;background:#f8fafc;font-family:Arial,sans-serif;">
+    <div style="margin-bottom:16px;">
+      <div style="font-size:18px;font-weight:800;color:#0f172a;">${escapeHtml(documentTitle)}</div>
+    </div>
+    ${sections}
+  </body>
+</html>`;
 }
 
 function getIncidentSeverityOrder(severity: string) {
@@ -399,7 +685,7 @@ function ProblemPill({ problem }: { problem: IncidentProblem }) {
   return (
     <div
       className={cn(
-        "panel-radius flex min-h-[76px] items-center gap-3 border px-3 py-3",
+        "panel-radius flex min-h-[84px] items-center gap-3.5 border px-4 py-3",
         problem.active
           ? "border-[#ffd8df] bg-[#fff3f6]"
           : "border-[#e7eaef] bg-white",
@@ -407,8 +693,8 @@ function ProblemPill({ problem }: { problem: IncidentProblem }) {
     >
       <span
         className={cn(
-          "inline-flex size-8 items-center justify-center rounded-full",
-          problem.active ? "bg-[#ffe7ed] text-[var(--accent)]" : "bg-[#f5f7fb] text-[#b0b8c5]",
+          "inline-flex size-10 shrink-0 items-center justify-center rounded-full",
+          problem.active ? "bg-[#ffe7ed] text-[var(--accent)]" : "bg-[#f4f7fb] text-[#b0b8c5]",
         )}
       >
         {problem.label.includes("Internet") ? (
@@ -470,6 +756,82 @@ function getIncidentIssueSortValue(incident: IncidentRecord) {
   return activeLabels || "SIN MARCAS";
 }
 
+function buildIncidentAttachmentPreview(
+  title: string,
+  fileName: string,
+  accentColor: string,
+) {
+  const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="900" viewBox="0 0 1200 900" fill="none">
+      <rect width="1200" height="900" rx="48" fill="#F8FAFC"/>
+      <rect x="56" y="56" width="1088" height="788" rx="36" fill="white" stroke="#E2E8F0" stroke-width="4"/>
+      <rect x="96" y="96" width="260" height="54" rx="27" fill="${accentColor}" fill-opacity="0.12"/>
+      <text x="128" y="130" fill="${accentColor}" font-size="26" font-family="Arial, sans-serif" font-weight="700">${title}</text>
+      <text x="96" y="236" fill="#0F172A" font-size="56" font-family="Arial, sans-serif" font-weight="700">Vista asociada</text>
+      <text x="96" y="302" fill="#64748B" font-size="30" font-family="Arial, sans-serif">${fileName}</text>
+      <rect x="96" y="368" width="1008" height="356" rx="28" fill="${accentColor}" fill-opacity="0.08" stroke="${accentColor}" stroke-opacity="0.22" stroke-width="3"/>
+      <circle cx="214" cy="484" r="64" fill="${accentColor}" fill-opacity="0.14"/>
+      <path d="M180 516h68l26-34 32 42 44-60 70 52H180z" fill="${accentColor}" fill-opacity="0.85"/>
+      <circle cx="264" cy="450" r="18" fill="${accentColor}" fill-opacity="0.9"/>
+      <text x="96" y="790" fill="#94A3B8" font-size="24" font-family="Arial, sans-serif">Adjunto disponible para revisión operativa</text>
+    </svg>
+  `;
+
+  return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
+}
+
+function getIncidentAttachmentPreviewSource(
+  attachment: IncidentAttachment | null | undefined,
+  title: string,
+  accentColor: string,
+) {
+  if (!attachment) {
+    return null;
+  }
+
+  return (
+    attachment.previewUrl ??
+    buildIncidentAttachmentPreview(title, attachment.fileName, accentColor)
+  );
+}
+
+function getBinaryIncidentCheckState(value: string) {
+  const normalizedValue = value.trim().toLowerCase();
+  const negativeTerms = [
+    "incompleta",
+    "parcial",
+    "incidencia",
+    "demora",
+    "seguimiento",
+    "manual",
+    "reinici",
+  ];
+  const positiveTerms = ["ok", "normal", "estable", "sin novedad", "completa"];
+
+  const isNegative = negativeTerms.some((term) => normalizedValue.includes(term));
+  const isPositive = positiveTerms.some((term) => normalizedValue.includes(term));
+
+  if (!isNegative && isPositive) {
+    return {
+      label: "Sí",
+      Icon: CheckCircle2,
+      iconClassName: "text-[#12b76a]",
+      iconWrapClassName: "bg-[#dcfce7]",
+      panelClassName: "border-[#d7eadf] bg-[#f3fcf6]",
+      labelClassName: "text-[#178a56]",
+    };
+  }
+
+  return {
+    label: "No",
+    Icon: CircleX,
+    iconClassName: "text-[#f04461]",
+    iconWrapClassName: "bg-[#ffe7ed]",
+    panelClassName: "border-[#ffd8df] bg-[#fff3f6]",
+    labelClassName: "text-[#b42318]",
+  };
+}
+
 function ActiveProblemSummary({ problems }: { problems: IncidentProblem[] }) {
   const activeProblems = problems.filter((problem) => problem.active);
 
@@ -506,9 +868,17 @@ function ActiveProblemSummary({ problems }: { problems: IncidentProblem[] }) {
 export function IncidentsWorkspace({
   incidents,
   hasGeminiKey,
+  embedded = false,
+  headerActionsPortalTarget = null,
+  drawerPortalTarget = null,
+  onSelectedIdChange,
 }: {
   incidents: IncidentRecord[];
   hasGeminiKey: boolean;
+  embedded?: boolean;
+  headerActionsPortalTarget?: HTMLElement | null;
+  drawerPortalTarget?: HTMLElement | null;
+  onSelectedIdChange?: (selectedId: string | null) => void;
 }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [drawerTab, setDrawerTab] = useState<
@@ -540,12 +910,12 @@ export function IncidentsWorkspace({
     useState<IncidentControlColumn | null>(null);
   const [dragOverColumn, setDragOverColumn] =
     useState<IncidentControlColumn | null>(null);
-  const [proofsByIncident, setProofsByIncident] = useState<
-    Record<string, SpeedtestProofState>
-  >({});
+  const [isExporting, setIsExporting] = useState(false);
   const [evidenceByIncident, setEvidenceByIncident] = useState<
     Record<string, IncidentEvidenceState>
   >({});
+  const [evidencePreview, setEvidencePreview] =
+    useState<IncidentEvidencePreview | null>(null);
 
   function handleSort(nextSortBy: IncidentSortKey) {
     if (sortBy === nextSortBy) {
@@ -604,6 +974,14 @@ export function IncidentsWorkspace({
       JSON.stringify(columnOrder),
     );
   }, [columnOrder]);
+
+  useEffect(() => {
+    setEvidencePreview(null);
+  }, [selectedId]);
+
+  useEffect(() => {
+    onSelectedIdChange?.(selectedId);
+  }, [onSelectedIdChange, selectedId]);
 
   const filteredIncidents = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -673,18 +1051,14 @@ export function IncidentsWorkspace({
 
   const selectedIncident =
     sortedIncidents.find((incident) => incident.id === selectedId) ?? null;
-  const selectedProof = selectedIncident ? proofsByIncident[selectedIncident.id] ?? null : null;
   const selectedEvidence = selectedIncident ? evidenceByIncident[selectedIncident.id] ?? {} : {};
-  const resolvedSpeedtest =
-    selectedProof?.extracted?.upload ?? selectedIncident?.speedtest ?? "";
-  const resolvedPing = selectedProof?.extracted?.ping ?? selectedIncident?.ping ?? "";
-  const resolvedSpeedtestParts = splitMetricValue(resolvedSpeedtest);
-  const resolvedPingParts = splitMetricValue(resolvedPing);
-  const resolvedGpuParts = splitMetricValue(selectedIncident?.gpuLoad ?? "");
+  const resolvedSpeedtest = selectedIncident?.speedtest ?? "";
+  const resolvedPing = selectedIncident?.ping ?? "";
   const selectedPingAttachment =
     selectedEvidence.pingAttachment ?? selectedIncident?.pingAttachment ?? null;
   const selectedGpuAttachment =
     selectedEvidence.gpuAttachment ?? selectedIncident?.gpuAttachment ?? null;
+  const selectedSpeedtestAttachment = selectedIncident?.speedtestAttachment ?? null;
   const selectedVenueImages =
     selectedEvidence.venueImages ?? selectedIncident?.venueImages ?? [];
   const selectedSeverityTone = selectedIncident
@@ -693,97 +1067,30 @@ export function IncidentsWorkspace({
   const selectedIncidentTeams = selectedIncident
     ? splitIncidentMatchLabel(selectedIncident.matchLabel)
     : null;
-
-  async function handleSpeedtestProofChange(
-    incident: IncidentRecord,
-    file: File | null,
-  ) {
-    if (!file) {
-      return;
-    }
-
-    setProofsByIncident((current) => ({
-      ...current,
-      [incident.id]: {
-        fileName: file.name,
-        fileSizeLabel: formatBytes(file.size),
-        extracted: current[incident.id]?.extracted ?? null,
-        error: null,
-        parsing: hasGeminiKey,
-      },
-    }));
-
-    if (!hasGeminiKey) {
-      return;
-    }
-
-    const formData = new FormData();
-    formData.set("image", file);
-
-    try {
-      const response = await fetch("/api/ai/speedtest", {
-        method: "POST",
-        body: formData,
-      });
-
-      const payload = (await response.json()) as {
-        error?: string;
-        extracted?: SpeedtestProofExtraction;
-      };
-
-      if (!response.ok || !payload.extracted) {
-        throw new Error(payload.error || "No pudimos leer la captura adjunta.");
-      }
-
-      setProofsByIncident((current) => ({
-        ...current,
-        [incident.id]: {
-          fileName: file.name,
-          fileSizeLabel: formatBytes(file.size),
-          extracted: payload.extracted ?? null,
-          error: null,
-          parsing: false,
-        },
-      }));
-    } catch (error) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : "No pudimos leer la captura del speedtest.";
-
-      setProofsByIncident((current) => ({
-        ...current,
-        [incident.id]: {
-          fileName: file.name,
-          fileSizeLabel: formatBytes(file.size),
-          extracted: current[incident.id]?.extracted ?? null,
-          error: message,
-          parsing: false,
-        },
-      }));
-    }
-  }
-
-  function handleEvidenceFileChange(
-    incident: IncidentRecord,
-    kind: "pingAttachment" | "gpuAttachment",
-    file: File | null,
-  ) {
-    if (!file) {
-      return;
-    }
-
-    setEvidenceByIncident((current) => ({
-      ...current,
-      [incident.id]: {
-        ...current[incident.id],
-        [kind]: {
-          fileName: file.name,
-          fileSizeLabel: formatBytes(file.size),
-        },
-      },
-    }));
-  }
+  const selectedTestCheck = selectedIncident
+    ? getBinaryIncidentCheckState(selectedIncident.testCheck)
+    : null;
+  const selectedStartCheck = selectedIncident
+    ? getBinaryIncidentCheckState(selectedIncident.startCheck)
+    : null;
+  const selectedGraphicsCheck = selectedIncident
+    ? getBinaryIncidentCheckState(selectedIncident.graphicsCheck)
+    : null;
+  const selectedSpeedtestPreviewSrc = getIncidentAttachmentPreviewSource(
+    selectedSpeedtestAttachment,
+    "Speedtest",
+    "#E61238",
+  );
+  const selectedPingPreviewSrc = getIncidentAttachmentPreviewSource(
+    selectedPingAttachment,
+    "Ping",
+    "#0F766E",
+  );
+  const selectedGpuPreviewSrc = getIncidentAttachmentPreviewSource(
+    selectedGpuAttachment,
+    "GPU",
+    "#7C3AED",
+  );
 
   function handleVenueImagesChange(incident: IncidentRecord, files: FileList | null) {
     if (!files?.length) {
@@ -797,9 +1104,26 @@ export function IncidentsWorkspace({
         venueImages: Array.from(files).map((file) => ({
           fileName: file.name,
           fileSizeLabel: formatBytes(file.size),
+          previewUrl: URL.createObjectURL(file),
         })),
       },
     }));
+  }
+
+  function openEvidencePreview(
+    title: string,
+    attachment: IncidentAttachment | null | undefined,
+    src: string | null,
+  ) {
+    if (!attachment || !src) {
+      return;
+    }
+
+    setEvidencePreview({
+      title,
+      fileName: attachment.fileName,
+      src,
+    });
   }
 
   const metrics = useMemo(() => {
@@ -842,8 +1166,8 @@ export function IncidentsWorkspace({
         inicio: incident.startCheck,
         grafica: incident.graphicsCheck,
         hora_prueba: incident.testTime,
-        speedtest: proofsByIncident[incident.id]?.extracted?.upload ?? incident.speedtest,
-        ping: proofsByIncident[incident.id]?.extracted?.ping ?? incident.ping,
+        speedtest: incident.speedtest,
+        ping: incident.ping,
         gpu: incident.gpuLoad,
         sede: incident.venue,
         tipo_transmision: incident.transmissionType,
@@ -854,8 +1178,114 @@ export function IncidentsWorkspace({
           : "No",
         actualizado: incident.updatedAt,
       })),
-    [filteredIncidents, proofsByIncident],
+    [filteredIncidents],
   );
+
+  async function exportVisibleIncidents(sourceIncidents: IncidentRecord[]) {
+    if (!sourceIncidents.length || isExporting) {
+      return;
+    }
+
+    setIsExporting(true);
+
+    try {
+      const incidentGroups = groupIncidentsByLeague(sourceIncidents);
+      const documentTitle =
+        incidentGroups.length === 1
+          ? incidentGroups[0]?.league ?? "Incidencias"
+          : "Todas las incidencias";
+      const fileBaseName = [
+        "incidencias",
+        sanitizeFileSegment("visibles"),
+      ].join("-");
+
+      const excelDocument = buildIncidentsExcelDocument(incidentGroups);
+
+      downloadBlob(
+        new Blob([excelDocument], {
+          type: "application/vnd.ms-excel;charset=utf-8",
+        }),
+        `${fileBaseName}.xls`,
+      );
+
+      const [{ jsPDF }, { default: autoTable }] = await Promise.all([
+        import("jspdf"),
+        import("jspdf-autotable"),
+      ]);
+
+      const pdfDocument = new jsPDF({
+        orientation: "landscape",
+        unit: "pt",
+        format: "a3",
+      });
+      const pageWidth = pdfDocument.internal.pageSize.getWidth();
+      const pageHeight = pdfDocument.internal.pageSize.getHeight();
+      const marginX = 32;
+      const contentWidth = pageWidth - marginX * 2;
+      let currentY = 32;
+
+      pdfDocument.setFont("helvetica", "bold");
+      pdfDocument.setFontSize(16);
+      pdfDocument.setTextColor(15, 23, 42);
+      pdfDocument.text(documentTitle, marginX, currentY);
+      currentY += 20;
+
+      incidentGroups.forEach(({ league, items }, index) => {
+        if (index > 0 && currentY > pageHeight - 160) {
+          pdfDocument.addPage();
+          currentY = 32;
+        }
+
+        if (incidentGroups.length > 1) {
+          const accent = hexToRgb(getIncidentLeagueAccentColor(league));
+          pdfDocument.setFillColor(accent.red, accent.green, accent.blue);
+          pdfDocument.rect(marginX, currentY, contentWidth, 24, "F");
+          pdfDocument.setFont("helvetica", "bold");
+          pdfDocument.setFontSize(11);
+          pdfDocument.setTextColor(255, 255, 255);
+          pdfDocument.text(league, marginX + 10, currentY + 16);
+        }
+
+        autoTable(pdfDocument, {
+          startY: currentY + (incidentGroups.length > 1 ? 24 : 0),
+          margin: { left: marginX, right: marginX },
+          head: [INCIDENT_EXPORT_COLUMNS.map((column) => column.label)],
+          body: items.map((incident) =>
+            INCIDENT_EXPORT_COLUMNS.map((column) => column.value(incident)),
+          ),
+          theme: "grid",
+          styles: {
+            font: "helvetica",
+            fontSize: 6,
+            cellPadding: 3,
+            textColor: [15, 23, 42],
+            lineColor: [219, 228, 240],
+            lineWidth: 0.5,
+            overflow: "linebreak",
+            valign: "top",
+          },
+          headStyles: {
+            fillColor: [15, 23, 42],
+            textColor: [255, 255, 255],
+            fontStyle: "bold",
+            fontSize: 6,
+          },
+          alternateRowStyles: {
+            fillColor: [248, 250, 252],
+          },
+        });
+
+        currentY =
+          (pdfDocument as { lastAutoTable?: { finalY: number } }).lastAutoTable
+            ?.finalY ?? currentY + 48;
+        currentY += 20;
+      });
+
+      pdfDocument.save(`${fileBaseName}.pdf`);
+    } finally {
+      setIsExporting(false);
+    }
+  }
 
   const renderIncidentControlHeader = (column: IncidentControlColumn) => {
     const sortKey = INCIDENT_CONTROL_COLUMN_SORT_KEY[column];
@@ -880,7 +1310,7 @@ export function IncidentsWorkspace({
                   ? "STREAMER"
                   : column === "issue"
                     ? "PROBLEMAS"
-                    : "ACTUALIZADO";
+                    : "ACT.";
 
     return (
       <th
@@ -941,7 +1371,7 @@ export function IncidentsWorkspace({
   ) => {
     const cellClassName = cn(
       "px-6 py-5",
-      column === "match" && "px-8",
+      column === "match" && (selectedIncident ? "px-5" : "px-8"),
       column === "updated" && "px-8 text-right",
     );
 
@@ -978,6 +1408,7 @@ export function IncidentsWorkspace({
               matchLabel={incident.matchLabel}
               competition={incident.competition}
               metaTime={getIncidentTimeLabel(incident.updatedAt)}
+              compact={Boolean(selectedIncident)}
             />
           </td>
         );
@@ -993,28 +1424,28 @@ export function IncidentsWorkspace({
       case "operator":
         return (
           <td key={column} className={cellClassName}>
-            <div className="flex items-center gap-3 text-sm font-medium text-[#4b5c74]">
+            <div className="flex min-w-0 items-center gap-3 text-sm font-medium text-[#4b5c74]">
               <HoverAvatarBadge
                 initials={getInitials(incident.operatorControl)}
                 roleLabel="Operador"
                 tone="accent"
                 size="sm"
               />
-              <span>{incident.operatorControl}</span>
+              <span className="min-w-0 flex-1 truncate">{incident.operatorControl}</span>
             </div>
           </td>
         );
       case "streamer":
         return (
           <td key={column} className={cellClassName}>
-            <div className="flex items-center gap-3 text-sm font-medium text-[#4b5c74]">
+            <div className="flex min-w-0 items-center gap-3 text-sm font-medium text-[#4b5c74]">
               <HoverAvatarBadge
                 initials={getInitials(incident.streamer)}
                 roleLabel="Streamer"
                 tone="neutral"
                 size="sm"
               />
-              <span>{incident.streamer}</span>
+              <span className="min-w-0 flex-1 truncate">{incident.streamer}</span>
             </div>
           </td>
         );
@@ -1038,154 +1469,156 @@ export function IncidentsWorkspace({
     }
   };
 
-  return (
-    <div
-      className={cn(
-        "grid min-h-[42rem] gap-8",
-        selectedIncident ? "xl:grid-cols-[minmax(0,1fr)_420px]" : "grid-cols-1",
-      )}
-    >
-      <div className="flex min-w-0 flex-col gap-10">
-        <SectionPageHeader
-          title="Incidencias"
-          actions={
-            <>
-            <label className="flex h-[52px] min-w-[280px] items-center gap-3 rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--surface)] px-4 shadow-sm">
-              <Search className="size-4 text-[var(--accent)]" />
-              <input
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="Buscar incidencia, partido u operador..."
-                className="w-full bg-transparent text-sm font-medium text-[var(--foreground)] outline-none placeholder:text-[#94a3b8]"
-              />
-            </label>
-
-            <button
-              type="button"
-              className="inline-flex h-[52px] items-center gap-2 rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--surface)] px-5 text-sm font-bold text-[var(--foreground)] shadow-sm"
-            >
-              <Filter className="size-4 text-[var(--accent)]" />
-              Filtrar
-            </button>
-
-            <SectionAiAssistant
-              section="Incidencias"
-              title="Consulta las incidencias visibles"
-              description="Pregunta por gravedad, operador, streamer, partido afectado o problema principal usando solo la tabla filtrada actual."
-              placeholder="Ej. ¿Qué incidencias críticas hay y cómo quedó la prueba?"
-              contextLabel="Incidencias visibles en la tabla actual"
-              context={aiContext}
-              guidance="Prioriza gravedad, operador control, streamer, partido, competencia, problema principal y checks de prueba, inicio y gráfica. Si preguntan por prioridad, ordena de crítica a baja."
-              examples={[
-                "¿Qué incidencias críticas hay ahora?",
-                "¿Qué streamer tiene más incidencias visibles?",
-                "¿Qué partidos tienen problemas de Internet?",
-                "¿Qué incidencias tienen la gráfica manual o con observación?",
-              ]}
-              hasGeminiKey={hasGeminiKey}
-              buttonVariant="icon"
-            />
-
-            <button
-              type="button"
-              title="La carga persistida llegará con el módulo conectado a base de datos."
-              className="inline-flex h-[52px] items-center gap-2 rounded-[var(--panel-radius)] bg-[var(--accent)] px-5 text-sm font-extrabold text-white shadow-[0_14px_28px_rgba(230,18,56,0.18)]"
-            >
-              <Plus className="size-4" />
-              Nueva incidencia
-            </button>
-            </>
-          }
+  const workspaceActions = (
+    <div className="flex flex-wrap items-center gap-3 md:justify-end">
+      <label className="flex h-[52px] min-w-[280px] items-center gap-3 rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--surface)] px-4 shadow-sm">
+        <Search className="size-4 text-[var(--accent)]" />
+        <input
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="Buscar incidencia, partido u operador..."
+          className="w-full bg-transparent text-sm font-medium text-[var(--foreground)] outline-none placeholder:text-[#94a3b8]"
         />
+      </label>
 
-        <section
-          className={cn(
-            "grid gap-4 sm:grid-cols-2",
-            selectedIncident ? "2xl:grid-cols-4" : "xl:grid-cols-4",
-          )}
+      <div className="flex shrink-0 items-center gap-3">
+        <button
+          type="button"
+          onClick={() => void exportVisibleIncidents(sortedIncidents)}
+          disabled={!sortedIncidents.length || isExporting}
+          aria-label={isExporting ? "Exportando incidencias" : "Exportar incidencias"}
+          title={isExporting ? "Exportando incidencias" : "Exportar incidencias"}
+          className="inline-flex size-[52px] items-center justify-center rounded-[var(--panel-radius)] bg-[var(--accent)] text-white shadow-[0_14px_28px_rgba(230,18,56,0.18)] transition hover:bg-[var(--accent-strong)]"
         >
-          <article className="panel-surface border border-[var(--border)] bg-[var(--surface)] p-5">
-            <p className="text-[11px] font-black uppercase tracking-[0.18em] text-[#70819b]">
-              Total incidencias
-            </p>
-            <p className="mt-3 text-4xl font-black tracking-[-0.04em] text-[var(--foreground)]">
-              {metrics.total}
-            </p>
-            <div className="mt-5 flex items-center justify-between gap-4">
-              <span className="inline-flex items-center rounded-xl bg-[#f4f7fb] px-2.5 py-1 text-[11px] font-bold text-[#617187]">
-                {metrics.competitionCount} competencias
-              </span>
-              <div className="h-1.5 w-24 overflow-hidden rounded-full bg-[#e7edf5]">
-                <div
-                  className="h-full rounded-full bg-[var(--accent)]"
-                  style={{ width: `${Math.max(10, Math.min(metrics.total * 18, 100))}%` }}
-                />
-              </div>
-            </div>
-          </article>
+          <Download className="size-4" />
+        </button>
+        <SectionAiAssistant
+          section="Incidencias"
+          title="Consulta las incidencias visibles"
+          description="Pregunta por gravedad, operador, streamer, partido afectado o problema principal usando solo la tabla filtrada actual."
+          placeholder="Ej. ¿Qué incidencias críticas hay y cómo quedó la prueba?"
+          contextLabel="Incidencias visibles en la tabla actual"
+          context={aiContext}
+          guidance="Prioriza gravedad, operador control, streamer, partido, competencia, problema principal y checks de prueba, inicio y gráfica. Si preguntan por prioridad, ordena de crítica a baja."
+          examples={[
+            "¿Qué incidencias críticas hay ahora?",
+            "¿Qué streamer tiene más incidencias visibles?",
+            "¿Qué partidos tienen problemas de Internet?",
+            "¿Qué incidencias tienen la gráfica manual o con observación?",
+          ]}
+          hasGeminiKey={hasGeminiKey}
+          buttonVariant="icon"
+        />
+      </div>
+    </div>
+  );
+  const headerActionsPortal =
+    embedded && headerActionsPortalTarget
+      ? createPortal(workspaceActions, headerActionsPortalTarget)
+      : null;
+  const incidentColumnWidths = useMemo(() => {
+    const weights = selectedIncident
+      ? INCIDENT_CONTROL_COMPACT_COLUMN_WIDTH_WEIGHT
+      : INCIDENT_CONTROL_COLUMN_WIDTH_WEIGHT;
+    const totalWeight = columnOrder.reduce((sum, column) => sum + weights[column], 0);
 
-          <article className="panel-surface border border-[#ffd7df] bg-[#fff5f7] p-5 ring-1 ring-[#ffd7df]">
-            <p className="text-[11px] font-black uppercase tracking-[0.18em] text-[var(--accent)]">
-              Críticas
-            </p>
-            <p className="mt-3 text-4xl font-black tracking-[-0.04em] text-[var(--accent)]">
-              {metrics.critical}
-            </p>
-            <div className="mt-5 flex items-center justify-between gap-4">
-              <span className="inline-flex items-center rounded-xl bg-[#ffe4ea] px-2.5 py-1 text-[11px] font-bold text-[var(--accent)]">
-                Atención inmediata
-              </span>
-              <div className="h-1.5 w-24 overflow-hidden rounded-full bg-[#f3c8d4]">
-                <div
-                  className="h-full rounded-full bg-[var(--accent)]"
-                  style={{ width: `${metrics.criticalPercent}%` }}
-                />
-              </div>
-            </div>
-          </article>
+    return columnOrder.reduce<Record<IncidentControlColumn, string>>((acc, column) => {
+      acc[column] = `${((weights[column] / totalWeight) * 100).toFixed(2)}%`;
+      return acc;
+    }, {} as Record<IncidentControlColumn, string>);
+  }, [columnOrder, selectedIncident]);
 
-          <article className="panel-surface border border-[#ffe6c7] bg-white p-5">
-            <p className="text-[11px] font-black uppercase tracking-[0.18em] text-[#8a6a27]">
-              Altas y medias
-            </p>
-            <p className="mt-3 text-4xl font-black tracking-[-0.04em] text-[var(--foreground)]">
-              {metrics.mediumHigh}
-            </p>
-            <div className="mt-5 flex items-center justify-between gap-4">
-              <span className="inline-flex items-center rounded-xl bg-[#fff4e8] px-2.5 py-1 text-[11px] font-bold text-[#d97706]">
-                {metrics.mediumHighPercent}% del total
-              </span>
-              <div className="h-1.5 w-24 overflow-hidden rounded-full bg-[#fae5c5]">
-                <div
-                  className="h-full rounded-full bg-[#f59e0b]"
-                  style={{ width: `${metrics.mediumHighPercent}%` }}
-                />
-              </div>
+  const workspaceContent = (
+    <div className="flex min-w-0 flex-col gap-8">
+      {embedded && !headerActionsPortal ? workspaceActions : null}
+      <section
+        className={cn(
+          "grid gap-4 sm:grid-cols-2",
+          selectedIncident ? "2xl:grid-cols-4" : "xl:grid-cols-4",
+        )}
+      >
+        <article className="panel-surface border border-[var(--border)] bg-[var(--surface)] p-5">
+          <p className="text-[11px] font-black uppercase tracking-[0.18em] text-[#70819b]">
+            Total incidencias
+          </p>
+          <p className="mt-3 text-4xl font-black tracking-[-0.04em] text-[var(--foreground)]">
+            {metrics.total}
+          </p>
+          <div className="mt-5 flex items-center justify-between gap-4">
+            <span className="inline-flex items-center rounded-xl bg-[#f4f7fb] px-2.5 py-1 text-[11px] font-bold text-[#617187]">
+              {metrics.competitionCount} competencias
+            </span>
+            <div className="h-1.5 w-24 overflow-hidden rounded-full bg-[#e7edf5]">
+              <div
+                className="h-full rounded-full bg-[var(--accent)]"
+                style={{ width: `${Math.max(10, Math.min(metrics.total * 18, 100))}%` }}
+              />
             </div>
-          </article>
+          </div>
+        </article>
 
-          <article className="panel-surface border border-[#d8f0e3] bg-[var(--surface)] p-5">
-            <p className="text-[11px] font-black uppercase tracking-[0.18em] text-[#4b7a61]">
-              Partidos afectados
-            </p>
-            <p className="mt-3 text-4xl font-black tracking-[-0.04em] text-[var(--foreground)]">
-              {metrics.affectedMatches}
-            </p>
-            <div className="mt-5 flex items-center justify-between gap-4">
-              <span className="inline-flex items-center rounded-xl bg-[#ebfaf1] px-2.5 py-1 text-[11px] font-bold text-[#0f9f61]">
-                {metrics.affectedMatchesPercent}% del total
-              </span>
-              <div className="h-1.5 w-24 overflow-hidden rounded-full bg-[#dcefe5]">
-                <div
-                  className="h-full rounded-full bg-[#10b981]"
-                  style={{ width: `${metrics.affectedMatchesPercent}%` }}
-                />
-              </div>
+        <article className="panel-surface border border-[#ffd7df] bg-[#fff5f7] p-5 ring-1 ring-[#ffd7df]">
+          <p className="text-[11px] font-black uppercase tracking-[0.18em] text-[var(--accent)]">
+            Críticas
+          </p>
+          <p className="mt-3 text-4xl font-black tracking-[-0.04em] text-[var(--accent)]">
+            {metrics.critical}
+          </p>
+          <div className="mt-5 flex items-center justify-between gap-4">
+            <span className="inline-flex items-center rounded-xl bg-[#ffe4ea] px-2.5 py-1 text-[11px] font-bold text-[var(--accent)]">
+              Atención inmediata
+            </span>
+            <div className="h-1.5 w-24 overflow-hidden rounded-full bg-[#f3c8d4]">
+              <div
+                className="h-full rounded-full bg-[var(--accent)]"
+                style={{ width: `${metrics.criticalPercent}%` }}
+              />
             </div>
-          </article>
-        </section>
+          </div>
+        </article>
 
-        <div className="min-h-0 flex-1">
+        <article className="panel-surface border border-[#ffe6c7] bg-white p-5">
+          <p className="text-[11px] font-black uppercase tracking-[0.18em] text-[#8a6a27]">
+            Altas y medias
+          </p>
+          <p className="mt-3 text-4xl font-black tracking-[-0.04em] text-[var(--foreground)]">
+            {metrics.mediumHigh}
+          </p>
+          <div className="mt-5 flex items-center justify-between gap-4">
+            <span className="inline-flex items-center rounded-xl bg-[#fff4e8] px-2.5 py-1 text-[11px] font-bold text-[#d97706]">
+              {metrics.mediumHighPercent}% del total
+            </span>
+            <div className="h-1.5 w-24 overflow-hidden rounded-full bg-[#fae5c5]">
+              <div
+                className="h-full rounded-full bg-[#f59e0b]"
+                style={{ width: `${metrics.mediumHighPercent}%` }}
+              />
+            </div>
+          </div>
+        </article>
+
+        <article className="panel-surface border border-[#d8f0e3] bg-[var(--surface)] p-5">
+          <p className="text-[11px] font-black uppercase tracking-[0.18em] text-[#4b7a61]">
+            Partidos afectados
+          </p>
+          <p className="mt-3 text-4xl font-black tracking-[-0.04em] text-[var(--foreground)]">
+            {metrics.affectedMatches}
+          </p>
+          <div className="mt-5 flex items-center justify-between gap-4">
+            <span className="inline-flex items-center rounded-xl bg-[#ebfaf1] px-2.5 py-1 text-[11px] font-bold text-[#0f9f61]">
+              {metrics.affectedMatchesPercent}% del total
+            </span>
+            <div className="h-1.5 w-24 overflow-hidden rounded-full bg-[#dcefe5]">
+              <div
+                className="h-full rounded-full bg-[#10b981]"
+                style={{ width: `${metrics.affectedMatchesPercent}%` }}
+              />
+            </div>
+          </div>
+        </article>
+      </section>
+
+      <div className="min-h-0 flex-1">
         <SectionTableCard
           title="Control de Incidencias"
           icon={AlertTriangle}
@@ -1206,10 +1639,18 @@ export function IncidentsWorkspace({
               </div>
             </>
           }
-          className="flex h-full min-h-0 flex-col"
+          className="flex h-full min-h-0 min-w-0 flex-col"
         >
-          <div className="flex-1 overflow-auto">
-            <table className="min-w-full text-left">
+          <div className="min-w-0 flex-1 overflow-auto">
+            <table className="min-w-full table-fixed text-left">
+              <colgroup>
+                {columnOrder.map((column) => (
+                  <col
+                    key={column}
+                    style={{ width: incidentColumnWidths[column] }}
+                  />
+                ))}
+              </colgroup>
               <thead>
                 <tr className="bg-[#fafbfd] text-[11px] font-black uppercase tracking-[0.18em] text-[#94a3b8]">
                   {columnOrder.map((column) =>
@@ -1246,787 +1687,748 @@ export function IncidentsWorkspace({
             </table>
           </div>
         </SectionTableCard>
+      </div>
+    </div>
+  );
+
+  const selectedIncidentDrawer = selectedIncident ? (
+    <aside className="min-w-0 self-start xl:sticky xl:top-24">
+      <div className="panel-surface fixed inset-x-4 bottom-4 top-20 z-40 flex flex-col overflow-hidden border border-[var(--border)] bg-[var(--surface)] xl:static xl:h-[calc(100vh-8rem)] xl:w-full">
+        <div className="border-b border-[var(--border)] p-6">
+        <div className="mb-4 flex items-center justify-between gap-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="inline-flex rounded-full border border-[#f3cfd8] bg-[#fff3f6] px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-[var(--accent)]">
+              {selectedIncident.id}
+            </span>
+            <span
+              style={{
+                backgroundColor: getTeamLeagueColorSet(
+                  getIncidentLeagueLabel(selectedIncident.competition),
+                ).soft,
+                color: getTeamLeagueColorSet(
+                  getIncidentLeagueLabel(selectedIncident.competition),
+                ).accent,
+              }}
+              className="inline-flex rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em]"
+            >
+              {getIncidentLeagueLabel(selectedIncident.competition)}
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setSelectedId(null);
+              setDrawerTab("details");
+            }}
+            aria-label="Cerrar detalle de incidencia"
+            className="inline-flex size-10 items-center justify-center rounded-full bg-[var(--background-soft)] text-[#94a3b8]"
+          >
+            <X className="size-4" />
+          </button>
+        </div>
+
+        <div className="flex items-end justify-between gap-6">
+          <div className="min-w-0">
+          <div className="space-y-1">
+            <p className="text-[1.6rem] font-black leading-[1.05] tracking-[-0.04em] text-[var(--foreground)]">
+              {selectedIncidentTeams?.homeTeam ?? selectedIncident.matchLabel}
+            </p>
+            <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-[1.6rem] font-black leading-[1.05] tracking-[-0.04em] text-[var(--foreground)]">
+              <span className="text-[var(--accent)]">vs</span>
+              <span>{selectedIncidentTeams?.awayTeam || selectedIncident.matchLabel}</span>
+            </div>
+          </div>
+
+            <div className="mt-4 flex items-center gap-4 text-sm text-[#70819b]">
+              <span className="inline-flex items-center gap-2">
+                <Clock3 className="size-4 text-[#b1b8c5]" />
+                {selectedIncident.eventDate}
+              </span>
+              <span className="inline-flex items-center gap-2">
+                <Clock3 className="size-4 text-[#b1b8c5]" />
+                {getIncidentTimeLabel(selectedIncident.updatedAt)}
+              </span>
+            </div>
+            <div className="mt-2 inline-flex items-start gap-2 text-sm text-[#70819b]">
+              <MapPin className="mt-0.5 size-4 shrink-0 text-[#b1b8c5]" />
+              <span>{selectedIncident.venue}</span>
+            </div>
+          </div>
+        </div>
+        </div>
+
+        <div className="border-b border-[var(--border)] px-6">
+          <div className="grid grid-cols-4 gap-2 border-b border-[var(--border)]/60">
+            <button
+              type="button"
+              onClick={() => setDrawerTab("details")}
+              className={cn(
+                "inline-flex min-w-0 items-center justify-center gap-1.5 border-b-2 px-1 pb-4 pt-3 text-[10px] font-black uppercase tracking-[0.12em] transition",
+                drawerTab === "details"
+                  ? "border-[var(--accent)] text-[var(--accent)]"
+                  : "border-transparent text-[#94a3b8] hover:text-[#617187]",
+              )}
+            >
+              <Eye className="size-3.5 shrink-0" />
+              <span className="truncate">Detalle</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setDrawerTab("activity")}
+              className={cn(
+                "inline-flex min-w-0 items-center justify-center gap-1.5 border-b-2 px-1 pb-4 pt-3 text-[10px] font-black uppercase tracking-[0.12em] transition",
+                drawerTab === "activity"
+                  ? "border-[var(--accent)] text-[var(--accent)]"
+                  : "border-transparent text-[#94a3b8] hover:text-[#617187]",
+              )}
+            >
+              <History className="size-3.5 shrink-0" />
+              <span className="truncate">Log</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setDrawerTab("notes")}
+              className={cn(
+                "inline-flex min-w-0 items-center justify-center gap-1.5 border-b-2 px-1 pb-4 pt-3 text-[10px] font-black uppercase tracking-[0.12em] transition",
+                drawerTab === "notes"
+                  ? "border-[var(--accent)] text-[var(--accent)]"
+                  : "border-transparent text-[#94a3b8] hover:text-[#617187]",
+              )}
+            >
+              <FileText className="size-3.5 shrink-0" />
+              <span className="truncate">Notas</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setDrawerTab("images")}
+              className={cn(
+                "inline-flex min-w-0 items-center justify-center gap-1.5 border-b-2 px-1 pb-4 pt-3 text-[10px] font-black uppercase tracking-[0.12em] transition",
+                drawerTab === "images"
+                  ? "border-[var(--accent)] text-[var(--accent)]"
+                  : "border-transparent text-[#94a3b8] hover:text-[#617187]",
+              )}
+            >
+              <ImageIcon className="size-3.5 shrink-0" />
+              <span className="truncate">Imgs</span>
+            </button>
+          </div>
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6 xl:max-h-none">
+          {drawerTab === "details" ? (
+            <div className="space-y-8">
+        <section className="space-y-4">
+          <h4 className="text-[11px] font-black uppercase tracking-[0.18em] text-[#94a3b8]">
+            Severidad
+          </h4>
+          <div className="grid gap-3">
+            <div
+              className={cn(
+                "panel-radius border p-4",
+                selectedSeverityTone?.panel,
+              )}
+            >
+              <p
+                className={cn(
+                  "text-[10px] font-black uppercase tracking-[0.16em]",
+                  selectedSeverityTone?.label,
+                )}
+              >
+                Nivel actual
+              </p>
+              <p
+                className={cn(
+                  "mt-2 text-sm font-black",
+                  selectedSeverityTone?.value,
+                )}
+              >
+                {selectedIncident.severity}
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <section className="space-y-4">
+          <h4 className="text-[11px] font-black uppercase tracking-[0.18em] text-[#94a3b8]">
+            Responsables
+          </h4>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="panel-radius border border-[var(--border)] bg-white p-4">
+              <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#94a3b8]">
+                Operador
+              </p>
+              <div className="mt-3 flex items-center gap-3">
+                <HoverAvatarBadge
+                  initials={getInitials(selectedIncident.operatorControl)}
+                  roleLabel="Operador"
+                  tone="accent"
+                  size="md"
+                />
+                <p className="text-sm font-bold text-[var(--foreground)]">
+                  {selectedIncident.operatorControl}
+                </p>
+              </div>
+            </div>
+            <div className="panel-radius border border-[var(--border)] bg-white p-4">
+              <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#94a3b8]">
+                Streamer
+              </p>
+              <div className="mt-3 flex items-center gap-3">
+                <HoverAvatarBadge
+                  initials={getInitials(selectedIncident.streamer)}
+                  roleLabel="Streamer"
+                  tone="neutral"
+                  size="md"
+                />
+                <p className="text-sm font-bold text-[var(--foreground)]">
+                  {selectedIncident.streamer}
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="space-y-4">
+          <h4 className="text-[11px] font-black uppercase tracking-[0.18em] text-[#94a3b8]">
+            Contexto del partido
+          </h4>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="panel-radius flex min-h-[84px] items-center gap-3 border border-[var(--border)] bg-white p-4">
+              <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-full bg-[#f4f7fb] text-[#7c8aa0]">
+                <Cpu className="size-[18px]" />
+              </span>
+              <div className="min-w-0">
+                <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#94a3b8]">
+                  Tipo
+                </p>
+                <p className="mt-1 text-sm font-bold text-[var(--foreground)]">
+                  {selectedIncident.transmissionType}
+                </p>
+              </div>
+            </div>
+            <div className="panel-radius flex min-h-[84px] items-center gap-3 border border-[var(--border)] bg-white p-4">
+              <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-full bg-[#f4f7fb] text-[#7c8aa0]">
+                <Wifi className="size-[18px]" />
+              </span>
+              <div className="min-w-0">
+                <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#94a3b8]">
+                  Señal
+                </p>
+                <p className="mt-1 text-sm font-bold text-[var(--foreground)]">
+                  {selectedIncident.signalDelivery}
+                </p>
+              </div>
+            </div>
+            <div
+              className={cn(
+                "panel-radius col-span-2 flex min-h-[84px] items-center justify-between gap-3 border px-4 py-3",
+                selectedIncident.aptoLineal
+                  ? "border-[#d7eadf] bg-[#f3fcf6]"
+                  : "border-[#ffd8df] bg-[#fff3f6]",
+              )}
+            >
+              <div>
+                <p
+                  className={cn(
+                    "text-[10px] font-black uppercase tracking-[0.16em]",
+                    selectedIncident.aptoLineal
+                      ? "text-[#178a56]"
+                      : "text-[#b42318]",
+                  )}
+                >
+                  Apto lineal
+                </p>
+              </div>
+              <span
+                className={cn(
+                  "inline-flex size-10 items-center justify-center rounded-full",
+                  selectedIncident.aptoLineal
+                    ? "bg-[#dcfce7] text-[#12b76a]"
+                    : "bg-[#ffe7ed] text-[#f04461]",
+                )}
+              >
+                {selectedIncident.aptoLineal ? (
+                  <CheckCircle2 className="size-7" />
+                ) : (
+                  <CircleX className="size-7" />
+                )}
+              </span>
+            </div>
+          </div>
+        </section>
+
+        <section className="space-y-4">
+          <h4 className="text-[11px] font-black uppercase tracking-[0.18em] text-[#94a3b8]">
+            Pruebas de salida
+          </h4>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="panel-radius flex min-h-[84px] items-center gap-3 border border-[var(--border)] bg-white p-4">
+              <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-full bg-[#f4f7fb] text-[#94a3b8]">
+                <Clock3 className="size-7" />
+              </span>
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#94a3b8]">
+                  Hora
+                </p>
+                <p className="mt-2 text-sm font-bold text-[var(--foreground)]">
+                  {selectedIncident.testTime}
+                </p>
+              </div>
+            </div>
+            <div
+              className={cn(
+                "panel-radius flex min-h-[84px] items-center gap-3 border p-4",
+                selectedTestCheck?.panelClassName,
+              )}
+            >
+              <span
+                className={cn(
+                  "inline-flex size-10 shrink-0 items-center justify-center rounded-full",
+                  selectedTestCheck?.iconWrapClassName,
+                  selectedTestCheck?.iconClassName,
+                )}
+              >
+                {selectedTestCheck ? (
+                  <selectedTestCheck.Icon className="size-7" />
+                ) : null}
+              </span>
+              <div>
+                <p
+                  className={cn(
+                    "text-[10px] font-black uppercase tracking-[0.16em]",
+                    selectedTestCheck?.labelClassName,
+                  )}
+                >
+                  Prueba
+                </p>
+              </div>
+            </div>
+            <div
+              className={cn(
+                "panel-radius flex min-h-[84px] items-center gap-3 border p-4",
+                selectedStartCheck?.panelClassName,
+              )}
+            >
+              <span
+                className={cn(
+                  "inline-flex size-10 shrink-0 items-center justify-center rounded-full",
+                  selectedStartCheck?.iconWrapClassName,
+                  selectedStartCheck?.iconClassName,
+                )}
+              >
+                {selectedStartCheck ? (
+                  <selectedStartCheck.Icon className="size-7" />
+                ) : null}
+              </span>
+              <div>
+                <p
+                  className={cn(
+                    "text-[10px] font-black uppercase tracking-[0.16em]",
+                    selectedStartCheck?.labelClassName,
+                  )}
+                >
+                  Inicio
+                </p>
+              </div>
+            </div>
+            <div
+              className={cn(
+                "panel-radius flex min-h-[84px] items-center gap-3 border p-4",
+                selectedGraphicsCheck?.panelClassName,
+              )}
+            >
+              <span
+                className={cn(
+                  "inline-flex size-10 shrink-0 items-center justify-center rounded-full",
+                  selectedGraphicsCheck?.iconWrapClassName,
+                  selectedGraphicsCheck?.iconClassName,
+                )}
+              >
+                {selectedGraphicsCheck ? (
+                  <selectedGraphicsCheck.Icon className="size-7" />
+                ) : null}
+              </span>
+              <div>
+                <p
+                  className={cn(
+                    "text-[10px] font-black uppercase tracking-[0.16em]",
+                    selectedGraphicsCheck?.labelClassName,
+                  )}
+                >
+                  Gráfica
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="space-y-4">
+          <h4 className="text-[11px] font-black uppercase tracking-[0.18em] text-[#94a3b8]">
+            Bloque técnico
+          </h4>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="panel-radius min-h-[84px] border border-[var(--border)] bg-white p-4">
+              <div className="flex items-center gap-4">
+                <button
+                  type="button"
+                  onClick={() =>
+                    openEvidencePreview(
+                      "Speedtest",
+                      selectedSpeedtestAttachment,
+                      selectedSpeedtestPreviewSrc,
+                    )
+                  }
+                  disabled={!selectedSpeedtestAttachment || !selectedSpeedtestPreviewSrc}
+                  className={cn(
+                    "inline-flex size-10 shrink-0 items-center justify-center rounded-full border transition",
+                    selectedSpeedtestAttachment && selectedSpeedtestPreviewSrc
+                      ? "border-[#ffd7df] bg-[#fff5f7] text-[var(--accent)] hover:border-[var(--accent)] hover:bg-[#fff0f4]"
+                      : "cursor-not-allowed border-[var(--border)] bg-[#f8fafc] text-[#c3ccd9]",
+                  )}
+                  aria-label="Abrir captura de speedtest"
+                >
+                  <Gauge className="size-4" />
+                </button>
+                <div className="min-w-0">
+                  <p className="text-sm font-bold text-[var(--foreground)]">
+                    Speedtest
+                  </p>
+                  <p className="mt-1 truncate text-sm font-mono font-bold text-[var(--accent)]">
+                    {resolvedSpeedtest}
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div className="panel-radius min-h-[84px] border border-[var(--border)] bg-white p-4">
+              <div className="flex items-center gap-4">
+                <button
+                  type="button"
+                  onClick={() =>
+                    openEvidencePreview("Ping", selectedPingAttachment, selectedPingPreviewSrc)
+                  }
+                  disabled={!selectedPingAttachment || !selectedPingPreviewSrc}
+                  className={cn(
+                    "inline-flex size-10 shrink-0 items-center justify-center rounded-full border transition",
+                    selectedPingAttachment && selectedPingPreviewSrc
+                      ? "border-[#d6f0eb] bg-[#f3fcfa] text-[#0f766e] hover:border-[#0f766e] hover:bg-[#ecfdf8]"
+                      : "cursor-not-allowed border-[var(--border)] bg-[#f8fafc] text-[#c3ccd9]",
+                  )}
+                  aria-label="Abrir captura de ping"
+                >
+                  <Wifi className="size-4" />
+                </button>
+                <div className="min-w-0">
+                  <p className="text-sm font-bold text-[var(--foreground)]">
+                    Ping
+                  </p>
+                  <p className="mt-1 truncate text-sm font-mono font-bold text-[var(--foreground)]">
+                    {resolvedPing}
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div className="panel-radius min-h-[84px] border border-[var(--border)] bg-white p-4">
+              <div className="flex items-center gap-4">
+                <button
+                  type="button"
+                  onClick={() =>
+                    openEvidencePreview("GPU", selectedGpuAttachment, selectedGpuPreviewSrc)
+                  }
+                  disabled={!selectedGpuAttachment || !selectedGpuPreviewSrc}
+                  className={cn(
+                    "inline-flex size-10 shrink-0 items-center justify-center rounded-full border transition",
+                    selectedGpuAttachment && selectedGpuPreviewSrc
+                      ? "border-[#ebe0ff] bg-[#f8f5ff] text-[#7c3aed] hover:border-[#7c3aed] hover:bg-[#f4f0ff]"
+                      : "cursor-not-allowed border-[var(--border)] bg-[#f8fafc] text-[#c3ccd9]",
+                  )}
+                  aria-label="Abrir captura de GPU"
+                >
+                  <Cpu className="size-4" />
+                </button>
+                <div className="min-w-0">
+                  <p className="text-sm font-bold text-[var(--foreground)]">
+                    GPU
+                  </p>
+                  <p className="mt-1 truncate text-sm font-mono font-bold text-[var(--foreground)]">
+                    {selectedIncident.gpuLoad}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </section>
+
+        <section className="space-y-4">
+          <h4 className="text-[11px] font-black uppercase tracking-[0.18em] text-[#94a3b8]">
+            Problemas detectados
+          </h4>
+          <div className="grid grid-cols-2 gap-2">
+            {selectedIncident.problems.map((problem) => (
+              <ProblemPill key={problem.label} problem={problem} />
+            ))}
+          </div>
+        </section>
+            </div>
+          ) : drawerTab === "activity" ? (
+            <section className="space-y-5">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <History className="size-4 text-[var(--accent)]" />
+                <h4 className="text-[11px] font-black uppercase tracking-[0.18em] text-[#94a3b8]">
+                  Actividad
+                </h4>
+              </div>
+              <span className="rounded-full bg-[var(--background-soft)] px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-[#7d8ca1]">
+                {selectedIncident.activity.length} eventos
+              </span>
+            </div>
+
+            {selectedIncident.activity.length ? (
+              <div className="space-y-4 border-l border-[var(--border)] pl-5">
+                {selectedIncident.activity.map((entry, index) => {
+                  const tone = getIncidentActivityTone(entry.tone);
+
+                  return (
+                    <div key={`${selectedIncident.id}-${entry.time}-${index}`} className="relative">
+                      <div className="absolute -left-[27px] top-1 bg-[var(--surface)] p-1">
+                        <div
+                          className={cn(
+                            "size-3 rounded-full ring-4",
+                            tone.dot,
+                          )}
+                        />
+                      </div>
+
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-sm font-bold text-[var(--foreground)]">
+                            {entry.actor}
+                          </p>
+                          <p className="mt-1 text-sm leading-relaxed text-[#4b5c74]">
+                            {entry.action}
+                          </p>
+                          {entry.detail ? (
+                            <p className="mt-2 text-xs leading-5 text-[#70819b]">
+                              {entry.detail}
+                            </p>
+                          ) : null}
+                        </div>
+                        <span
+                          className={cn(
+                            "shrink-0 rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.14em]",
+                            tone.badge,
+                          )}
+                        >
+                          {entry.time}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="rounded-[10px] border border-dashed border-[var(--border)] bg-[var(--background-soft)] p-4 text-sm text-[#617187]">
+                Todavía no hay actividad registrada para esta incidencia.
+              </div>
+            )}
+            </section>
+          ) : drawerTab === "notes" ? (
+            <section className="space-y-5">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <FileText className="size-4 text-[var(--accent)]" />
+                <h4 className="text-[11px] font-black uppercase tracking-[0.18em] text-[#94a3b8]">
+                  Notas
+                </h4>
+              </div>
+              <span className="rounded-full bg-[var(--background-soft)] px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-[#7d8ca1]">
+                Observación técnica
+              </span>
+            </div>
+
+            <div className="rounded-2xl border border-[var(--border)] bg-[var(--background-soft)] p-4">
+              <p className="text-sm leading-7 text-[#4b5c74]">
+                {selectedIncident.observations}
+              </p>
+              <div className="mt-4 flex items-center justify-between border-t border-[var(--border)] pt-4">
+                <span className="text-[11px] font-bold text-[#94a3b8]">
+                  Operador: {selectedIncident.reporter}
+                </span>
+                <span className="text-[11px] font-bold text-[#94a3b8]">
+                  {selectedIncident.updatedAt}
+                </span>
+              </div>
+            </div>
+            </section>
+          ) : (
+            <section className="space-y-5">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <ImageIcon className="size-4 text-[var(--accent)]" />
+                <h4 className="text-[11px] font-black uppercase tracking-[0.18em] text-[#94a3b8]">
+                  Imágenes
+                </h4>
+              </div>
+              <span className="rounded-full bg-[var(--background-soft)] px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-[#7d8ca1]">
+                {selectedVenueImages.length} adjuntas
+              </span>
+            </div>
+
+            <label className="flex cursor-pointer items-center gap-3 rounded-[10px] border border-dashed border-[#d7dee8] bg-[#fafbfd] px-4 py-3 transition hover:border-[var(--accent)] hover:bg-[#fff7f9]">
+              <span className="inline-flex size-10 items-center justify-center rounded-xl bg-white text-[#94a3b8] shadow-sm">
+                <Upload className="size-4" />
+              </span>
+              <span className="flex-1">
+                <span className="block text-sm font-bold text-[var(--foreground)]">
+                  Subir imágenes de la cancha
+                </span>
+                <span className="block text-xs text-[#94a3b8]">
+                  Puedes cargar una o varias fotos del estadio, cabina o contexto operativo.
+                </span>
+              </span>
+              <input
+                type="file"
+                accept="image/png,image/jpeg,image/webp,image/jpg"
+                multiple
+                className="hidden"
+                onChange={(event) =>
+                  handleVenueImagesChange(
+                    selectedIncident,
+                    event.target.files ?? null,
+                  )
+                }
+              />
+            </label>
+
+            {selectedVenueImages.length ? (
+              <div className="space-y-2">
+                {selectedVenueImages.map((image, index) => (
+                  <div
+                    key={`${selectedIncident.id}-venue-${image.fileName}-${index}`}
+                    className="rounded-[10px] border border-[var(--border)] bg-[#fcfcfd] p-4"
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="inline-flex size-11 items-center justify-center rounded-xl bg-[#eef2f6] text-[#7c8aa0]">
+                        <ImageIcon className="size-5" />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-bold text-[var(--foreground)]">
+                          {image.fileName}
+                        </p>
+                        <p className="text-xs text-[#94a3b8]">
+                          {image.fileSizeLabel}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-[10px] border border-dashed border-[var(--border)] bg-[var(--background-soft)] p-4 text-sm text-[#617187]">
+                Todavía no hay imágenes cargadas para esta incidencia.
+              </div>
+            )}
+            </section>
+          )}
+        </div>
+
+        <div className="border-t border-[var(--border)] bg-[var(--surface)] p-6">
+          <button className="w-full rounded-2xl bg-[var(--accent)] px-5 py-3 text-sm font-black uppercase tracking-[0.16em] text-white shadow-[0_14px_28px_rgba(230,18,56,0.18)] transition hover:bg-[var(--accent-strong)]">
+            Editar incidencia
+          </button>
         </div>
       </div>
+    </aside>
+  ) : null;
+  const selectedIncidentDrawerPortal =
+    selectedIncidentDrawer && drawerPortalTarget
+      ? createPortal(selectedIncidentDrawer, drawerPortalTarget)
+      : null;
+  const useExternalDrawer = embedded && Boolean(onSelectedIdChange);
+  const showInlineEmbeddedDrawer = Boolean(selectedIncidentDrawer) && !useExternalDrawer;
 
-      {selectedIncident ? (
-        <aside className="panel-surface fixed inset-x-4 bottom-4 top-24 z-40 flex flex-col overflow-hidden border border-[var(--border)] bg-[var(--surface)] xl:sticky xl:inset-auto xl:top-24 xl:bottom-auto xl:z-auto xl:h-[calc(100vh-7rem)] xl:w-full xl:self-start">
-            <div className="border-b border-[var(--border)] p-6">
-              <div className="mb-4 flex items-center justify-between gap-4">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="inline-flex rounded-full border border-[#f3cfd8] bg-[#fff3f6] px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-[var(--accent)]">
-                    {selectedIncident.id}
-                  </span>
-                  <span
-                    style={{
-                      backgroundColor: getTeamLeagueColorSet(
-                        getIncidentLeagueLabel(selectedIncident.competition),
-                      ).soft,
-                      color: getTeamLeagueColorSet(
-                        getIncidentLeagueLabel(selectedIncident.competition),
-                      ).accent,
-                    }}
-                    className="inline-flex rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em]"
-                  >
-                    {getIncidentLeagueLabel(selectedIncident.competition)}
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSelectedId(null);
-                    setDrawerTab("details");
-                  }}
-                  aria-label="Cerrar detalle de incidencia"
-                  className="inline-flex size-10 items-center justify-center rounded-full bg-[var(--background-soft)] text-[#94a3b8]"
-                >
-                  <X className="size-4" />
-                </button>
-              </div>
+  return (
+    <div className="flex min-h-[42rem] flex-col gap-6">
+      {headerActionsPortal}
+      {embedded ? (
+        <>
+          <div
+            className={cn(
+              "grid min-h-0 gap-6",
+              embedded && "-mt-1",
+              showInlineEmbeddedDrawer
+                ? "xl:grid-cols-[minmax(0,1fr)_390px]"
+                : "grid-cols-1",
+            )}
+          >
+            {workspaceContent}
+            {showInlineEmbeddedDrawer ? selectedIncidentDrawer : null}
+          </div>
+          {selectedIncidentDrawerPortal}
+        </>
+      ) : selectedIncidentDrawer ? (
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_390px]">
+          <div className="flex min-w-0 flex-col gap-6">
+            <SectionPageHeader
+              title="Incidencias"
+              description="Monitorea incidencias, seguimiento técnico y evidencias del corte visible."
+              actions={workspaceActions}
+            />
+            {workspaceContent}
+          </div>
+          {selectedIncidentDrawer}
+        </div>
+      ) : (
+        <>
+          <SectionPageHeader
+            title="Incidencias"
+            description="Monitorea incidencias, seguimiento técnico y evidencias del corte visible."
+            actions={workspaceActions}
+          />
+          {workspaceContent}
+        </>
+      )}
 
-              <div className="flex items-end justify-between gap-6">
-                <div className="min-w-0">
-                <div className="space-y-1">
-                  <p className="text-[1.6rem] font-black leading-[1.05] tracking-[-0.04em] text-[var(--foreground)]">
-                    {selectedIncidentTeams?.homeTeam ?? selectedIncident.matchLabel}
-                  </p>
-                  <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-[1.6rem] font-black leading-[1.05] tracking-[-0.04em] text-[var(--foreground)]">
-                    <span className="text-[var(--accent)]">vs</span>
-                    <span>{selectedIncidentTeams?.awayTeam || selectedIncident.matchLabel}</span>
-                  </div>
-                </div>
+      {evidencePreview ? (
+        <div
+          className="fixed inset-0 z-[90] flex items-center justify-center bg-[#101828]/72 p-6 backdrop-blur-sm"
+          onClick={() => setEvidencePreview(null)}
+        >
+          <div
+            className="relative w-full max-w-4xl rounded-[28px] bg-white p-4 shadow-[0_32px_80px_rgba(15,23,42,0.28)]"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={() => setEvidencePreview(null)}
+              className="absolute right-4 top-4 inline-flex size-11 items-center justify-center rounded-full bg-[#f8fafc] text-[#94a3b8] transition hover:bg-[#eef2f6] hover:text-[#52627a]"
+              aria-label="Cerrar vista previa"
+            >
+              <X className="size-5" />
+            </button>
 
-                  <div className="mt-4 flex items-center gap-4 text-sm text-[#70819b]">
-                    <span className="inline-flex items-center gap-2">
-                      <Clock3 className="size-4 text-[#b1b8c5]" />
-                      {selectedIncident.eventDate}
-                    </span>
-                    <span className="inline-flex items-center gap-2">
-                      <Clock3 className="size-4 text-[#b1b8c5]" />
-                      {getIncidentTimeLabel(selectedIncident.updatedAt)}
-                    </span>
-                  </div>
-                  <div className="mt-2 inline-flex items-start gap-2 text-sm text-[#70819b]">
-                    <MapPin className="mt-0.5 size-4 shrink-0 text-[#b1b8c5]" />
-                    <span>{selectedIncident.venue}</span>
-                  </div>
-                </div>
-              </div>
+            <div className="mb-4 pr-14">
+              <p className="text-[11px] font-black uppercase tracking-[0.18em] text-[#94a3b8]">
+                {evidencePreview.title}
+              </p>
+              <p className="mt-2 truncate text-sm font-bold text-[var(--foreground)]">
+                {evidencePreview.fileName}
+              </p>
             </div>
 
-            <div className="border-b border-[var(--border)] px-6">
-              <div className="grid grid-cols-4 gap-2 border-b border-[var(--border)]/60">
-                <button
-                  type="button"
-                  onClick={() => setDrawerTab("details")}
-                  className={cn(
-                    "inline-flex min-w-0 items-center justify-center gap-1.5 border-b-2 px-1 pb-4 pt-3 text-[10px] font-black uppercase tracking-[0.12em] transition",
-                    drawerTab === "details"
-                      ? "border-[var(--accent)] text-[var(--accent)]"
-                      : "border-transparent text-[#94a3b8] hover:text-[#617187]",
-                  )}
-                >
-                  <Eye className="size-3.5 shrink-0" />
-                  <span className="truncate">Detalle</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setDrawerTab("activity")}
-                  className={cn(
-                    "inline-flex min-w-0 items-center justify-center gap-1.5 border-b-2 px-1 pb-4 pt-3 text-[10px] font-black uppercase tracking-[0.12em] transition",
-                    drawerTab === "activity"
-                      ? "border-[var(--accent)] text-[var(--accent)]"
-                      : "border-transparent text-[#94a3b8] hover:text-[#617187]",
-                  )}
-                >
-                  <History className="size-3.5 shrink-0" />
-                  <span className="truncate">Log</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setDrawerTab("notes")}
-                  className={cn(
-                    "inline-flex min-w-0 items-center justify-center gap-1.5 border-b-2 px-1 pb-4 pt-3 text-[10px] font-black uppercase tracking-[0.12em] transition",
-                    drawerTab === "notes"
-                      ? "border-[var(--accent)] text-[var(--accent)]"
-                      : "border-transparent text-[#94a3b8] hover:text-[#617187]",
-                  )}
-                >
-                  <FileText className="size-3.5 shrink-0" />
-                  <span className="truncate">Notas</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setDrawerTab("images")}
-                  className={cn(
-                    "inline-flex min-w-0 items-center justify-center gap-1.5 border-b-2 px-1 pb-4 pt-3 text-[10px] font-black uppercase tracking-[0.12em] transition",
-                    drawerTab === "images"
-                      ? "border-[var(--accent)] text-[var(--accent)]"
-                      : "border-transparent text-[#94a3b8] hover:text-[#617187]",
-                  )}
-                >
-                  <ImageIcon className="size-3.5 shrink-0" />
-                  <span className="truncate">Imgs</span>
-                </button>
-              </div>
+            <div className="overflow-hidden rounded-[22px] border border-[var(--border)] bg-[#f8fafc]">
+              <Image
+                src={evidencePreview.src}
+                alt={evidencePreview.fileName}
+                width={1400}
+                height={1000}
+                unoptimized
+                className="h-auto max-h-[76vh] w-full object-contain"
+              />
             </div>
-
-            <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6">
-              {drawerTab === "details" ? (
-                <div className="space-y-8">
-              <section className="space-y-4">
-                <div className="flex items-center gap-2">
-                  <ShieldAlert className="size-4 text-[var(--accent)]" />
-                  <h4 className="text-[11px] font-black uppercase tracking-[0.18em] text-[#94a3b8]">
-                    Severidad
-                  </h4>
-                </div>
-                <div className="grid gap-3">
-                  <div
-                    className={cn(
-                      "panel-radius border p-4",
-                      selectedSeverityTone?.panel,
-                    )}
-                  >
-                    <p
-                      className={cn(
-                        "text-[10px] font-black uppercase tracking-[0.16em]",
-                        selectedSeverityTone?.label,
-                      )}
-                    >
-                      Nivel actual
-                    </p>
-                    <p
-                      className={cn(
-                        "mt-2 text-sm font-black",
-                        selectedSeverityTone?.value,
-                      )}
-                    >
-                      {selectedIncident.severity}
-                    </p>
-                  </div>
-                </div>
-              </section>
-
-              <section className="space-y-4">
-                <div className="flex items-center gap-2">
-                  <UserRound className="size-4 text-[var(--accent)]" />
-                  <h4 className="text-[11px] font-black uppercase tracking-[0.18em] text-[#94a3b8]">
-                    Responsables
-                  </h4>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="panel-radius border border-[var(--border)] bg-white p-4">
-                    <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#94a3b8]">
-                      Operador
-                    </p>
-                    <div className="mt-3 flex items-center gap-3">
-                      <HoverAvatarBadge
-                        initials={getInitials(selectedIncident.operatorControl)}
-                        roleLabel="Operador"
-                        tone="accent"
-                        size="md"
-                      />
-                      <p className="text-sm font-bold text-[var(--foreground)]">
-                        {selectedIncident.operatorControl}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="panel-radius border border-[var(--border)] bg-white p-4">
-                    <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#94a3b8]">
-                      Streamer
-                    </p>
-                    <div className="mt-3 flex items-center gap-3">
-                      <HoverAvatarBadge
-                        initials={getInitials(selectedIncident.streamer)}
-                        roleLabel="Streamer"
-                        tone="neutral"
-                        size="md"
-                      />
-                      <p className="text-sm font-bold text-[var(--foreground)]">
-                        {selectedIncident.streamer}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </section>
-
-              <section className="space-y-4">
-                <div className="flex items-center gap-2">
-                  <Radio className="size-4 text-[var(--accent)]" />
-                  <h4 className="text-[11px] font-black uppercase tracking-[0.18em] text-[#94a3b8]">
-                    Contexto del partido
-                  </h4>
-                </div>
-                <div className="grid gap-3">
-                  <div className="panel-radius border border-[var(--border)] bg-white p-4">
-                    <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#94a3b8]">
-                      Competencia
-                    </p>
-                    <p className="mt-2 text-sm font-bold text-[var(--foreground)]">
-                      {selectedIncident.competition}
-                    </p>
-                  </div>
-                  <div className="panel-radius border border-[var(--border)] bg-white p-4">
-                    <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#94a3b8]">
-                      Sede
-                    </p>
-                    <p className="mt-2 text-sm font-bold text-[var(--foreground)]">
-                      {selectedIncident.venue}
-                    </p>
-                  </div>
-                  <div className="panel-radius border border-[var(--border)] bg-white p-4">
-                    <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#94a3b8]">
-                      Tipo de transmisión
-                    </p>
-                    <p className="mt-2 text-sm font-bold text-[var(--foreground)]">
-                      {selectedIncident.transmissionType}
-                    </p>
-                  </div>
-                  <div className="panel-radius border border-[var(--border)] bg-white p-4">
-                    <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#94a3b8]">
-                      Envíos de señal
-                    </p>
-                    <p className="mt-2 text-sm font-bold text-[var(--foreground)]">
-                      {selectedIncident.signalDelivery}
-                    </p>
-                  </div>
-                  <div className="panel-radius border border-[var(--border)] bg-white p-4">
-                    <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#94a3b8]">
-                      Apto lineal
-                    </p>
-                    <p className="mt-2 text-sm font-bold text-[var(--foreground)]">
-                      {selectedIncident.aptoLineal ? "Sí" : "No"}
-                    </p>
-                  </div>
-                </div>
-              </section>
-
-              <section className="space-y-4">
-                <div className="flex items-center gap-2">
-                  <Radio className="size-4 text-[var(--accent)]" />
-                  <h4 className="text-[11px] font-black uppercase tracking-[0.18em] text-[#94a3b8]">
-                    Pruebas de salida
-                  </h4>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="panel-radius flex min-h-[92px] items-center gap-3 border border-[var(--border)] bg-white p-4">
-                    <span className="inline-flex size-10 items-center justify-center rounded-xl bg-[#f8f9fb] text-[#94a3b8]">
-                      <Clock3 className="size-4" />
-                    </span>
-                    <div>
-                      <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#94a3b8]">
-                        Hora de prueba
-                      </p>
-                      <p className="mt-2 text-sm font-bold text-[var(--foreground)]">
-                        {selectedIncident.testTime}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="panel-radius flex min-h-[92px] items-center gap-3 border border-[var(--border)] bg-white p-4">
-                    <span className="inline-flex size-10 items-center justify-center rounded-xl bg-[#f8f9fb] text-[#94a3b8]">
-                      <FileText className="size-4" />
-                    </span>
-                    <div>
-                      <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#94a3b8]">
-                        Prueba
-                      </p>
-                      <p className="mt-2 text-sm font-bold text-[var(--foreground)]">
-                        {selectedIncident.testCheck}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="panel-radius flex min-h-[92px] items-center gap-3 border border-[var(--border)] bg-white p-4">
-                    <span className="inline-flex size-10 items-center justify-center rounded-xl bg-[#f8f9fb] text-[#94a3b8]">
-                      <Clock3 className="size-4" />
-                    </span>
-                    <div>
-                      <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#94a3b8]">
-                        Inicio
-                      </p>
-                      <p className="mt-2 text-sm font-bold text-[var(--foreground)]">
-                        {selectedIncident.startCheck}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="panel-radius flex min-h-[92px] items-center gap-3 border border-[var(--border)] bg-white p-4">
-                    <span className="inline-flex size-10 items-center justify-center rounded-xl bg-[#f8f9fb] text-[#94a3b8]">
-                      <Palette className="size-4" />
-                    </span>
-                    <div>
-                      <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#94a3b8]">
-                        Gráfica
-                      </p>
-                      <p className="mt-2 text-sm font-bold text-[var(--foreground)]">
-                        {selectedIncident.graphicsCheck}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </section>
-
-              <section className="space-y-4">
-                <div className="flex items-center gap-2">
-                  <Gauge className="size-4 text-[var(--accent)]" />
-                  <h4 className="text-[11px] font-black uppercase tracking-[0.18em] text-[#94a3b8]">
-                    Bloque técnico
-                  </h4>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="panel-radius grid min-h-[92px] grid-cols-[minmax(0,1fr)_auto] items-center gap-4 border border-[var(--border)] bg-white p-4">
-                    <div className="min-w-0">
-                      <p className="text-sm font-bold text-[var(--foreground)]">
-                        Speedtest
-                      </p>
-                      <p className="text-xs text-[#94a3b8]">Subida</p>
-                    </div>
-                    <div className="min-w-[5.5rem] pl-2 text-right">
-                      <p className="text-sm font-mono font-bold text-[var(--accent)]">
-                        {resolvedSpeedtestParts.amount}
-                      </p>
-                      {resolvedSpeedtestParts.unit ? (
-                        <p className="text-sm font-mono font-bold text-[var(--accent)]">
-                          {resolvedSpeedtestParts.unit}
-                        </p>
-                      ) : null}
-                    </div>
-                  </div>
-                  <div className="panel-radius grid min-h-[92px] grid-cols-[minmax(0,1fr)_auto] items-center gap-4 border border-[var(--border)] bg-white p-4">
-                    <div className="min-w-0">
-                      <p className="text-sm font-bold text-[var(--foreground)]">
-                        Ping
-                      </p>
-                      <p className="text-xs text-[#94a3b8]">Nodo principal</p>
-                    </div>
-                    <div className="min-w-[5.5rem] pl-2 text-right">
-                      <p className="text-sm font-mono font-bold text-[var(--foreground)]">
-                        {resolvedPingParts.amount}
-                      </p>
-                      {resolvedPingParts.unit ? (
-                        <p className="text-sm font-mono font-bold text-[var(--foreground)]">
-                          {resolvedPingParts.unit}
-                        </p>
-                      ) : null}
-                    </div>
-                  </div>
-                  <div className="panel-radius grid min-h-[92px] grid-cols-[minmax(0,1fr)_auto] items-center gap-4 border border-[var(--border)] bg-white p-4">
-                    <div className="min-w-0">
-                      <p className="text-sm font-bold text-[var(--foreground)]">
-                        GPU
-                      </p>
-                      <p className="text-xs text-[#94a3b8]">Encoder local</p>
-                    </div>
-                    <div className="min-w-[5.5rem] pl-2 text-right">
-                      <p className="text-sm font-mono font-bold text-[var(--foreground)]">
-                        {resolvedGpuParts.amount}
-                      </p>
-                      {resolvedGpuParts.unit ? (
-                        <p className="text-sm font-mono font-bold text-[var(--foreground)]">
-                          {resolvedGpuParts.unit}
-                        </p>
-                      ) : null}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="space-y-3">
-                  <label className="flex cursor-pointer items-center gap-3 rounded-[10px] border border-dashed border-[#d7dee8] bg-[#fafbfd] px-4 py-3 transition hover:border-[var(--accent)] hover:bg-[#fff7f9]">
-                    <span className="inline-flex size-10 items-center justify-center rounded-xl bg-white text-[#94a3b8] shadow-sm">
-                      <Upload className="size-4" />
-                    </span>
-                    <span className="flex-1">
-                      <span className="block text-sm font-bold text-[var(--foreground)]">
-                        Subir captura de speedtest
-                      </span>
-                      <span className="block text-xs text-[#94a3b8]">
-                        PNG, JPG o WEBP. Si Gemini está configurado, la lectura es automática.
-                      </span>
-                    </span>
-                    {selectedProof?.extracted ? (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-[#ecfaf1] px-2.5 py-1 text-[11px] font-bold text-[#15945b]">
-                        <Sparkles className="size-3.5" />
-                        Leído con IA
-                      </span>
-                    ) : (
-                      <span className="inline-flex size-10 items-center justify-center rounded-xl bg-white text-[#94a3b8] shadow-sm">
-                        <Paperclip className="size-4" />
-                      </span>
-                    )}
-                    <input
-                      type="file"
-                      accept="image/png,image/jpeg,image/webp,image/jpg"
-                      className="hidden"
-                      onChange={(event) =>
-                        handleSpeedtestProofChange(
-                          selectedIncident,
-                          event.target.files?.[0] ?? null,
-                        )
-                      }
-                    />
-                  </label>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <label className="flex cursor-pointer items-center gap-3 rounded-[10px] border border-dashed border-[#d7dee8] bg-[#fafbfd] px-4 py-3 transition hover:border-[var(--accent)] hover:bg-[#fff7f9]">
-                      <span className="inline-flex size-10 items-center justify-center rounded-xl bg-white text-[#94a3b8] shadow-sm">
-                        <Upload className="size-4" />
-                      </span>
-                      <span className="flex-1">
-                        <span className="block text-sm font-bold text-[var(--foreground)]">
-                          Subir captura de ping
-                        </span>
-                        <span className="block text-xs text-[#94a3b8]">
-                          Adjunta la evidencia del ping tomada por el técnico.
-                        </span>
-                      </span>
-                      <input
-                        type="file"
-                        accept="image/png,image/jpeg,image/webp,image/jpg"
-                        className="hidden"
-                        onChange={(event) =>
-                          handleEvidenceFileChange(
-                            selectedIncident,
-                            "pingAttachment",
-                            event.target.files?.[0] ?? null,
-                          )
-                        }
-                      />
-                    </label>
-
-                    <label className="flex cursor-pointer items-center gap-3 rounded-[10px] border border-dashed border-[#d7dee8] bg-[#fafbfd] px-4 py-3 transition hover:border-[var(--accent)] hover:bg-[#fff7f9]">
-                      <span className="inline-flex size-10 items-center justify-center rounded-xl bg-white text-[#94a3b8] shadow-sm">
-                        <Upload className="size-4" />
-                      </span>
-                      <span className="flex-1">
-                        <span className="block text-sm font-bold text-[var(--foreground)]">
-                          Subir captura de GPU
-                        </span>
-                        <span className="block text-xs text-[#94a3b8]">
-                          Adjunta la captura del uso de GPU del encoder.
-                        </span>
-                      </span>
-                      <input
-                        type="file"
-                        accept="image/png,image/jpeg,image/webp,image/jpg"
-                        className="hidden"
-                        onChange={(event) =>
-                          handleEvidenceFileChange(
-                            selectedIncident,
-                            "gpuAttachment",
-                            event.target.files?.[0] ?? null,
-                          )
-                        }
-                      />
-                    </label>
-                  </div>
-
-                  {selectedProof ? (
-                    <div className="rounded-[10px] border border-[var(--border)] bg-[#fcfcfd] p-4">
-                      <div className="flex items-center gap-3">
-                        <span className="inline-flex size-11 items-center justify-center rounded-xl bg-[#eef2f6] text-[#7c8aa0]">
-                          {selectedProof.parsing ? (
-                            <LoaderCircle className="size-5 animate-spin" />
-                          ) : (
-                            <FileText className="size-5" />
-                          )}
-                        </span>
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-bold text-[var(--foreground)]">
-                            {selectedProof.fileName}
-                          </p>
-                          <p className="text-xs text-[#94a3b8]">
-                            {selectedProof.fileSizeLabel}
-                          </p>
-                        </div>
-                      </div>
-
-                      {selectedProof.parsing ? (
-                        <p className="mt-3 text-xs font-medium text-[#617187]">
-                          Leyendo captura con IA...
-                        </p>
-                      ) : null}
-
-                      {selectedProof.extracted ? (
-                        <div className="mt-3 grid grid-cols-2 gap-2">
-                          {selectedProof.extracted.upload ? (
-                            <div className="rounded-lg bg-[#f6f8fb] px-3 py-2">
-                              <p className="text-[10px] font-black uppercase tracking-[0.14em] text-[#94a3b8]">
-                                Upload
-                              </p>
-                              <p className="mt-1 text-xs font-bold text-[var(--foreground)]">
-                                {selectedProof.extracted.upload}
-                              </p>
-                            </div>
-                          ) : null}
-                          {selectedProof.extracted.ping ? (
-                            <div className="rounded-lg bg-[#f6f8fb] px-3 py-2">
-                              <p className="text-[10px] font-black uppercase tracking-[0.14em] text-[#94a3b8]">
-                                Ping
-                              </p>
-                              <p className="mt-1 text-xs font-bold text-[var(--foreground)]">
-                                {selectedProof.extracted.ping}
-                              </p>
-                            </div>
-                          ) : null}
-                          {selectedProof.extracted.download ? (
-                            <div className="rounded-lg bg-[#f6f8fb] px-3 py-2">
-                              <p className="text-[10px] font-black uppercase tracking-[0.14em] text-[#94a3b8]">
-                                Download
-                              </p>
-                              <p className="mt-1 text-xs font-bold text-[var(--foreground)]">
-                                {selectedProof.extracted.download}
-                              </p>
-                            </div>
-                          ) : null}
-                          {selectedProof.extracted.provider ? (
-                            <div className="rounded-lg bg-[#f6f8fb] px-3 py-2">
-                              <p className="text-[10px] font-black uppercase tracking-[0.14em] text-[#94a3b8]">
-                                Proveedor
-                              </p>
-                              <p className="mt-1 text-xs font-bold text-[var(--foreground)]">
-                                {selectedProof.extracted.provider}
-                              </p>
-                            </div>
-                          ) : null}
-                        </div>
-                      ) : null}
-
-                      {selectedProof.error ? (
-                        <p className="mt-3 text-xs font-medium text-[#ad1d39]">
-                          {selectedProof.error}
-                        </p>
-                      ) : null}
-                    </div>
-                  ) : null}
-
-                  {selectedPingAttachment ? (
-                    <div className="rounded-[10px] border border-[var(--border)] bg-[#fcfcfd] p-4">
-                      <div className="flex items-center gap-3">
-                        <span className="inline-flex size-11 items-center justify-center rounded-xl bg-[#eef2f6] text-[#7c8aa0]">
-                          <FileText className="size-5" />
-                        </span>
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-bold text-[var(--foreground)]">
-                            {selectedPingAttachment.fileName}
-                          </p>
-                          <p className="text-xs text-[#94a3b8]">
-                            {selectedPingAttachment.fileSizeLabel}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  ) : null}
-
-                  {selectedGpuAttachment ? (
-                    <div className="rounded-[10px] border border-[var(--border)] bg-[#fcfcfd] p-4">
-                      <div className="flex items-center gap-3">
-                        <span className="inline-flex size-11 items-center justify-center rounded-xl bg-[#eef2f6] text-[#7c8aa0]">
-                          <FileText className="size-5" />
-                        </span>
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-bold text-[var(--foreground)]">
-                            {selectedGpuAttachment.fileName}
-                          </p>
-                          <p className="text-xs text-[#94a3b8]">
-                            {selectedGpuAttachment.fileSizeLabel}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  ) : null}
-                </div>
-              </section>
-
-              <section className="space-y-4">
-                <div className="flex items-center gap-2">
-                  <AlertTriangle className="size-4 text-[var(--accent)]" />
-                  <h4 className="text-[11px] font-black uppercase tracking-[0.18em] text-[#94a3b8]">
-                    Problemas detectados
-                  </h4>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  {selectedIncident.problems.map((problem) => (
-                    <ProblemPill key={problem.label} problem={problem} />
-                  ))}
-                </div>
-              </section>
-                </div>
-              ) : drawerTab === "activity" ? (
-                <section className="space-y-5">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-2">
-                      <History className="size-4 text-[var(--accent)]" />
-                      <h4 className="text-[11px] font-black uppercase tracking-[0.18em] text-[#94a3b8]">
-                        Actividad
-                      </h4>
-                    </div>
-                    <span className="rounded-full bg-[var(--background-soft)] px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-[#7d8ca1]">
-                      {selectedIncident.activity.length} eventos
-                    </span>
-                  </div>
-
-                  <div className="rounded-[10px] border border-[var(--border)] bg-[var(--background-soft)] px-4 py-3 text-xs leading-6 text-[#617187]">
-                    Registro de quién marcó cada cambio, qué acción realizó y a qué hora quedó asentada.
-                  </div>
-
-                  {selectedIncident.activity.length ? (
-                    <div className="space-y-4 border-l border-[var(--border)] pl-5">
-                      {selectedIncident.activity.map((entry, index) => {
-                        const tone = getIncidentActivityTone(entry.tone);
-
-                        return (
-                          <div key={`${selectedIncident.id}-${entry.time}-${index}`} className="relative">
-                            <div className="absolute -left-[27px] top-1 bg-[var(--surface)] p-1">
-                              <div
-                                className={cn(
-                                  "size-3 rounded-full ring-4",
-                                  tone.dot,
-                                )}
-                              />
-                            </div>
-
-                            <div className="flex items-start justify-between gap-3">
-                              <div className="min-w-0">
-                                <p className="text-sm font-bold text-[var(--foreground)]">
-                                  {entry.actor}
-                                </p>
-                                <p className="mt-1 text-sm leading-relaxed text-[#4b5c74]">
-                                  {entry.action}
-                                </p>
-                                {entry.detail ? (
-                                  <p className="mt-2 text-xs leading-6 text-[#70819b]">
-                                    {entry.detail}
-                                  </p>
-                                ) : null}
-                              </div>
-                              <span
-                                className={cn(
-                                  "shrink-0 rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.14em]",
-                                  tone.badge,
-                                )}
-                              >
-                                {entry.time}
-                              </span>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <div className="rounded-[10px] border border-dashed border-[var(--border)] bg-[var(--background-soft)] p-4 text-sm text-[#617187]">
-                      Todavía no hay actividad registrada para esta incidencia.
-                    </div>
-                  )}
-                </section>
-              ) : drawerTab === "notes" ? (
-                <section className="space-y-5">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-2">
-                      <FileText className="size-4 text-[var(--accent)]" />
-                      <h4 className="text-[11px] font-black uppercase tracking-[0.18em] text-[#94a3b8]">
-                        Notas
-                      </h4>
-                    </div>
-                    <span className="rounded-full bg-[var(--background-soft)] px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-[#7d8ca1]">
-                      Observación técnica
-                    </span>
-                  </div>
-
-                  <div className="rounded-[10px] border border-[var(--border)] bg-[var(--background-soft)] px-4 py-3 text-xs leading-6 text-[#617187]">
-                    Registro operativo con las observaciones cargadas por el técnico a cargo de la incidencia.
-                  </div>
-
-                  <div className="rounded-2xl border border-[var(--border)] bg-[var(--background-soft)] p-4">
-                    <p className="text-sm leading-7 text-[#4b5c74]">
-                      {selectedIncident.observations}
-                    </p>
-                    <div className="mt-4 flex items-center justify-between border-t border-[var(--border)] pt-4">
-                      <span className="text-[11px] font-bold text-[#94a3b8]">
-                        Operador: {selectedIncident.reporter}
-                      </span>
-                      <span className="text-[11px] font-bold text-[#94a3b8]">
-                        {selectedIncident.updatedAt}
-                      </span>
-                    </div>
-                  </div>
-                </section>
-              ) : (
-                <section className="space-y-5">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-2">
-                      <ImageIcon className="size-4 text-[var(--accent)]" />
-                      <h4 className="text-[11px] font-black uppercase tracking-[0.18em] text-[#94a3b8]">
-                        Imágenes
-                      </h4>
-                    </div>
-                    <span className="rounded-full bg-[var(--background-soft)] px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-[#7d8ca1]">
-                      {selectedVenueImages.length} adjuntas
-                    </span>
-                  </div>
-
-                  <label className="flex cursor-pointer items-center gap-3 rounded-[10px] border border-dashed border-[#d7dee8] bg-[#fafbfd] px-4 py-3 transition hover:border-[var(--accent)] hover:bg-[#fff7f9]">
-                    <span className="inline-flex size-10 items-center justify-center rounded-xl bg-white text-[#94a3b8] shadow-sm">
-                      <Upload className="size-4" />
-                    </span>
-                    <span className="flex-1">
-                      <span className="block text-sm font-bold text-[var(--foreground)]">
-                        Subir imágenes de la cancha
-                      </span>
-                      <span className="block text-xs text-[#94a3b8]">
-                        Puedes cargar una o varias fotos del estadio, cabina o contexto operativo.
-                      </span>
-                    </span>
-                    <input
-                      type="file"
-                      accept="image/png,image/jpeg,image/webp,image/jpg"
-                      multiple
-                      className="hidden"
-                      onChange={(event) =>
-                        handleVenueImagesChange(
-                          selectedIncident,
-                          event.target.files ?? null,
-                        )
-                      }
-                    />
-                  </label>
-
-                  {selectedVenueImages.length ? (
-                    <div className="space-y-2">
-                      {selectedVenueImages.map((image, index) => (
-                        <div
-                          key={`${selectedIncident.id}-venue-${image.fileName}-${index}`}
-                          className="rounded-[10px] border border-[var(--border)] bg-[#fcfcfd] p-4"
-                        >
-                          <div className="flex items-center gap-3">
-                            <span className="inline-flex size-11 items-center justify-center rounded-xl bg-[#eef2f6] text-[#7c8aa0]">
-                              <ImageIcon className="size-5" />
-                            </span>
-                            <div className="min-w-0 flex-1">
-                              <p className="truncate text-sm font-bold text-[var(--foreground)]">
-                                {image.fileName}
-                              </p>
-                              <p className="text-xs text-[#94a3b8]">
-                                {image.fileSizeLabel}
-                              </p>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="rounded-[10px] border border-dashed border-[var(--border)] bg-[var(--background-soft)] p-4 text-sm text-[#617187]">
-                      Todavía no hay imágenes cargadas para esta incidencia.
-                    </div>
-                  )}
-                </section>
-              )}
-            </div>
-
-            <div className="border-t border-[var(--border)] bg-[var(--surface)] p-6">
-              <button className="w-full rounded-2xl bg-[var(--accent)] px-5 py-3 text-sm font-black uppercase tracking-[0.16em] text-white shadow-[0_14px_28px_rgba(230,18,56,0.18)] transition hover:bg-[var(--accent-strong)]">
-                Editar incidencia
-              </button>
-            </div>
-        </aside>
+          </div>
+        </div>
       ) : null}
     </div>
   );

@@ -1,10 +1,17 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ExternalLink, Globe, Instagram, MapPinned, ShieldAlert, UserRound } from "lucide-react";
+import { ExternalLink, Globe, Instagram, Mail, MapPinned, MessageCircle, ShieldAlert, UserRound } from "lucide-react";
 
 import { TeamLogoMark } from "@/components/team-logo-mark";
 import { Card } from "@/components/ui/card";
+import { getUserContext } from "@/lib/auth";
+import { getPeopleData } from "@/lib/data/dashboard";
+import {
+  buildTeamResponsibleLookup,
+  getTeamResponsibleContact,
+} from "@/lib/team-responsibles";
 import { getTeamBySlug, splitTeamCompetitions } from "@/lib/team-directory";
+import { buildWhatsAppUrl } from "@/lib/utils";
 
 type PageProps = {
   params: Promise<{ slug: string }>;
@@ -62,6 +69,16 @@ export default async function TeamDetailPage({ params }: PageProps) {
     notFound();
   }
 
+  const user = await getUserContext();
+  const people = user.userId ? await getPeopleData() : [];
+  const responsibleLookup = buildTeamResponsibleLookup(people);
+  const responsibleContact = getTeamResponsibleContact(
+    team.official_name,
+    team.manager,
+    responsibleLookup,
+  );
+  const responsibleLabel =
+    responsibleContact?.fullName ?? team.manager ?? "Sin responsable";
   const leagueBadges = splitTeamCompetitions(team.competition);
 
   return (
@@ -105,7 +122,27 @@ export default async function TeamDetailPage({ params }: PageProps) {
                 </span>
                 <span className="flex items-center gap-2">
                   <UserRound className="size-4" />
-                  {team.manager ?? "Sin responsable"}
+                  {responsibleLabel}
+                  {responsibleContact?.phone ? (
+                    <a
+                      href={buildWhatsAppUrl(responsibleContact.phone)}
+                      target="_blank"
+                      rel="noreferrer"
+                      aria-label={`Escribir por WhatsApp a ${responsibleContact.fullName}`}
+                      className="inline-flex size-8 items-center justify-center rounded-full bg-[#ecfdf3] text-[#16a34a] transition hover:bg-[#dcfce7]"
+                    >
+                      <MessageCircle className="size-4" />
+                    </a>
+                  ) : null}
+                  {responsibleContact?.email ? (
+                    <a
+                      href={`mailto:${responsibleContact.email}`}
+                      aria-label={`Escribir por correo a ${responsibleContact.fullName}`}
+                      className="inline-flex size-8 items-center justify-center rounded-full bg-[#eef2ff] text-[#4f46e5] transition hover:bg-[#e0e7ff]"
+                    >
+                      <Mail className="size-4" />
+                    </a>
+                  ) : null}
                 </span>
               </div>
             </div>
@@ -169,9 +206,31 @@ export default async function TeamDetailPage({ params }: PageProps) {
               <p className="text-[11px] font-black uppercase tracking-[0.16em] text-[#94a3b8]">
                 Responsable
               </p>
-              <p className="mt-2 text-base font-bold text-[var(--foreground)]">
-                {team.manager ?? "Sin responsable"}
-              </p>
+              <div className="mt-2 flex items-center gap-2">
+                <p className="text-base font-bold text-[var(--foreground)]">
+                  {responsibleLabel}
+                </p>
+                {responsibleContact?.phone ? (
+                  <a
+                    href={buildWhatsAppUrl(responsibleContact.phone)}
+                    target="_blank"
+                    rel="noreferrer"
+                    aria-label={`Escribir por WhatsApp a ${responsibleContact.fullName}`}
+                    className="inline-flex size-8 items-center justify-center rounded-full bg-[#ecfdf3] text-[#16a34a] transition hover:bg-[#dcfce7]"
+                  >
+                    <MessageCircle className="size-4" />
+                  </a>
+                ) : null}
+                {responsibleContact?.email ? (
+                  <a
+                    href={`mailto:${responsibleContact.email}`}
+                    aria-label={`Escribir por correo a ${responsibleContact.fullName}`}
+                    className="inline-flex size-8 items-center justify-center rounded-full bg-[#eef2ff] text-[#4f46e5] transition hover:bg-[#e0e7ff]"
+                  >
+                    <Mail className="size-4" />
+                  </a>
+                ) : null}
+              </div>
             </div>
           </div>
         </Card>

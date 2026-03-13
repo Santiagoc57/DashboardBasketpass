@@ -5,7 +5,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export default async function Home() {
   if (!isSupabaseConfigured) {
-    redirect("/grid");
+    redirect("/mi-jornada");
   }
 
   const supabase = await createSupabaseServerClient();
@@ -13,5 +13,5 @@ export default async function Home() {
     data: { user },
   } = await supabase.auth.getUser();
 
-  redirect(user ? "/grid" : "/login");
+  redirect(user ? "/mi-jornada" : "/login");
 }

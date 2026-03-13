@@ -1,15 +1,17 @@
 const ROLE_PREFIX = "Rol principal:";
+const CITY_PREFIX = "Ciudad:";
 const COVERAGE_PREFIX = "Equipos que cubre:";
 
 export type PersonNotesMeta = {
   role: string;
+  city: string;
   coverage: string;
   notes: string;
 };
 
 export function parsePersonNotesMeta(value?: string | null): PersonNotesMeta {
   if (!value) {
-    return { role: "", coverage: "", notes: "" };
+    return { role: "", city: "", coverage: "", notes: "" };
   }
 
   const lines = value
@@ -17,6 +19,7 @@ export function parsePersonNotesMeta(value?: string | null): PersonNotesMeta {
     .map((line) => line.trimEnd());
 
   let role = "";
+  let city = "";
   let coverage = "";
 
   const freeLines = lines.filter((line) => {
@@ -31,6 +34,11 @@ export function parsePersonNotesMeta(value?: string | null): PersonNotesMeta {
       return false;
     }
 
+    if (trimmed.startsWith(CITY_PREFIX)) {
+      city = trimmed.replace(CITY_PREFIX, "").trim();
+      return false;
+    }
+
     if (trimmed.startsWith(COVERAGE_PREFIX)) {
       coverage = trimmed.replace(COVERAGE_PREFIX, "").trim();
       return false;
@@ -41,6 +49,7 @@ export function parsePersonNotesMeta(value?: string | null): PersonNotesMeta {
 
   return {
     role,
+    city,
     coverage,
     notes: freeLines.join("\n").trim(),
   };
@@ -48,16 +57,22 @@ export function parsePersonNotesMeta(value?: string | null): PersonNotesMeta {
 
 export function buildPersonNotesMeta(input: {
   role?: string | null;
+  city?: string | null;
   coverage?: string | null;
   notes?: string | null;
 }) {
   const role = input.role?.trim() ?? "";
+  const city = input.city?.trim() ?? "";
   const coverage = input.coverage?.trim() ?? "";
   const notes = input.notes?.trim() ?? "";
   const lines: string[] = [];
 
   if (role) {
     lines.push(`${ROLE_PREFIX} ${role}`);
+  }
+
+  if (city) {
+    lines.push(`${CITY_PREFIX} ${city}`);
   }
 
   if (coverage) {

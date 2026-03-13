@@ -31,6 +31,9 @@ type AssignmentRow = {
     home_team: string;
     away_team: string;
     venue: string | null;
+    commentary_plan: string | null;
+    transport: string | null;
+    notes: string | null;
     kickoff_at: string;
     duration_minutes: number;
     timezone: string;
@@ -52,6 +55,8 @@ type MatchAssignmentContextRow = {
   } | null;
   person: {
     full_name: string;
+    phone: string | null;
+    email: string | null;
   } | null;
 };
 
@@ -81,10 +86,28 @@ export type CollaboratorAssignmentItem = {
   ownerEmail: string | null;
   responsibleName: string | null;
   realizerName: string | null;
+  operatorControlName: string | null;
+  supportTechName: string | null;
   producerName: string | null;
+  encoderName: string | null;
+  relatorName: string | null;
+  cameraCount: number;
   talentLabel: string | null;
+  commentaryPlan: string | null;
+  transport: string | null;
+  matchNotes: string | null;
+  contacts: CollaboratorGroupContact[];
   dateLabel: string;
   timeLabel: string;
+};
+
+export type CollaboratorGroupContact = {
+  roleName: string;
+  roleCategory: string | null;
+  sortOrder: number;
+  personName: string | null;
+  phone: string | null;
+  email: string | null;
 };
 
 export type CollaboratorDayData = {
@@ -190,8 +213,14 @@ function buildAssignmentItem(params: {
   roleCategory?: string | null;
   responsibleName?: string | null;
   realizerName?: string | null;
+  operatorControlName?: string | null;
+  supportTechName?: string | null;
   producerName?: string | null;
+  encoderName?: string | null;
+  relatorName?: string | null;
+  cameraCount?: number;
   talentLabel?: string | null;
+  contacts?: CollaboratorGroupContact[];
 }) {
   const match = params.match;
 
@@ -216,8 +245,17 @@ function buildAssignmentItem(params: {
     ownerEmail: match.owner?.email ?? null,
     responsibleName: params.responsibleName ?? null,
     realizerName: params.realizerName ?? null,
+    operatorControlName: params.operatorControlName ?? null,
+    supportTechName: params.supportTechName ?? null,
     producerName: params.producerName ?? null,
+    encoderName: params.encoderName ?? null,
+    relatorName: params.relatorName ?? null,
+    cameraCount: params.cameraCount ?? 0,
     talentLabel: params.talentLabel ?? null,
+    commentaryPlan: match.commentary_plan ?? null,
+    transport: match.transport ?? null,
+    matchNotes: match.notes ?? null,
+    contacts: params.contacts ?? [],
     dateLabel: formatMatchDate(match.kickoff_at, match.timezone, "EEE d MMM"),
     timeLabel: formatMatchTime(match.kickoff_at, match.timezone),
   } satisfies CollaboratorAssignmentItem;
@@ -230,6 +268,28 @@ function pickContextName(
   return (
     items.find((item) => item.role?.name === roleName)?.person?.full_name?.trim() ?? null
   );
+}
+
+function pickContextContact(
+  items: MatchAssignmentContextRow[],
+  roleName: string,
+): CollaboratorGroupContact | null {
+  const matched = items.find(
+    (item) => item.role?.name === roleName && item.person?.full_name?.trim(),
+  );
+
+  if (!matched?.role || !matched.person?.full_name?.trim()) {
+    return null;
+  }
+
+  return {
+    roleName: matched.role.name,
+    roleCategory: matched.role.category ?? null,
+    sortOrder: matched.role.sort_order ?? 999,
+    personName: matched.person.full_name.trim(),
+    phone: matched.person.phone ?? null,
+    email: matched.person.email ?? null,
+  };
 }
 
 function buildTalentLabel(items: MatchAssignmentContextRow[]) {
@@ -252,6 +312,46 @@ function buildTalentLabel(items: MatchAssignmentContextRow[]) {
   return orderedNames.slice(0, 2).join(" / ");
 }
 
+function countCameraAssignments(items: MatchAssignmentContextRow[]) {
+  return items.filter((item) => item.role?.category === "Camaras").length;
+}
+
+function buildGroupContacts(params: {
+  items: MatchAssignmentContextRow[];
+  fallbackResponsible?: {
+    personName: string | null;
+    phone: string | null;
+    email: string | null;
+  } | null;
+}) {
+  const contacts = params.items
+    .filter((item) => item.role && item.person?.full_name?.trim())
+    .map((item) => ({
+      roleName: item.role!.name,
+      roleCategory: item.role!.category ?? null,
+      sortOrder: item.role!.sort_order ?? 999,
+      personName: item.person!.full_name.trim(),
+      phone: item.person!.phone ?? null,
+      email: item.person!.email ?? null,
+    }))
+    .sort((left, right) => left.sortOrder - right.sortOrder);
+
+  const hasResponsible = contacts.some((contact) => contact.roleName === "Responsable");
+
+  if (!hasResponsible && params.fallbackResponsible?.personName) {
+    contacts.unshift({
+      roleName: "Responsable",
+      roleCategory: "Coordinacion",
+      sortOrder: 10,
+      personName: params.fallbackResponsible.personName,
+      phone: params.fallbackResponsible.phone ?? null,
+      email: params.fallbackResponsible.email ?? null,
+    });
+  }
+
+  return contacts;
+}
+
 async function getMatchContextMap(matchIds: string[]) {
   if (!matchIds.length) {
     return new Map<string, MatchAssignmentContextRow[]>();
@@ -261,7 +361,7 @@ async function getMatchContextMap(matchIds: string[]) {
   const result = await supabase
     .from("assignments")
     .select(
-      "match_id, role:roles!assignments_role_id_fkey(name, category, sort_order), person:people!assignments_person_id_fkey(full_name)",
+      "match_id, role:roles!assignments_role_id_fkey(name, category, sort_order), person:people!assignments_person_id_fkey(full_name, phone, email)",
     )
     .in("match_id", matchIds);
 
@@ -286,7 +386,7 @@ async function getAssignmentsForPerson(personId: string) {
   const assignmentsResult = await supabase
     .from("assignments")
     .select(
-      "id, confirmed, notes, role:roles!assignments_role_id_fkey(id, name, category, sort_order), match:matches!assignments_match_id_fkey(id, competition, production_mode, status, home_team, away_team, venue, kickoff_at, duration_minutes, timezone, owner:people!matches_owner_id_fkey(id, full_name, phone, email))",
+      "id, confirmed, notes, role:roles!assignments_role_id_fkey(id, name, category, sort_order), match:matches!assignments_match_id_fkey(id, competition, production_mode, status, home_team, away_team, venue, commentary_plan, transport, notes, kickoff_at, duration_minutes, timezone, owner:people!matches_owner_id_fkey(id, full_name, phone, email))",
     )
     .eq("person_id", personId);
 
@@ -307,13 +407,41 @@ async function getAssignmentsForPerson(personId: string) {
     const contextRows = matchContextMap.get(assignment.matchId) ?? [];
     const responsibleName =
       pickContextName(contextRows, "Responsable") ?? assignment.ownerName ?? null;
+    const responsibleContact =
+      pickContextContact(contextRows, "Responsable") ??
+      (assignment.ownerName
+        ? {
+            roleName: "Responsable",
+            roleCategory: "Coordinacion",
+            sortOrder: 10,
+            personName: assignment.ownerName,
+            phone: assignment.ownerPhone,
+            email: assignment.ownerEmail,
+          }
+        : null);
 
     return {
       ...assignment,
       responsibleName,
       realizerName: pickContextName(contextRows, "Realizador"),
+      operatorControlName: pickContextName(contextRows, "Operador de Control"),
+      supportTechName: pickContextName(contextRows, "Soporte tecnico"),
       producerName: pickContextName(contextRows, "Productor"),
+      encoderName: pickContextName(contextRows, "Encoder"),
+      relatorName: pickContextName(contextRows, "Relator"),
+      cameraCount: countCameraAssignments(contextRows),
       talentLabel: buildTalentLabel(contextRows),
+      contacts: buildGroupContacts({
+        items: contextRows,
+        fallbackResponsible:
+          responsibleContact && responsibleContact.personName
+            ? {
+                personName: responsibleContact.personName,
+                phone: responsibleContact.phone,
+                email: responsibleContact.email,
+              }
+            : null,
+      }),
     };
   });
 }
@@ -335,6 +463,9 @@ async function getFallbackAssignmentForMatch(params: {
         home_team: "Boca Juniors",
         away_team: "Atenas de Córdoba",
         venue: "Luis Conde, Buenos Aires",
+        commentary_plan: null,
+        transport: "Llegar 45 minutos antes. La sede suele abrir tarde.",
+        notes: "Vista demo para validar el asistente de grupo y sus contactos.",
         kickoff_at: demoKickoffAt,
         duration_minutes: 150,
         timezone: "America/Bogota",
@@ -350,8 +481,39 @@ async function getFallbackAssignmentForMatch(params: {
       notes: "Modo prueba habilitado temporalmente.",
       responsibleName: params.profileName ?? "Modo prueba",
       realizerName: null,
+      operatorControlName: "Mauro Ruiz Díaz",
+      supportTechName: "Fary Leonardo Urriaga",
       producerName: null,
+      encoderName: null,
+      relatorName: null,
+      cameraCount: 0,
       talentLabel: null,
+      contacts: [
+        {
+          roleName: "Responsable",
+          roleCategory: "Coordinacion",
+          sortOrder: 10,
+          personName: params.profileName ?? "Modo prueba",
+          phone: null,
+          email: null,
+        },
+        {
+          roleName: "Operador de Control",
+          roleCategory: "Produccion",
+          sortOrder: 30,
+          personName: "Mauro Ruiz Díaz",
+          phone: "573001112233",
+          email: "mauro.ruiz@basketproduction.pro",
+        },
+        {
+          roleName: "Soporte tecnico",
+          roleCategory: "Produccion",
+          sortOrder: 40,
+          personName: "Fary Leonardo Urriaga",
+          phone: "573001112244",
+          email: "fary.urriaga@basketproduction.pro",
+        },
+      ],
     });
   }
 
@@ -359,7 +521,7 @@ async function getFallbackAssignmentForMatch(params: {
   const matchResult = await supabase
     .from("matches")
     .select(
-      "id, competition, production_mode, status, home_team, away_team, venue, kickoff_at, duration_minutes, timezone, owner:people!matches_owner_id_fkey(id, full_name, phone, email)",
+      "id, competition, production_mode, status, home_team, away_team, venue, commentary_plan, transport, notes, kickoff_at, duration_minutes, timezone, owner:people!matches_owner_id_fkey(id, full_name, phone, email)",
     )
     .eq("id", params.matchId)
     .maybeSingle();
@@ -374,6 +536,18 @@ async function getFallbackAssignmentForMatch(params: {
 
   const match = matchResult.data as MatchContextMatchRow;
   const contextRows = (await getMatchContextMap([params.matchId])).get(params.matchId) ?? [];
+  const responsibleContact =
+    pickContextContact(contextRows, "Responsable") ??
+    (match.owner?.full_name
+      ? {
+          roleName: "Responsable",
+          roleCategory: "Coordinacion",
+          sortOrder: 10,
+          personName: match.owner.full_name,
+          phone: match.owner.phone ?? null,
+          email: match.owner.email ?? null,
+        }
+      : null);
 
   return buildAssignmentItem({
     assignmentId: `trial-${params.matchId}`,
@@ -386,8 +560,24 @@ async function getFallbackAssignmentForMatch(params: {
       match.owner?.full_name ??
       params.profileName,
     realizerName: pickContextName(contextRows, "Realizador"),
+    operatorControlName: pickContextName(contextRows, "Operador de Control"),
+    supportTechName: pickContextName(contextRows, "Soporte tecnico"),
     producerName: pickContextName(contextRows, "Productor"),
+    encoderName: pickContextName(contextRows, "Encoder"),
+    relatorName: pickContextName(contextRows, "Relator"),
+    cameraCount: countCameraAssignments(contextRows),
     talentLabel: buildTalentLabel(contextRows),
+    contacts: buildGroupContacts({
+      items: contextRows,
+      fallbackResponsible:
+        responsibleContact && responsibleContact.personName
+          ? {
+              personName: responsibleContact.personName,
+              phone: responsibleContact.phone,
+              email: responsibleContact.email,
+            }
+          : null,
+    }),
   });
 }
 

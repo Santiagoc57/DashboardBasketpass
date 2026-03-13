@@ -1,7 +1,7 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import {
   ArrowRight,
-  Headset,
   LockKeyhole,
   Mail,
   Radio,
@@ -9,7 +9,7 @@ import {
   Video,
 } from "lucide-react";
 
-import { loginAction } from "@/app/actions/auth";
+import { loginAction, loginToDashboardAction } from "@/app/actions/auth";
 import { SetupPanel } from "@/components/layout/setup-panel";
 import { PageMessage } from "@/components/ui/page-message";
 import { SubmitButton } from "@/components/ui/submit-button";
@@ -25,6 +25,9 @@ type PageProps = {
 export default async function LoginPage({ searchParams }: PageProps) {
   const resolvedSearchParams = await searchParams;
   const { intent, notice } = parseNotice(resolvedSearchParams);
+  const supportEmail = "soporte@dashboardproduccion.local";
+  const supportWhatsAppHref: string | null = null;
+  const supportContactHref = supportWhatsAppHref ?? `mailto:${supportEmail}`;
 
   if (!isSupabaseConfigured) {
     return (
@@ -80,13 +83,13 @@ export default async function LoginPage({ searchParams }: PageProps) {
   } = await supabase.auth.getUser();
 
   if (user) {
-    redirect("/grid");
+    redirect("/mi-jornada");
   }
 
   const redirectTo =
     typeof resolvedSearchParams.redirectTo === "string"
       ? resolvedSearchParams.redirectTo
-      : "/grid";
+      : "/mi-jornada";
 
   return (
     <div className="min-h-screen bg-[var(--background)]">
@@ -159,7 +162,7 @@ export default async function LoginPage({ searchParams }: PageProps) {
 
         <section className="flex min-h-screen items-center justify-center px-6 py-8 sm:px-8 lg:px-10 xl:px-12">
           <div className="w-full max-w-[400px] xl:max-w-[420px]">
-            <div className="mb-8 flex items-center gap-3 lg:hidden">
+            <div className="mb-8 flex items-center justify-center gap-3 text-center lg:hidden">
               <div className="flex size-10 items-center justify-center rounded-xl bg-[var(--foreground)] text-white">
                 <Video className="size-5" />
               </div>
@@ -169,16 +172,13 @@ export default async function LoginPage({ searchParams }: PageProps) {
             </div>
 
             <div className="rounded-[22px] border border-[var(--border)] bg-[var(--surface)] p-7 shadow-[0_12px_34px_rgba(28,13,16,0.05)] sm:p-8 xl:p-9">
-              <div className="mb-6 xl:mb-7">
+              <div className="mb-6 text-center xl:mb-7 lg:text-left">
                 <p className="text-xs font-bold uppercase tracking-[0.32em] text-[var(--accent)]">
-                  Acceso
+                  Hola bienvenido
                 </p>
-                <h2 className="mt-2.5 text-[1.8rem] font-black tracking-tight text-[var(--foreground)] xl:text-[2rem]">
+                <h2 className="mx-auto mt-2.5 max-w-[12rem] text-[1.8rem] font-black leading-[0.94] tracking-tight text-[var(--foreground)] lg:mx-0 lg:max-w-none xl:text-[2rem]">
                   Acceso a la plataforma
                 </h2>
-                <p className="mt-2 text-sm font-medium text-[var(--muted)]">
-                  Ingresa tus credenciales corporativas para continuar.
-                </p>
               </div>
 
               <PageMessage intent={intent} message={notice} />
@@ -199,7 +199,7 @@ export default async function LoginPage({ searchParams }: PageProps) {
                       name="email"
                       placeholder="operaciones@canal.com"
                       required
-                      className="block h-[52px] w-full rounded-[15px] border border-[var(--border)] bg-[var(--background-soft)] pl-11 pr-4 text-[15px] text-[var(--foreground)] outline-none transition focus:border-[var(--accent)] focus:ring-2 focus:ring-[rgba(230,18,56,0.12)] xl:h-14 xl:pl-12 xl:text-base"
+                      className="block h-[52px] w-full rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--background-soft)] pl-11 pr-4 text-[15px] text-[var(--foreground)] outline-none transition focus:border-[var(--accent)] focus:ring-2 focus:ring-[rgba(230,18,56,0.12)] xl:h-14 xl:pl-12 xl:text-base"
                     />
                   </div>
                 </label>
@@ -217,12 +217,21 @@ export default async function LoginPage({ searchParams }: PageProps) {
                       name="password"
                       placeholder="********"
                       required
-                      className="block h-[52px] w-full rounded-[15px] border border-[var(--border)] bg-[var(--background-soft)] pl-11 pr-4 text-[15px] text-[var(--foreground)] outline-none transition focus:border-[var(--accent)] focus:ring-2 focus:ring-[rgba(230,18,56,0.12)] xl:h-14 xl:pl-12 xl:text-base"
+                      className="block h-[52px] w-full rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--background-soft)] pl-11 pr-4 text-[15px] text-[var(--foreground)] outline-none transition focus:border-[var(--accent)] focus:ring-2 focus:ring-[rgba(230,18,56,0.12)] xl:h-14 xl:pl-12 xl:text-base"
                     />
                   </div>
                 </label>
 
-                <div className="flex items-center justify-between gap-4 pt-1">
+                <div className="-mt-1 flex justify-end">
+                  <Link
+                    href="/forgot-password"
+                    className="text-sm font-medium text-[var(--muted)] transition hover:text-[var(--accent)]"
+                  >
+                    Olvidé mi contraseña
+                  </Link>
+                </div>
+
+                <div className="flex items-center justify-start gap-4 pt-1">
                   <label className="flex items-center gap-2 text-sm font-medium text-[var(--muted)]">
                     <input
                       type="checkbox"
@@ -230,18 +239,20 @@ export default async function LoginPage({ searchParams }: PageProps) {
                     />
                     Recordarme
                   </label>
-                  <a
-                    href="mailto:soporte@dashboardproduccion.local"
-                    className="text-sm font-medium text-[var(--muted)] transition hover:text-[var(--accent)]"
-                  >
-                    Contactar soporte
-                  </a>
                 </div>
 
-                <div className="pt-3">
+                <div className="grid gap-3 pt-3">
                   <SubmitButton
                     pendingLabel="Ingresando..."
-                    className="h-[52px] w-full gap-2 rounded-[15px] text-[15px] font-bold shadow-[0_8px_24px_rgba(230,18,56,0.26)] xl:h-14 xl:text-base"
+                    className="h-[52px] w-full gap-2 text-[15px] font-bold shadow-[0_8px_24px_rgba(230,18,56,0.26)] xl:h-14 xl:text-base"
+                  >
+                    Entrar a Mi jornada
+                    <ArrowRight className="size-5" />
+                  </SubmitButton>
+                  <SubmitButton
+                    formAction={loginToDashboardAction}
+                    pendingLabel="Ingresando..."
+                    className="h-[52px] w-full gap-2 bg-[#1faa52] text-[15px] font-bold text-white shadow-[0_12px_28px_rgba(31,170,82,0.22)] hover:bg-[#189346] xl:h-14 xl:text-base"
                   >
                     Entrar al dashboard
                     <ArrowRight className="size-5" />
@@ -250,14 +261,12 @@ export default async function LoginPage({ searchParams }: PageProps) {
               </form>
             </div>
 
-            <p className="mt-6 flex items-center justify-center gap-2 text-center text-sm font-medium text-[var(--muted)] xl:mt-8">
-              <Headset className="size-4" />
-              ¿Problemas técnicos?{" "}
+            <p className="mt-6 flex items-center justify-center text-center text-sm font-medium text-[var(--muted)] xl:mt-8">
               <a
-                href="mailto:soporte@dashboardproduccion.local"
+                href={supportContactHref}
                 className="text-[var(--foreground)] underline transition hover:text-[var(--accent)]"
               >
-                Contactar a soporte IT
+                Contactar a soporte
               </a>
             </p>
           </div>

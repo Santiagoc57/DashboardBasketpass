@@ -1,9 +1,11 @@
 "use client";
 
 import Image from "next/image";
-import { Camera, UserRound } from "lucide-react";
+import Link from "next/link";
+import { Camera, LogOut, Settings2, Shield, UserRound } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { signOutAction } from "@/app/actions/auth";
 import {
   AVATAR_CHANGE_EVENT,
   getAvatarStorageKey,
@@ -25,14 +27,18 @@ export function UserProfileChip({
   email,
   roleLabel,
   className,
+  mobileMenu = false,
 }: {
   userId: string | null;
   fullName: string;
   email: string | null;
   roleLabel: string;
   className?: string;
+  mobileMenu?: boolean;
 }) {
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const storageKey = useMemo(
     () => getAvatarStorageKey({ userId, email, fullName }),
@@ -65,6 +71,32 @@ export function UserProfileChip({
     };
   }, [storageKey]);
 
+  useEffect(() => {
+    if (!mobileMenu || !menuOpen) {
+      return;
+    }
+
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!menuRef.current?.contains(event.target as Node)) {
+        setMenuOpen(false);
+      }
+    };
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setMenuOpen(false);
+      }
+    };
+
+    window.addEventListener("mousedown", handlePointerDown);
+    window.addEventListener("keydown", handleEscape);
+
+    return () => {
+      window.removeEventListener("mousedown", handlePointerDown);
+      window.removeEventListener("keydown", handleEscape);
+    };
+  }, [menuOpen, mobileMenu]);
+
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) {
@@ -94,6 +126,75 @@ export function UserProfileChip({
     reader.readAsDataURL(file);
   };
 
+  const avatarButtonClassName = mobileMenu
+    ? "relative flex size-14 items-center justify-center overflow-hidden rounded-full border border-[var(--border)] bg-[#edf1f4] shadow-sm ring-2 ring-white transition hover:border-[var(--accent)]"
+    : "group relative flex size-14 items-center justify-center overflow-hidden rounded-full border border-[var(--border)] bg-[#edf1f4] shadow-sm ring-2 ring-white transition hover:border-[var(--accent)]";
+
+  const avatarContent = avatarSrc ? (
+    <Image
+      src={avatarSrc}
+      alt={`Foto de perfil de ${fullName}`}
+      fill
+      sizes="56px"
+      className="object-cover"
+    />
+  ) : (
+    <div className="flex size-full items-center justify-center bg-[#d8e3e2] text-[#324b53]">
+      {fullName.trim() ? (
+        <span className="text-sm font-extrabold">{getInitials(fullName)}</span>
+      ) : (
+        <UserRound className="size-6" />
+      )}
+    </div>
+  );
+
+  if (mobileMenu) {
+    return (
+      <div ref={menuRef} className={cn("relative", className)}>
+        <button
+          type="button"
+          onClick={() => setMenuOpen((current) => !current)}
+          className={avatarButtonClassName}
+          aria-expanded={menuOpen}
+          aria-haspopup="menu"
+          aria-label="Abrir menú de perfil"
+        >
+          {avatarContent}
+        </button>
+
+        {menuOpen ? (
+          <div className="panel-surface absolute right-0 top-[calc(100%+0.75rem)] z-50 w-56 border border-[var(--border)] bg-[var(--surface)] p-2 shadow-[0_18px_40px_rgba(20,24,35,0.12)]">
+            <Link
+              href="/teams"
+              onClick={() => setMenuOpen(false)}
+              className="flex w-full items-center gap-3 rounded-[calc(var(--panel-radius)-4px)] px-3 py-3 text-sm font-semibold text-[var(--foreground)] transition hover:bg-[var(--background-soft)]"
+            >
+              <Shield className="size-4 text-[#617187]" />
+              Equipos
+            </Link>
+            <Link
+              href="/settings"
+              onClick={() => setMenuOpen(false)}
+              className="flex w-full items-center gap-3 rounded-[calc(var(--panel-radius)-4px)] px-3 py-3 text-sm font-semibold text-[var(--foreground)] transition hover:bg-[var(--background-soft)]"
+            >
+              <Settings2 className="size-4 text-[#617187]" />
+              Configuración
+            </Link>
+            <form action={signOutAction}>
+              <button
+                type="submit"
+                className="flex w-full items-center gap-3 rounded-[calc(var(--panel-radius)-4px)] px-3 py-3 text-sm font-semibold text-[var(--foreground)] transition hover:bg-[var(--background-soft)]"
+              >
+                <LogOut className="size-4 text-[#617187]" />
+                Cerrar sesión
+              </button>
+            </form>
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+
   return (
     <div className={cn("flex items-center gap-3", className)}>
       <div className="hidden text-right sm:block">
@@ -108,26 +209,10 @@ export function UserProfileChip({
       <button
         type="button"
         onClick={() => inputRef.current?.click()}
-        className="group relative flex size-14 items-center justify-center overflow-hidden rounded-full border border-[var(--border)] bg-[#edf1f4] shadow-sm ring-2 ring-white transition hover:border-[var(--accent)]"
+        className={avatarButtonClassName}
         title="Cambiar foto de perfil"
       >
-        {avatarSrc ? (
-          <Image
-            src={avatarSrc}
-            alt={`Foto de perfil de ${fullName}`}
-            fill
-            sizes="56px"
-            className="object-cover"
-          />
-        ) : (
-          <div className="flex size-full items-center justify-center bg-[#d8e3e2] text-[#324b53]">
-            {fullName.trim() ? (
-              <span className="text-sm font-extrabold">{getInitials(fullName)}</span>
-            ) : (
-              <UserRound className="size-6" />
-            )}
-          </div>
-        )}
+        {avatarContent}
         <span className="absolute bottom-0 right-0 flex size-6 items-center justify-center rounded-full border-2 border-white bg-[var(--accent)] text-white shadow-sm transition group-hover:scale-105">
           <Camera className="size-3.5" />
         </span>

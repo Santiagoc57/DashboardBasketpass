@@ -33,18 +33,26 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const isAuthRoute = request.nextUrl.pathname.startsWith("/login");
+  const pathname = request.nextUrl.pathname;
+  const allowsGuestMiJornada =
+    appEnv.allowGuestMiJornadaAccess && pathname === "/mi-jornada";
+  const isLoginRoute = pathname === "/login";
+  const isPublicAuthRoute =
+    isLoginRoute ||
+    pathname === "/forgot-password" ||
+    pathname === "/reset-password" ||
+    pathname.startsWith("/auth/");
 
-  if (!user && !isAuthRoute) {
+  if (!user && !isPublicAuthRoute && !allowsGuestMiJornada) {
     const loginUrl = request.nextUrl.clone();
     loginUrl.pathname = "/login";
     loginUrl.searchParams.set("redirectTo", request.nextUrl.pathname);
     return NextResponse.redirect(loginUrl);
   }
 
-  if (user && isAuthRoute) {
+  if (user && isLoginRoute) {
     const appUrl = request.nextUrl.clone();
-    appUrl.pathname = "/grid";
+    appUrl.pathname = "/mi-jornada";
     return NextResponse.redirect(appUrl);
   }
 

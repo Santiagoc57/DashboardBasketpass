@@ -3,14 +3,13 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  AlertTriangle,
   BriefcaseBusiness,
   CalendarDays,
+  CircleHelp,
   ClipboardList,
   FileText,
   Settings2,
   Shield,
-  ShieldCheck,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -18,21 +17,24 @@ import { cn } from "@/lib/utils";
 const navItems = [
   { href: "/grid", label: "Producción", icon: CalendarDays },
   { href: "/mi-jornada", label: "Mi jornada", icon: ClipboardList },
-  { href: "/incidents", label: "Incidencias", icon: AlertTriangle },
-  { href: "/reports", label: "Reportes", icon: FileText },
+  { href: "/reports", label: "Operaciones", icon: FileText },
   { href: "/teams", label: "Equipos", icon: Shield },
   { href: "/people", label: "Personal", icon: BriefcaseBusiness },
-  { href: "/roles", label: "Roles", icon: ShieldCheck },
   { href: "/settings", label: "Configuración", icon: Settings2 },
+  { href: "/support", label: "Soporte", icon: CircleHelp },
 ] as const;
+
+const mobileNavItems = navItems.filter((item) =>
+  ["/grid", "/mi-jornada", "/reports"].includes(item.href),
+);
 
 export function DashboardNav({ mobile = false }: { mobile?: boolean }) {
   const pathname = usePathname();
 
   if (mobile) {
     return (
-      <nav className="flex gap-2 overflow-x-auto pb-1">
-        {navItems.map((item) => {
+      <nav className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        {mobileNavItems.map((item) => {
           const active = pathname.startsWith(item.href);
           const Icon = item.icon;
 
@@ -41,7 +43,7 @@ export function DashboardNav({ mobile = false }: { mobile?: boolean }) {
               key={item.href}
               href={item.href}
               className={cn(
-                "inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold transition",
+                "inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-full border px-4 py-2 text-sm font-semibold transition",
                 active
                   ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent)]"
                   : "border-[var(--border)] bg-[var(--surface)] text-[var(--muted)] hover:bg-[var(--background-soft)] hover:text-[var(--foreground)]",
@@ -57,7 +59,7 @@ export function DashboardNav({ mobile = false }: { mobile?: boolean }) {
   }
 
   return (
-    <nav className="space-y-1">
+    <nav className="space-y-2">
       {navItems.map((item) => {
         const active = pathname.startsWith(item.href);
         const Icon = item.icon;
@@ -67,10 +69,10 @@ export function DashboardNav({ mobile = false }: { mobile?: boolean }) {
             key={item.href}
             href={item.href}
             className={cn(
-              "flex items-center gap-3 rounded-[22px] px-4 py-3 text-[15px] font-semibold transition",
+              "flex items-center gap-3 rounded-[var(--panel-radius)] px-4 py-3.5 text-[15px] font-semibold transition",
               active
-                ? "bg-[var(--accent-soft)] text-[var(--accent)]"
-                : "text-[#52627b] hover:bg-[var(--background-soft)] hover:text-[var(--foreground)]",
+                ? "bg-[var(--accent)] text-white shadow-[0_14px_32px_rgba(230,18,56,0.24)]"
+                : "bg-[#0d1731] text-white hover:bg-[#132347]",
             )}
           >
             <Icon className="size-5" strokeWidth={2.2} />

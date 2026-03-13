@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { addDays, addMonths } from "date-fns";
 
 import { SectionAiAssistant } from "@/components/ai/section-ai-assistant";
 import { CreateMatchModal } from "@/components/grid/create-match-modal";
@@ -9,7 +10,12 @@ import { SectionPageHeader } from "@/components/layout/section-page-header";
 import { SetupPanel } from "@/components/layout/setup-panel";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageMessage } from "@/components/ui/page-message";
-import { formatMatchDate, getDateInputValue, getMonthInputValue } from "@/lib/date";
+import {
+  buildKickoffAt,
+  formatMatchDate,
+  getDateInputValue,
+  getMonthInputValue,
+} from "@/lib/date";
 import { getGridCalendarData, getGridData } from "@/lib/data/dashboard";
 import { requireUserContext } from "@/lib/auth";
 import { isSupabaseConfigured } from "@/lib/env";
@@ -97,6 +103,46 @@ function formatDayHeading(kickoffAt: string, timezone: string) {
   return label.charAt(0).toUpperCase() + label.slice(1);
 }
 
+function buildGridDateShift(params: {
+  date: string;
+  view: "day" | "month";
+  amount: number;
+}) {
+  const baseDate =
+    params.view === "month"
+      ? new Date(`${params.date}-01T12:00:00`)
+      : new Date(`${params.date}T12:00:00`);
+  const shiftedDate =
+    params.view === "month"
+      ? addMonths(baseDate, params.amount)
+      : addDays(baseDate, params.amount);
+
+  return params.view === "month"
+    ? getMonthInputValue(shiftedDate)
+    : getDateInputValue(shiftedDate);
+}
+
+function formatSummaryDateLabel(params: {
+  date: string;
+  view: "day" | "month";
+  timezone: string;
+}) {
+  const referenceDate =
+    params.view === "month" ? `${params.date}-01` : params.date;
+  const referenceKickoff = buildKickoffAt({
+    date: referenceDate,
+    time: "12:00",
+    timezone: params.timezone,
+  });
+  const label = formatMatchDate(
+    referenceKickoff,
+    params.timezone,
+    params.view === "month" ? "MMM yyyy" : "EEEE, d 'de' MMM",
+  );
+
+  return label.replaceAll(".", "").toUpperCase();
+}
+
 export default async function GridPage({ searchParams }: PageProps) {
   const resolvedSearchParams = await searchParams;
   const { intent, notice } = parseNotice(resolvedSearchParams);
@@ -144,6 +190,25 @@ export default async function GridPage({ searchParams }: PageProps) {
     view: "month",
     date: getMonthInputValue(),
   });
+  const previousDateHref = buildGridHref(resolvedSearchParams, {
+    date: buildGridDateShift({
+      date: filters.date,
+      view: filters.view,
+      amount: -1,
+    }),
+  });
+  const nextDateHref = buildGridHref(resolvedSearchParams, {
+    date: buildGridDateShift({
+      date: filters.date,
+      view: filters.view,
+      amount: 1,
+    }),
+  });
+  const summaryDateLabel = formatSummaryDateLabel({
+    date: filters.date,
+    view: filters.view,
+    timezone: filters.timezone,
+  });
   const aiContext = dayGroups.flatMap((group) =>
     group.items.map((match) => ({
       partido: `${match.home_team} vs ${match.away_team}`,
@@ -161,10 +226,11 @@ export default async function GridPage({ searchParams }: PageProps) {
   );
 
   return (
-    <div className="grid gap-6 2xl:grid-cols-[minmax(0,1fr)_23rem]">
+    <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_20rem] 2xl:grid-cols-[minmax(0,1fr)_22rem]">
       <div className="min-w-0 space-y-10">
         <SectionPageHeader
           title="Producción"
+          description="Organiza la jornada, asigna roles y supervisa la carga operativa del día."
           actions={
             <>
               <div className="flex h-[52px] rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--background-soft)] p-1">
@@ -228,7 +294,7 @@ export default async function GridPage({ searchParams }: PageProps) {
 
         <PageMessage intent={intent} message={notice} />
 
-        <section className="space-y-6">
+        <section className="min-w-0 space-y-6">
           {dayGroups.length ? (
             dayGroups.map((group) => (
               <div key={group.key} className="space-y-4">
@@ -270,10 +336,13 @@ export default async function GridPage({ searchParams }: PageProps) {
         </section>
       </div>
 
-      <aside className="self-start 2xl:sticky 2xl:top-24">
+      <aside className="min-w-0 self-start xl:sticky xl:top-24">
         <ProductionInsightsPanel
           matches={dayGroups.flatMap((group) => group.items)}
           timezone={filters.timezone}
+          currentDateLabel={summaryDateLabel}
+          previousDateHref={previousDateHref}
+          nextDateHref={nextDateHref}
         />
       </aside>
     </div>

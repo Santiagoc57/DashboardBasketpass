@@ -7,11 +7,15 @@ export function SectionPageHeader({
   description,
   actions,
   className,
+  contentClassName,
+  descriptionClassName,
 }: {
-  title: string;
-  description?: string;
+  title: ReactNode;
+  description?: ReactNode;
   actions?: ReactNode;
   className?: string;
+  contentClassName?: string;
+  descriptionClassName?: string;
 }) {
   return (
     <section
@@ -20,12 +24,17 @@ export function SectionPageHeader({
         className,
       )}
     >
-      <div className="space-y-2">
+      <div className={cn("space-y-2", contentClassName)}>
         <h2 className="text-4xl font-black tracking-tight text-[var(--foreground)]">
           {title}
         </h2>
         {description ? (
-          <p className="max-w-2xl text-sm font-medium text-[#617187]">
+          <p
+            className={cn(
+              "max-w-2xl text-sm font-medium text-[#617187]",
+              descriptionClassName,
+            )}
+          >
             {description}
           </p>
         ) : null}

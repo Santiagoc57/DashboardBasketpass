@@ -1,30 +1,40 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { GripVertical } from "lucide-react";
+import { GripVertical, Mail, MapPin, MessageCircle } from "lucide-react";
+import Link from "next/link";
 
-import { PersonRowActions } from "@/components/people/person-row-actions";
-import { Button } from "@/components/ui/button";
-import { getAssignmentStateDisplayName, getRoleDisplayName } from "@/lib/display";
+import { togglePersonActiveAction } from "@/app/actions/people";
+import {
+  getCityIndicator,
+  getInitials,
+  getRolePresentation,
+  getWhatsAppHref,
+} from "@/components/people/people-view-helpers";
+import { getRoleDisplayName } from "@/lib/display";
 import { parsePersonNotesMeta } from "@/lib/people-notes";
 import type { PersonListItem } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 type PeopleTableColumn =
   | "profile"
-  | "contact"
-  | "status"
+  | "role"
   | "details"
-  | "actions";
+  | "phone"
+  | "email"
+  | "city"
+  | "status";
 
 const PEOPLE_TABLE_COLUMNS_STORAGE_KEY =
-  "basket-production.people.table-columns";
+  "basket-production.people.table-columns.v2";
 const DEFAULT_PEOPLE_TABLE_COLUMNS: PeopleTableColumn[] = [
   "profile",
-  "contact",
-  "status",
+  "role",
   "details",
-  "actions",
+  "phone",
+  "email",
+  "city",
+  "status",
 ];
 
 function normalizePeopleTableColumns(
@@ -46,26 +56,6 @@ function normalizePeopleTableColumns(
   }
 
   return nextColumns;
-}
-
-function getInitials(name: string) {
-  return name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? "")
-    .join("");
-}
-
-function getStatusBadgeClass(state: PersonListItem["assignment_state"]) {
-  switch (state) {
-    case "En asignacion":
-      return "border-[#b8e7c7] bg-[#eefbf2] text-[#1b7d43] [&>span]:bg-[#23b25f]";
-    case "Inactivo":
-      return "border-[#f2c6ce] bg-[#fff3f5] text-[#b42343] [&>span]:bg-[var(--accent)]";
-    default:
-      return "border-[#d8dee8] bg-[#f6f8fb] text-[#596980] [&>span]:bg-[#8ea0b7]";
-  }
 }
 
 export function PeopleTable({
@@ -150,18 +140,23 @@ export function PeopleTable({
   const renderHeader = (column: PeopleTableColumn) => {
     const isDropTarget =
       !!draggedColumn && draggedColumn !== column && dragOverColumn === column;
-    const isRightAligned = column === "actions";
 
     const label =
       column === "profile"
-        ? "Nombre y perfil"
-        : column === "contact"
-          ? "Contacto"
+        ? "Nombre"
+        : column === "role"
+          ? "Rol"
+          : column === "details"
+            ? "Responsable"
+          : column === "phone"
+            ? "Celular"
+          : column === "email"
+            ? "Correo"
+          : column === "city"
+            ? "Ciudad"
           : column === "status"
             ? "Estado"
-            : column === "details"
-              ? "Responsable y notas"
-              : "Acciones";
+            : "";
 
     return (
       <th
@@ -169,7 +164,6 @@ export function PeopleTable({
         className={cn(
           "px-6 py-4 transition-colors",
           column === "profile" && "px-8",
-          isRightAligned && "px-8 text-right",
           isDropTarget && "bg-[#f8fafc]",
         )}
         onDragOver={(event) => {
@@ -183,8 +177,7 @@ export function PeopleTable({
       >
         <div
           className={cn(
-            "flex items-center gap-2",
-            isRightAligned ? "justify-end" : "justify-between",
+            "flex items-center justify-between gap-2",
           )}
         >
           <span>{label}</span>
@@ -209,16 +202,13 @@ export function PeopleTable({
   const renderCell = (person: PersonListItem, column: PeopleTableColumn) => {
     const meta = parsePersonNotesMeta(person.notes);
     const displayRole = meta.role || person.primary_role || "";
-    const detailSummary = [
-      meta.coverage ? `Responsable: ${meta.coverage}` : "",
-      meta.notes,
-    ]
-      .filter(Boolean)
-      .join(" · ");
+    const rolePresentation = getRolePresentation(displayRole);
+    const city = meta.city || "";
+    const cityIndicator = getCityIndicator(city);
+    const detailSummary = meta.coverage || "";
     const cellClassName = cn(
       "px-6 py-5",
       column === "profile" && "px-8",
-      column === "actions" && "px-8",
     );
 
     switch (column) {
@@ -230,66 +220,150 @@ export function PeopleTable({
                 {getInitials(person.full_name)}
               </div>
               <div className="min-w-0">
-                <p className="truncate text-sm font-extrabold text-[var(--foreground)]">
-                  {person.full_name}
-                </p>
-                <p className="truncate text-xs font-medium text-[#70819b]">
-                  {displayRole
-                    ? getRoleDisplayName(displayRole)
-                    : "Sin rol frecuente"}
+                {canEdit ? (
+                  <Link
+                    href={`/people?edit=${person.id}`}
+                    className="truncate text-sm font-extrabold text-[var(--foreground)] transition hover:text-[var(--accent)]"
+                  >
+                    {person.full_name}
+                  </Link>
+                ) : (
+                  <p className="truncate text-sm font-extrabold text-[var(--foreground)]">
+                    {person.full_name}
+                  </p>
+                )}
+              </div>
+            </div>
+          </td>
+        );
+      case "phone":
+        return (
+          <td key={column} className={cellClassName}>
+            <div className="flex justify-start">
+              <div className="flex items-center gap-2">
+                {person.phone ? (
+                  <a
+                    href={getWhatsAppHref(person.phone) ?? undefined}
+                    target="_blank"
+                    rel="noreferrer"
+                    aria-label={`Escribir por WhatsApp a ${person.full_name}`}
+                    className="inline-flex size-8 items-center justify-center rounded-full bg-[#ecfdf3] text-[#16a34a] transition hover:bg-[#dcfce7]"
+                  >
+                    <MessageCircle className="size-4" />
+                  </a>
+                ) : null}
+                <p className="text-sm font-medium text-[var(--foreground)]">
+                  {person.phone ?? "Sin teléfono"}
                 </p>
               </div>
             </div>
           </td>
         );
-      case "contact":
+      case "role":
         return (
           <td key={column} className={cellClassName}>
-            <p className="text-sm font-medium text-[var(--foreground)]">
-              {person.phone ?? "Sin teléfono"}
-            </p>
-            <p className="text-xs font-medium text-[#70819b]">
-              {person.email ?? "Sin correo"}
-            </p>
+            <div className="flex items-center gap-2">
+              <span
+                className={cn(
+                  "inline-flex size-8 items-center justify-center rounded-full",
+                  rolePresentation.className,
+                )}
+              >
+                <rolePresentation.Icon className="size-4" />
+              </span>
+              <p className="text-sm font-medium text-[var(--foreground)]">
+                {displayRole ? getRoleDisplayName(displayRole) : "Sin rol"}
+              </p>
+            </div>
+          </td>
+        );
+      case "city":
+        return (
+          <td key={column} className={cellClassName}>
+            <div className="flex justify-start">
+              <div className="flex items-center gap-2">
+                <span
+                  title={cityIndicator.label}
+                  className="inline-flex size-8 items-center justify-center rounded-full bg-[#f4f7fb] text-sm"
+                >
+                  {cityIndicator.emoji ? (
+                    <span aria-hidden="true">{cityIndicator.emoji}</span>
+                  ) : (
+                    <MapPin className="size-4 text-[#94a3b8]" />
+                  )}
+                </span>
+                <p className="text-sm font-medium text-[var(--foreground)]">
+                  {city || "Sin ciudad"}
+                </p>
+              </div>
+            </div>
+          </td>
+        );
+      case "email":
+        return (
+          <td key={column} className={cellClassName}>
+            <div className="flex justify-start">
+              <div className="flex items-center gap-2">
+                {person.email ? (
+                  <a
+                    href={`mailto:${person.email}`}
+                    aria-label={`Escribir por correo a ${person.full_name}`}
+                    className="inline-flex size-8 items-center justify-center rounded-full bg-[#eef2ff] text-[#4f46e5] transition hover:bg-[#e0e7ff]"
+                  >
+                    <Mail className="size-4" />
+                  </a>
+                ) : null}
+                <p className="text-xs font-medium text-[#70819b]">
+                  {person.email ?? "Sin correo"}
+                </p>
+              </div>
+            </div>
           </td>
         );
       case "status":
         return (
           <td key={column} className={cellClassName}>
-            <span
-              className={cn(
-                "inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-bold",
-                getStatusBadgeClass(person.assignment_state),
-              )}
-            >
-              <span className="size-1.5 rounded-full" />
-              {getAssignmentStateDisplayName(person.assignment_state)}
-            </span>
+            <div className="flex justify-start">
+              <div className="flex items-center">
+                <form action={togglePersonActiveAction}>
+                  <input type="hidden" name="personId" value={person.id} />
+                  <input
+                    type="hidden"
+                    name="active"
+                    value={person.active ? "off" : "on"}
+                  />
+                  <button
+                    type="submit"
+                    role="switch"
+                    aria-checked={person.active}
+                    aria-label={`${person.active ? "Desactivar" : "Activar"} a ${person.full_name}`}
+                    disabled={!canEdit}
+                    className={cn(
+                      "relative inline-flex h-7 w-12 shrink-0 items-center rounded-full border transition",
+                      person.active
+                        ? "border-[#b8e7c7] bg-[#e9f9ee]"
+                        : "border-[#e6d8dd] bg-[#f4edf0]",
+                      !canEdit && "cursor-not-allowed opacity-60",
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "pointer-events-none absolute left-1 inline-flex size-5 rounded-full bg-white shadow-[0_2px_6px_rgba(15,23,42,0.16)] transition-transform",
+                        person.active && "translate-x-5",
+                      )}
+                    />
+                  </button>
+                </form>
+              </div>
+            </div>
           </td>
         );
       case "details":
         return (
           <td key={column} className={cellClassName}>
             <p className="max-w-[22rem] truncate text-sm font-medium text-[#516173]">
-              {detailSummary || "Sin responsable ni notas operativas"}
+              {detailSummary || "Sin responsable asignado"}
             </p>
-          </td>
-        );
-      case "actions":
-        return (
-          <td key={column} className={cellClassName}>
-            <div className="flex items-center justify-end">
-              {canEdit ? (
-                <PersonRowActions
-                  personId={person.id}
-                  fullName={person.full_name}
-                />
-              ) : (
-                <Button variant="secondary" disabled className="h-9">
-                  Solo lectura
-                </Button>
-              )}
-            </div>
           </td>
         );
       default:
@@ -307,10 +381,7 @@ export function PeopleTable({
         </thead>
         <tbody className="divide-y divide-[#edf1f6]">
           {people.map((person) => (
-            <tr
-              key={person.id}
-              className="group transition hover:bg-[#fff8f9]"
-            >
+            <tr key={person.id} className="group transition hover:bg-[#fafbfd]">
               {columnOrder.map((column) => renderCell(person, column))}
             </tr>
           ))}

@@ -1,6 +1,7 @@
-import { Bot, KeyRound, Settings2, UserRound } from "lucide-react";
+import { Bot, KeyRound, Megaphone, Settings2, UserRound } from "lucide-react";
 
 import {
+  saveAnnouncementAction,
   saveGeminiSettingsAction,
   savePreferencesAction,
 } from "@/app/actions/settings";
@@ -10,7 +11,9 @@ import { Input } from "@/components/ui/input";
 import { PageMessage } from "@/components/ui/page-message";
 import { Select } from "@/components/ui/select";
 import { SubmitButton } from "@/components/ui/submit-button";
+import { Textarea } from "@/components/ui/textarea";
 import { requireUserContext } from "@/lib/auth";
+import { getLatestAnnouncement } from "@/lib/data/announcements";
 import { isSupabaseConfigured } from "@/lib/env";
 import { ProfileAvatarSettings } from "@/components/settings/profile-avatar-settings";
 import { GEMINI_MODEL_OPTIONS, getSettingsSnapshot, UI_DENSITY_OPTIONS } from "@/lib/settings";
@@ -30,6 +33,9 @@ export default async function SettingsPage({ searchParams }: PageProps) {
 
   const user = await requireUserContext();
   const settings = await getSettingsSnapshot();
+  const latestAnnouncement = user.role === "admin"
+    ? await getLatestAnnouncement()
+    : null;
   const displayName =
     user.profile?.full_name?.trim() || user.email?.split("@")[0] || "Usuario";
 
@@ -180,6 +186,92 @@ export default async function SettingsPage({ searchParams }: PageProps) {
           </div>
         </form>
       </Card>
+
+      {user.role === "admin" ? (
+        <Card className="space-y-5">
+          <div className="flex items-center gap-3">
+            <div className="inline-flex size-11 items-center justify-center rounded-2xl bg-[var(--accent-soft)] text-[var(--accent)]">
+              <Megaphone className="size-5" />
+            </div>
+            <div>
+              <h3 className="text-lg font-extrabold text-[var(--foreground)]">
+                Comunicado general
+              </h3>
+              <p className="text-sm text-[#617187]">
+                Publica un popup para todos los colaboradores después del login y
+                mantenlo disponible desde la campana del header.
+              </p>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-[var(--border)] bg-[var(--background-soft)] px-4 py-3 text-sm text-[#617187]">
+            Estado actual:{" "}
+            <span className="font-bold text-[var(--foreground)]">
+              {latestAnnouncement?.active
+                ? "Publicado y visible"
+                : latestAnnouncement
+                  ? "Guardado sin publicar"
+                  : "Sin comunicado cargado"}
+            </span>
+            {latestAnnouncement ? (
+              <span className="ml-2 text-xs text-[#94a3b8]">
+                Última edición: {new Intl.DateTimeFormat("es-CO", {
+                  dateStyle: "medium",
+                  timeStyle: "short",
+                }).format(new Date(latestAnnouncement.updated_at))}
+              </span>
+            ) : null}
+          </div>
+
+          <form action={saveAnnouncementAction} className="grid gap-4">
+            <input type="hidden" name="redirectTo" value="/settings" />
+            <input
+              type="hidden"
+              name="announcementId"
+              value={latestAnnouncement?.id ?? ""}
+            />
+
+            <label className="space-y-2">
+              <span className="text-sm font-bold text-[#334155]">Título</span>
+              <Input
+                name="announcementTitle"
+                defaultValue={latestAnnouncement?.title ?? ""}
+                placeholder="Ej. Ajuste de horarios para la jornada de hoy"
+                className="h-11 rounded-xl bg-[var(--background-soft)]"
+              />
+            </label>
+
+            <label className="space-y-2">
+              <span className="text-sm font-bold text-[#334155]">Mensaje</span>
+              <Textarea
+                name="announcementBody"
+                defaultValue={latestAnnouncement?.body ?? ""}
+                placeholder="Escribe aquí el comunicado que verán todos al iniciar sesión."
+                className="bg-[var(--background-soft)]"
+              />
+            </label>
+
+            <label className="inline-flex items-center gap-3 rounded-2xl border border-[var(--border)] bg-[var(--background-soft)] px-4 py-3 text-sm font-semibold text-[#334155]">
+              <input
+                type="checkbox"
+                name="announcementActive"
+                defaultChecked={latestAnnouncement?.active ?? false}
+                className="size-4 rounded border-[var(--border)] text-[var(--accent)]"
+              />
+              Mostrar este comunicado justo después del login
+            </label>
+
+            <div className="flex justify-end">
+              <SubmitButton
+                pendingLabel="Publicando..."
+                className="h-11 rounded-xl px-5 text-sm font-bold"
+              >
+                Guardar comunicado
+              </SubmitButton>
+            </div>
+          </form>
+        </Card>
+      ) : null}
     </div>
   );
 }

@@ -7,7 +7,13 @@ import { SectionPageHeader } from "@/components/layout/section-page-header";
 import { TeamCard } from "@/components/teams/team-card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
+import { getUserContext } from "@/lib/auth";
+import { getPeopleData } from "@/lib/data/dashboard";
 import { getSettingsSnapshot } from "@/lib/settings";
+import {
+  buildTeamResponsibleLookup,
+  getTeamResponsibleContact,
+} from "@/lib/team-responsibles";
 import {
   getTeamLeagueAccentColor,
   getTeamLeagueCanvasTone,
@@ -55,9 +61,12 @@ function buildTeamsHref(
 
 export default async function TeamsPage({ searchParams }: PageProps) {
   const resolvedSearchParams = await searchParams;
+  const user = await getUserContext();
   const query = readSearchValue(resolvedSearchParams.q);
   const activeLeague = readSearchValue(resolvedSearchParams.league);
   const teams = getTeamDirectoryData({ query, league: activeLeague });
+  const people = user.userId ? await getPeopleData() : [];
+  const responsibleLookup = buildTeamResponsibleLookup(people);
   const settings = await getSettingsSnapshot();
   const tabs = getTeamDirectoryTabs();
   const leagueAccent = activeLeague
@@ -88,11 +97,12 @@ export default async function TeamsPage({ searchParams }: PageProps) {
 
       <SectionPageHeader
         title="Equipos"
+        description="Consulta ligas, sedes, responsables y cobertura activa de cada equipo."
         actions={
           <>
           <form
             action="/teams"
-            className="flex flex-1 items-center gap-2 rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--surface)] p-1.5 shadow-sm"
+            className="flex w-full items-center gap-2 rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--surface)] p-1.5 shadow-sm md:min-w-[22rem] md:flex-1"
           >
             {activeLeague ? (
               <input type="hidden" name="league" value={activeLeague} />
@@ -111,7 +121,8 @@ export default async function TeamsPage({ searchParams }: PageProps) {
               className="inline-flex h-10 items-center gap-2 rounded-[var(--panel-radius)] border border-[#f0d9de] bg-white px-4 text-sm font-bold text-[var(--foreground)] transition hover:border-[#efc2cb] hover:bg-[#fff6f8]"
             >
               <Filter className="size-4 text-[var(--accent)]" />
-              Filtrar equipos
+              <span className="hidden sm:inline">Filtrar equipos</span>
+              <span className="sm:hidden">Filtrar</span>
             </button>
           </form>
 
@@ -136,7 +147,7 @@ export default async function TeamsPage({ searchParams }: PageProps) {
             type="button"
             disabled
             title="La carga manual llegará con el módulo de equipos persistidos."
-            className="inline-flex h-[52px] items-center gap-2 rounded-[var(--panel-radius)] bg-[var(--accent)] px-5 text-sm font-extrabold text-white opacity-65 shadow-[0_14px_28px_rgba(230,18,56,0.18)]"
+            className="hidden h-[52px] items-center gap-2 rounded-[var(--panel-radius)] bg-[var(--accent)] px-5 text-sm font-extrabold text-white opacity-65 shadow-[0_14px_28px_rgba(230,18,56,0.18)] sm:inline-flex"
           >
             <Plus className="size-4" />
             Registrar equipo
@@ -189,6 +200,11 @@ export default async function TeamsPage({ searchParams }: PageProps) {
                 key={team.id}
                 team={team}
                 activeLeague={activeLeague || undefined}
+                responsibleContact={getTeamResponsibleContact(
+                  team.official_name,
+                  team.manager,
+                  responsibleLookup,
+                )}
               />
             ))}
           </div>

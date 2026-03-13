@@ -188,21 +188,27 @@ function SectionBlock({
   children: React.ReactNode;
 }) {
   return (
-    <section className="space-y-4 rounded-[18px] border border-[var(--border)] bg-[var(--surface)] px-5 py-5">
-      <div className="flex items-start gap-3">
-        <div className="mt-0.5 flex size-10 items-center justify-center rounded-full bg-[var(--background-soft)] text-[var(--accent)]">
-          {icon}
+    <section className="relative overflow-visible pl-5">
+      <div
+        aria-hidden="true"
+        className="absolute left-0 top-6 h-16 w-9 rounded-l-[16px] rounded-r-[12px] bg-[var(--accent)]/18"
+      />
+      <div className="relative z-[1] space-y-4 rounded-[20px] border border-[var(--border)] bg-[var(--surface)] px-6 py-6 shadow-[0_12px_32px_rgba(15,23,42,0.06)]">
+        <div className="flex items-start gap-3">
+          <div className="mt-0.5 flex size-10 items-center justify-center rounded-full bg-[var(--background-soft)] text-[var(--accent)]">
+            {icon}
+          </div>
+          <div>
+            <h3 className="text-base font-extrabold uppercase tracking-[0.12em] text-[var(--foreground)]">
+              {title}
+            </h3>
+            {description ? (
+              <p className="mt-1 text-sm text-[var(--muted)]">{description}</p>
+            ) : null}
+          </div>
         </div>
-        <div>
-          <h3 className="text-base font-extrabold text-[var(--foreground)]">
-            {title}
-          </h3>
-          {description ? (
-            <p className="mt-1 text-sm text-[var(--muted)]">{description}</p>
-          ) : null}
-        </div>
+        {children}
       </div>
-      {children}
     </section>
   );
 }
@@ -462,9 +468,15 @@ export function CreateMatchModal({
         <button
           type="button"
           className={cn(
-            "inline-flex size-9 items-center justify-center rounded-full border border-[#d7dde7] bg-[#f4f6fa] text-[var(--accent)] transition hover:border-[rgba(230,18,56,0.24)] hover:bg-[#fff3f6] disabled:cursor-not-allowed disabled:opacity-50",
+            "inline-flex size-9 items-center justify-center rounded-full border border-[#d7dde7] bg-[#f4f6fa] text-[#16181d] transition hover:border-[rgba(230,18,56,0.24)] hover:bg-[#fff3f6] hover:text-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-50",
+            isOpen &&
+              "border-[rgba(230,18,56,0.24)] bg-[#fff3f6] text-[var(--accent)]",
             triggerClassName,
           )}
+          onMouseDown={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+          }}
           onClick={(event) => {
             event.preventDefault();
             event.stopPropagation();
@@ -479,7 +491,15 @@ export function CreateMatchModal({
         <Button
           type="button"
           className={cn("h-[52px] gap-2 px-5 text-sm font-extrabold", triggerClassName)}
-          onClick={() => setIsOpen(true)}
+          onMouseDown={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+          }}
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            setIsOpen(true);
+          }}
           disabled={!canEdit}
         >
           {triggerIcon ?? <Plus className="size-4" />}
