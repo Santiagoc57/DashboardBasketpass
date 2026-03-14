@@ -9,7 +9,14 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.next({ request });
   }
 
-  const response = NextResponse.next({ request });
+  const pathname = request.nextUrl.pathname;
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set("x-pathname", pathname);
+  const response = NextResponse.next({
+    request: {
+      headers: requestHeaders,
+    },
+  });
 
   const supabase = createServerClient<Database>(
     appEnv.supabaseUrl,
@@ -33,7 +40,6 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const pathname = request.nextUrl.pathname;
   const allowsGuestMiJornada =
     appEnv.allowGuestMiJornadaAccess && pathname === "/mi-jornada";
   const isLoginRoute = pathname === "/login";

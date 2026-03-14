@@ -234,11 +234,28 @@ export default async function CollaboratorDayPage({ searchParams }: PageProps) {
   const user = await getUserContext();
   const guestMode = appEnv.allowGuestMiJornadaAccess && !user.userId;
   const settings = await getSettingsSnapshot();
-  const data = await getCollaboratorDayData({
-    email: user.email,
-    profileName: user.profile?.full_name ?? null,
-    selectedDate: date,
-  });
+  const emptyData = {
+    person: null,
+    linkedBy: null,
+    todayAssignments: [],
+    upcomingAssignments: [],
+    summary: {
+      totalToday: 0,
+      pendingToday: 0,
+      competitionsToday: 0,
+      nextKickoffLabel: null,
+    },
+  } satisfies Awaited<ReturnType<typeof getCollaboratorDayData>>;
+  const data = guestMode
+    ? emptyData
+    : await getCollaboratorDayData({
+        email: user.email,
+        profileName: user.profile?.full_name ?? null,
+        selectedDate: date,
+      }).catch((error) => {
+        console.error("[mi-jornada] failed to load collaborator data", error);
+        return emptyData;
+      });
 
   const selectedDate = date ?? new Date().toISOString().slice(0, 10);
   const fallbackCollaboratorName =
