@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowLeft, CalendarDays, Clock3, MapPin, Radio, UserRound } from "lucide-react";
+import { ArrowLeft, CalendarDays, Clock3, MapPin, Radio, UserRound, X } from "lucide-react";
 
 import { CollaboratorReportForm } from "@/components/collaborators/collaborator-report-form";
 import { SetupPanel } from "@/components/layout/setup-panel";
@@ -29,15 +29,24 @@ export default async function CollaboratorReportPage({ params }: PageProps) {
   if (!data.assignment) {
     return (
       <div className="mx-auto max-w-3xl space-y-6">
-        <Link
-          href="/mi-jornada"
-          className="inline-flex items-center gap-2 text-sm font-bold text-[var(--accent)]"
-        >
-          <ArrowLeft className="size-4" />
-          Volver a mi jornada
-        </Link>
+        <div className="flex items-start justify-between gap-3">
+          <Link
+            href="/mi-jornada"
+            className="inline-flex items-center gap-2 text-sm font-bold text-[var(--accent)]"
+          >
+            <ArrowLeft className="size-4" />
+            Volver a mi jornada
+          </Link>
+          <Link
+            href="/mi-jornada"
+            aria-label="Cerrar reporte"
+            className="inline-flex size-10 shrink-0 items-center justify-center rounded-full bg-[var(--background-soft)] text-[#94a3b8] transition hover:text-[var(--foreground)]"
+          >
+            <X className="size-4" />
+          </Link>
+        </div>
 
-        <Card className="space-y-4 rounded-[22px] border-[#f2d8ae] bg-[#fffaf0] p-6">
+        <Card className="space-y-4 rounded-[var(--panel-radius)] border-[#f2d8ae] bg-[#fffaf0] p-6">
           <p className="text-xs font-black uppercase tracking-[0.28em] text-[#9a5a0f]">
             Acceso no disponible
           </p>
@@ -72,34 +81,43 @@ export default async function CollaboratorReportPage({ params }: PageProps) {
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <Link
+            href="/mi-jornada"
+            className="inline-flex items-center gap-2 text-sm font-bold text-[var(--accent)]"
+          >
+            <ArrowLeft className="size-4" />
+            Volver a mi jornada
+          </Link>
+          {canOpenMatch ? (
+            <Link
+              href={`/match/${assignment.matchId}`}
+              className="inline-flex h-11 items-center rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--surface)] px-4 text-sm font-semibold text-[var(--foreground)] transition hover:bg-[var(--background-soft)]"
+            >
+              Abrir partido
+            </Link>
+          ) : (
+            <Link
+              href="/grid"
+              className="inline-flex h-11 items-center rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--surface)] px-4 text-sm font-semibold text-[var(--foreground)] transition hover:bg-[var(--background-soft)]"
+            >
+              Abrir Producción
+            </Link>
+          )}
+        </div>
         <Link
           href="/mi-jornada"
-          className="inline-flex items-center gap-2 text-sm font-bold text-[var(--accent)]"
+          aria-label="Cerrar reporte"
+          className="inline-flex size-10 shrink-0 items-center justify-center rounded-full bg-[var(--background-soft)] text-[#94a3b8] transition hover:text-[var(--foreground)]"
         >
-          <ArrowLeft className="size-4" />
-          Volver a mi jornada
+          <X className="size-4" />
         </Link>
-        {canOpenMatch ? (
-          <Link
-            href={`/match/${assignment.matchId}`}
-            className="inline-flex h-11 items-center rounded-[18px] border border-[var(--border)] bg-[var(--surface)] px-4 text-sm font-semibold text-[var(--foreground)] transition hover:bg-[var(--background-soft)]"
-          >
-            Abrir partido
-          </Link>
-        ) : (
-          <Link
-            href="/grid"
-            className="inline-flex h-11 items-center rounded-[18px] border border-[var(--border)] bg-[var(--surface)] px-4 text-sm font-semibold text-[var(--foreground)] transition hover:bg-[var(--background-soft)]"
-          >
-            Abrir Producción
-          </Link>
-        )}
       </div>
 
-      <Card className="space-y-5 rounded-[22px] p-5 sm:p-6">
+      <Card className="space-y-5 rounded-[var(--panel-radius)] p-5 sm:p-6">
         {data.trialAccess ? (
-          <div className="rounded-[18px] border border-[#cce8d7] bg-[#f2fbf6] px-4 py-3 text-sm text-[#256746]">
+          <div className="rounded-[var(--panel-radius)] border border-[#cce8d7] bg-[#f2fbf6] px-4 py-3 text-sm text-[#256746]">
             <span className="font-black uppercase tracking-[0.18em] text-[11px]">
               Modo prueba
             </span>
@@ -136,7 +154,7 @@ export default async function CollaboratorReportPage({ params }: PageProps) {
             </div>
           </div>
 
-          <div className="rounded-[18px] border border-[var(--border)] bg-[var(--background-soft)] px-4 py-3 text-right">
+          <div className="rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--background-soft)] px-4 py-3 text-right">
             <div className="flex items-center justify-end gap-2 text-[11px] font-black uppercase tracking-[0.18em] text-[#95a3ba]">
               <Clock3 className="size-4 text-[var(--accent)]" />
               Hora
@@ -148,14 +166,14 @@ export default async function CollaboratorReportPage({ params }: PageProps) {
         </div>
 
         <div className="grid gap-3 sm:grid-cols-4">
-          <div className="rounded-[18px] border border-[var(--border)] bg-[var(--background-soft)] px-4 py-3">
+          <div className="rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--background-soft)] px-4 py-3">
             <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.2em] text-[#95a3ba]">
               <CalendarDays className="size-4 text-[var(--accent)]" />
               Fecha
             </div>
             <p className="mt-2 text-sm font-semibold">{assignment.dateLabel}</p>
           </div>
-          <div className="rounded-[18px] border border-[var(--border)] bg-[var(--background-soft)] px-4 py-3">
+          <div className="rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--background-soft)] px-4 py-3">
             <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.2em] text-[#95a3ba]">
               <MapPin className="size-4 text-[var(--accent)]" />
               Sede
@@ -164,7 +182,7 @@ export default async function CollaboratorReportPage({ params }: PageProps) {
               {assignment.venue ?? "Por definir"}
             </p>
           </div>
-          <div className="rounded-[18px] border border-[var(--border)] bg-[var(--background-soft)] px-4 py-3">
+          <div className="rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--background-soft)] px-4 py-3">
             <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.2em] text-[#95a3ba]">
               <UserRound className="size-4 text-[var(--accent)]" />
               Responsable
@@ -173,7 +191,7 @@ export default async function CollaboratorReportPage({ params }: PageProps) {
               {assignment.ownerName ?? "Sin responsable"}
             </p>
           </div>
-          <div className="rounded-[18px] border border-[var(--border)] bg-[var(--background-soft)] px-4 py-3">
+          <div className="rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--background-soft)] px-4 py-3">
             <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.2em] text-[#95a3ba]">
               <Radio className="size-4 text-[var(--accent)]" />
               Mi nota

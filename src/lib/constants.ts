@@ -12,8 +12,67 @@ export const MATCH_STATUS_OPTIONS: Database["public"]["Enums"]["match_status"][]
 export const PRODUCTION_MODE_OPTIONS = [
   "Encoder",
   "Offtube Remoto",
-  "Cancha",
+  "En Cancha",
+  "Envio FDC/TYC",
+  "Envio FDC/DTV",
 ] as const;
+
+export const COMMENTARY_PLAN_OPTIONS = [
+  "Relatos en Cancha",
+  "Offtube Remoto",
+] as const;
+
+export type ProductionModeOption = (typeof PRODUCTION_MODE_OPTIONS)[number];
+
+const PRODUCTION_MODE_ALIASES = new Map<string, ProductionModeOption>([
+  ["cancha", "En Cancha"],
+]);
+
+export function normalizeProductionMode(
+  value: string | null | undefined,
+): ProductionModeOption | null {
+  const normalized = value?.trim();
+
+  if (!normalized) {
+    return null;
+  }
+
+  const exactOption = PRODUCTION_MODE_OPTIONS.find(
+    (option) => option.toLowerCase() === normalized.toLowerCase(),
+  );
+
+  if (exactOption) {
+    return exactOption;
+  }
+
+  return PRODUCTION_MODE_ALIASES.get(normalized.toLowerCase()) ?? null;
+}
+
+export function getProductionModeLabel(value: string | null | undefined) {
+  const normalized = normalizeProductionMode(value);
+
+  if (normalized) {
+    return normalized;
+  }
+
+  return value?.trim() ?? "";
+}
+
+export function normalizeCommentaryPlan(
+  value: string | null | undefined,
+): (typeof COMMENTARY_PLAN_OPTIONS)[number] | "" {
+  const normalized = value?.trim();
+
+  if (!normalized) {
+    return "";
+  }
+
+  return (
+    COMMENTARY_PLAN_OPTIONS.find(
+      (option) => option.toLowerCase() === normalized.toLowerCase(),
+    ) ?? ""
+  );
+}
 
 export const DASHBOARD_NAV = [
   { href: "/grid", label: "Producción" },

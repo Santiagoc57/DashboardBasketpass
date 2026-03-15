@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { Camera, LogOut, Settings2, Shield, UserRound } from "lucide-react";
+import { BriefcaseBusiness, Camera, LogOut, Settings2, Shield, UserRound } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { signOutAction } from "@/app/actions/auth";
@@ -164,6 +164,14 @@ export function UserProfileChip({
 
         {menuOpen ? (
           <div className="panel-surface absolute right-0 top-[calc(100%+0.75rem)] z-50 w-56 border border-[var(--border)] bg-[var(--surface)] p-2 shadow-[0_18px_40px_rgba(20,24,35,0.12)]">
+            <Link
+              href="/mi-jornada"
+              onClick={() => setMenuOpen(false)}
+              className="flex w-full items-center gap-3 rounded-[calc(var(--panel-radius)-4px)] px-3 py-3 text-sm font-semibold text-[var(--foreground)] transition hover:bg-[var(--background-soft)]"
+            >
+              <BriefcaseBusiness className="size-4 text-[#617187]" />
+              Mi jornada
+            </Link>
             <Link
               href="/teams"
               onClick={() => setMenuOpen(false)}

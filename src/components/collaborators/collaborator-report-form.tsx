@@ -1,20 +1,30 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
+  AlertTriangle,
+  Building2,
   CalendarDays,
+  CheckCircle2,
+  Circle,
+  CircleEllipsis,
   Clock3,
   ImageIcon,
   Layers3,
   Loader2,
   MapPin,
+  MonitorPlay,
   Palette,
   ReceiptText,
   Save,
+  SendHorizontal,
+  ShieldAlert,
+  SquarePen,
   Type,
   Upload,
   Wifi,
+  X,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -25,16 +35,15 @@ import { cn } from "@/lib/utils";
 
 type IssueKey = "internet" | "img" | "ocr" | "overlays" | "grafica";
 type ToggleValue = "si" | "no";
-type ConnectionValue = "buena" | "inestable" | "mala";
+type IncidentLevel = "sin" | "baja" | "alta" | "critica";
 type TechnicalCaptureKind = "speedtest" | "ping" | "gpu";
 type ReadingState = "idle" | "loading" | "error" | "done";
 
 type DraftState = {
-  connection: ConnectionValue;
+  incidentLevel: IncidentLevel;
   paid: ToggleValue;
   feedDetected: ToggleValue;
   problems: Record<IssueKey, boolean>;
-  transmissionType: string;
   signalLabel: string;
   aptoLineal: ToggleValue;
   testTime: string;
@@ -76,17 +85,61 @@ const DEFAULT_PROBLEMS: Record<IssueKey, boolean> = {
   grafica: false,
 };
 
+const YES_NO_OPTIONS: Array<{ label: string; value: ToggleValue }> = [
+  { label: "SI", value: "si" },
+  { label: "NO", value: "no" },
+];
+
+const REPORT_ICON_BUBBLE_BASE =
+  "inline-flex items-center justify-center rounded-full border border-[#ece6df] bg-[#faf7f3] shadow-[0_4px_12px_rgba(43,30,17,0.06)]";
+
+const INCIDENT_LEVEL_OPTIONS: Array<{
+  value: IncidentLevel;
+  label: string;
+  icon: typeof CheckCircle2;
+  activeClassName: string;
+  activeIconClassName: string;
+}> = [
+  {
+    value: "sin",
+    label: "Sin",
+    icon: CheckCircle2,
+    activeClassName: "border-[#d5ebdd] bg-[#f3fcf6] text-[#1b7d43]",
+    activeIconClassName: "border-[#ece6df] bg-[#faf7f3] text-[#1b7d43]",
+  },
+  {
+    value: "baja",
+    label: "Baja",
+    icon: Circle,
+    activeClassName: "border-[#dde5ef] bg-[#f8fafc] text-[#70819b]",
+    activeIconClassName: "border-[#ece6df] bg-[#faf7f3] text-[#6b5d5f]",
+  },
+  {
+    value: "alta",
+    label: "Alta",
+    icon: AlertTriangle,
+    activeClassName: "border-[#f3cfd8] bg-[#fff1f3] text-[#cf2246]",
+    activeIconClassName: "border-[#ece6df] bg-[#faf7f3] text-[#cf2246]",
+  },
+  {
+    value: "critica",
+    label: "Crítica",
+    icon: ShieldAlert,
+    activeClassName: "border-[#ead8f8] bg-[#fbf2ff] text-[#a12ad6]",
+    activeIconClassName: "border-[#ece6df] bg-[#faf7f3] text-[#a12ad6]",
+  },
+];
+
 function getDraftKey(assignmentId: string) {
   return `basket-production.collaborator-report.${assignmentId}`;
 }
 
 function buildDefaultDraft(): DraftState {
   return {
-    connection: "buena",
+    incidentLevel: "sin",
     paid: "si",
     feedDetected: "si",
     problems: DEFAULT_PROBLEMS,
-    transmissionType: "",
     signalLabel: "",
     aptoLineal: "si",
     testTime: "",
@@ -154,33 +207,182 @@ function SegmentedToggle<T extends string>({
         )}
       >
         {options.map((option) => (
-          <button
-            key={option.value}
-            type="button"
-            onClick={() => onChange(option.value)}
-            className={cn(
-              "rounded-[calc(var(--panel-radius)-4px)] px-3 py-2 text-sm font-bold transition",
-              value === option.value
-                ? "bg-[var(--surface)] text-[var(--accent)] shadow-sm"
-                : "text-[var(--muted)] hover:text-[var(--foreground)]",
-            )}
-          >
-            {option.label}
-          </button>
+          (() => {
+            const optionValue = String(option.value).toLowerCase();
+            const isPositive = optionValue === "si";
+            const isNegative = optionValue === "no";
+
+            return (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => onChange(option.value)}
+                className={cn(
+                  "flex h-full w-full items-center justify-center rounded-[calc(var(--panel-radius)-4px)] px-3 py-2 text-center text-sm font-bold uppercase leading-none tracking-[0.12em] transition",
+                  value === option.value
+                    ? isPositive
+                      ? "bg-[var(--surface)] text-[#1b7d43] shadow-sm"
+                      : isNegative
+                        ? "bg-[var(--surface)] text-[#cf2246] shadow-sm"
+                        : "bg-[var(--surface)] text-[var(--accent)] shadow-sm"
+                    : "text-[var(--muted)] hover:text-[var(--foreground)]",
+                )}
+              >
+                {option.label}
+              </button>
+            );
+          })()
         ))}
       </div>
     </div>
   );
 }
 
+function IncidentLevelSelector({
+  value,
+  onChange,
+}: {
+  value: IncidentLevel;
+  onChange: (value: IncidentLevel) => void;
+}) {
+  return (
+    <div className="space-y-2">
+      <p className="text-[11px] font-black uppercase tracking-[0.2em] text-[#95a3ba]">
+        Tipo de incidencia
+      </p>
+      <div className="grid grid-cols-4 gap-2">
+        {INCIDENT_LEVEL_OPTIONS.map((option) => {
+          const Icon = option.icon;
+          const active = value === option.value;
+
+          return (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => onChange(option.value)}
+              className={cn(
+                "flex min-h-[86px] min-w-0 flex-col items-center justify-center gap-2 rounded-[var(--panel-radius)] border px-1.5 py-3 text-center transition",
+                active
+                  ? option.activeClassName
+                  : "border-[var(--border)] bg-white text-[var(--muted)] hover:border-[#d7d0ca] hover:bg-[#fbfcfe]",
+              )}
+            >
+              <span
+                className={cn(
+                  REPORT_ICON_BUBBLE_BASE,
+                  "size-9",
+                  active
+                    ? option.activeIconClassName
+                    : "text-[var(--muted)]",
+                )}
+              >
+                <Icon className="size-[18px]" />
+              </span>
+              <span className="truncate text-[13px] font-black leading-none">
+                {option.label}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function BinaryStateButton({
+  label,
+  icon: Icon,
+  active,
+  onToggle,
+}: {
+  label: string;
+  icon: typeof ReceiptText;
+  active: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <div className="space-y-2">
+      <p className="text-[11px] font-black uppercase tracking-[0.2em] text-[#95a3ba]">
+        {label}
+      </p>
+      <button
+        type="button"
+        onClick={onToggle}
+        className={cn(
+          "flex w-full items-center gap-3 rounded-[var(--panel-radius)] border px-4 py-3 text-left transition",
+          active
+            ? "border-[#d5ebdd] bg-[#f3fcf6] text-[#1b7d43]"
+            : "border-[var(--border)] bg-[var(--surface)] text-[var(--muted)] hover:border-[#d7d0ca]",
+        )}
+      >
+        <span
+          className={cn(
+            REPORT_ICON_BUBBLE_BASE,
+            "size-9",
+            active ? "border-[#d5ebdd] bg-[#faf7f3] text-[#1b7d43]" : "text-[var(--muted)]",
+          )}
+        >
+          <Icon className="size-4" />
+        </span>
+        <span className="text-sm font-black uppercase tracking-[0.12em]">
+          {active ? "SI" : "NO"}
+        </span>
+      </button>
+    </div>
+  );
+}
+
+function ObservationFlagToggle({
+  label,
+  icon: Icon,
+  active,
+  onToggle,
+}: {
+  label: string;
+  icon: typeof CircleEllipsis;
+  active: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      className={cn(
+        "flex min-h-[92px] min-w-0 flex-col items-center justify-between rounded-[var(--panel-radius)] border px-3 py-3.5 text-center transition sm:min-h-[84px] sm:items-start sm:px-3.5 sm:py-4 sm:text-left",
+        active
+          ? "border-[#f3cfd8] bg-[#fff5f7]"
+          : "border-[var(--border)] bg-[var(--background-soft)] hover:border-[#ead2d8]",
+      )}
+    >
+      <span className="text-[10px] font-black uppercase tracking-[0.16em] text-[#95a3ba] sm:text-[11px] sm:tracking-[0.2em]">
+        {label}
+      </span>
+      <span
+        className={cn(
+          REPORT_ICON_BUBBLE_BASE,
+          "size-8 text-xs font-black transition sm:size-9 sm:self-end",
+          active
+            ? "border-[var(--accent)] bg-[var(--accent)] text-white"
+            : "text-[#8ea0b8]",
+        )}
+      >
+        {active ? <X className="size-4" /> : <Icon className="size-4" />}
+      </span>
+    </button>
+  );
+}
+
 export function CollaboratorReportForm({
   assignment,
+  showMatchSummary = true,
 }: {
   assignment: CollaboratorAssignmentItem;
+  showMatchSummary?: boolean;
 }) {
   const speedtestInputRef = useRef<HTMLInputElement | null>(null);
   const pingInputRef = useRef<HTMLInputElement | null>(null);
   const gpuInputRef = useRef<HTMLInputElement | null>(null);
+  const hasHydratedRef = useRef(false);
   const [draft, setDraft] = useState<DraftState>(() => {
     if (typeof window === "undefined") {
       return buildDefaultDraft();
@@ -199,20 +401,71 @@ export function CollaboratorReportForm({
     gpu: { state: "idle", message: "" },
   });
   const [saveMessage, setSaveMessage] = useState<string>("");
+  const draftKey = useMemo(() => getDraftKey(assignment.assignmentId), [assignment.assignmentId]);
+  const latestDraftRef = useRef(draft);
+
+  const persistDraft = useCallback(
+    (value: DraftState, message?: string) => {
+      if (typeof window === "undefined") {
+        return;
+      }
+
+      const payload = {
+        ...value,
+        updatedAt: new Date().toISOString(),
+      };
+
+      window.localStorage.setItem(draftKey, JSON.stringify(payload));
+
+      if (message) {
+        setSaveMessage(message);
+      }
+    },
+    [draftKey],
+  );
 
   const updateDraft = (updater: (previous: DraftState) => DraftState) => {
     setDraft((previous) => updater(previous));
   };
 
   const saveDraft = () => {
-    const nextDraft = {
-      ...draft,
-      updatedAt: new Date().toISOString(),
-    };
-    window.localStorage.setItem(getDraftKey(assignment.assignmentId), JSON.stringify(nextDraft));
-    setDraft(nextDraft);
-    setSaveMessage("Borrador guardado en este dispositivo.");
+    persistDraft(latestDraftRef.current, "Borrador guardado en este dispositivo.");
   };
+
+  const handleSendDraft = () => {
+    persistDraft(
+      latestDraftRef.current,
+      "Reporte listo. El envío definitivo se conectará en la siguiente fase.",
+    );
+  };
+
+  useEffect(() => {
+    latestDraftRef.current = draft;
+
+    if (!hasHydratedRef.current) {
+      hasHydratedRef.current = true;
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      persistDraft(draft, "Cambios guardados automáticamente.");
+    }, 450);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [draft, persistDraft]);
+
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      persistDraft(latestDraftRef.current);
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+
+    return () => {
+      persistDraft(latestDraftRef.current);
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+    };
+  }, [persistDraft]);
 
   const handleUploadCapture = async (
     kind: TechnicalCaptureKind,
@@ -290,87 +543,83 @@ export function CollaboratorReportForm({
 
   return (
     <div className="space-y-5">
-      <Card className="space-y-5 p-5">
-        <div className="space-y-1">
-          <p className="text-[11px] font-black uppercase tracking-[0.24em] text-[#95a3ba]">
-            Parte móvil
-          </p>
-          <h3 className="text-2xl font-black tracking-tight text-[var(--foreground)]">
-            Reportar novedades
-          </h3>
-          <p className="text-sm text-[#617187]">
-            Carga rápida para {assignment.homeTeam} vs {assignment.awayTeam}. Este
-            primer flujo guarda borrador local mientras conectamos la persistencia final.
-          </p>
-        </div>
-
-        <div className="grid gap-3 sm:grid-cols-3">
-          <div className="rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--background-soft)] px-4 py-3">
-            <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.2em] text-[#95a3ba]">
-              <CalendarDays className="size-4 text-[var(--accent)]" />
-              Fecha
-            </div>
-            <p className="mt-2 text-sm font-semibold">{assignment.dateLabel}</p>
-          </div>
-          <div className="rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--background-soft)] px-4 py-3">
-            <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.2em] text-[#95a3ba]">
-              <Clock3 className="size-4 text-[var(--accent)]" />
-              Hora
-            </div>
-            <p className="mt-2 text-sm font-semibold">{assignment.timeLabel}</p>
-          </div>
-          <div className="rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--background-soft)] px-4 py-3">
-            <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.2em] text-[#95a3ba]">
-              <MapPin className="size-4 text-[var(--accent)]" />
-              Sede
-            </div>
-            <p className="mt-2 text-sm font-semibold">
-              {assignment.venue ?? "Por definir"}
+      {showMatchSummary ? (
+        <Card className="space-y-5 p-5">
+          <div className="space-y-1">
+            <p className="text-[11px] font-black uppercase tracking-[0.24em] text-[#95a3ba]">
+              Parte móvil
+            </p>
+            <h3 className="text-2xl font-black tracking-tight text-[var(--foreground)]">
+              Reportar novedades
+            </h3>
+            <p className="text-sm text-[#617187]">
+              Carga rápida para {assignment.homeTeam} vs {assignment.awayTeam}. Este
+              primer flujo guarda borrador local mientras conectamos la persistencia final.
             </p>
           </div>
-        </div>
-      </Card>
+
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div className="rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--background-soft)] px-4 py-3">
+              <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.2em] text-[#95a3ba]">
+                <CalendarDays className="size-4 text-[var(--accent)]" />
+                Fecha
+              </div>
+              <p className="mt-2 text-sm font-semibold">{assignment.dateLabel}</p>
+            </div>
+            <div className="rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--background-soft)] px-4 py-3">
+              <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.2em] text-[#95a3ba]">
+                <Clock3 className="size-4 text-[var(--accent)]" />
+                Hora
+              </div>
+              <p className="mt-2 text-sm font-semibold">{assignment.timeLabel}</p>
+            </div>
+            <div className="rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--background-soft)] px-4 py-3">
+              <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.2em] text-[#95a3ba]">
+                <MapPin className="size-4 text-[var(--accent)]" />
+                Sede
+              </div>
+              <p className="mt-2 text-sm font-semibold">
+                {assignment.venue ?? "Por definir"}
+              </p>
+            </div>
+          </div>
+        </Card>
+      ) : null}
 
       <Card className="space-y-5 p-5">
         <h4 className="text-sm font-black uppercase tracking-[0.22em] text-[#95a3ba]">
           Estado general
         </h4>
 
-        <SegmentedToggle
-          label="Conexión"
-          value={draft.connection}
+        <IncidentLevelSelector
+          value={draft.incidentLevel}
           onChange={(value) =>
-            updateDraft((previous) => ({ ...previous, connection: value }))
+            updateDraft((previous) => ({ ...previous, incidentLevel: value }))
           }
-          options={[
-            { label: "Buena", value: "buena" },
-            { label: "Inestable", value: "inestable" },
-            { label: "Mala", value: "mala" },
-          ]}
         />
 
-        <div className="grid gap-4 sm:grid-cols-2">
-          <SegmentedToggle
+        <div className="grid grid-cols-2 gap-3">
+          <BinaryStateButton
             label="Pago"
-            value={draft.paid}
-            onChange={(value) =>
-              updateDraft((previous) => ({ ...previous, paid: value }))
+            icon={ReceiptText}
+            active={draft.paid === "si"}
+            onToggle={() =>
+              updateDraft((previous) => ({
+                ...previous,
+                paid: previous.paid === "si" ? "no" : "si",
+              }))
             }
-            options={[
-              { label: "Sí", value: "si" },
-              { label: "No", value: "no" },
-            ]}
           />
-          <SegmentedToggle
+          <BinaryStateButton
             label="Feed detectó"
-            value={draft.feedDetected}
-            onChange={(value) =>
-              updateDraft((previous) => ({ ...previous, feedDetected: value }))
+            icon={MonitorPlay}
+            active={draft.feedDetected === "si"}
+            onToggle={() =>
+              updateDraft((previous) => ({
+                ...previous,
+                feedDetected: previous.feedDetected === "si" ? "no" : "si",
+              }))
             }
-            options={[
-              { label: "Sí", value: "si" },
-              { label: "No", value: "no" },
-            ]}
           />
         </div>
       </Card>
@@ -380,23 +629,6 @@ export function CollaboratorReportForm({
           Contexto del partido
         </h4>
         <div className="grid gap-4 sm:grid-cols-2">
-          <label className="space-y-2">
-            <span className="text-[11px] font-black uppercase tracking-[0.2em] text-[#95a3ba]">
-              Tipo de transmisión
-            </span>
-            <input
-              type="text"
-              value={draft.transmissionType}
-              onChange={(event) =>
-                updateDraft((previous) => ({
-                  ...previous,
-                  transmissionType: event.target.value,
-                }))
-              }
-              placeholder="Ej. Encoder / Offtube"
-              className="h-12 w-full rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--background-soft)] px-4 text-sm font-medium text-[var(--foreground)] outline-none transition focus:border-[var(--accent)] focus:bg-[var(--surface)]"
-            />
-          </label>
           <label className="space-y-2">
             <span className="text-[11px] font-black uppercase tracking-[0.2em] text-[#95a3ba]">
               Señal
@@ -421,10 +653,7 @@ export function CollaboratorReportForm({
           onChange={(value) =>
             updateDraft((previous) => ({ ...previous, aptoLineal: value }))
           }
-          options={[
-            { label: "Sí", value: "si" },
-            { label: "No", value: "no" },
-          ]}
+          options={YES_NO_OPTIONS}
         />
       </Card>
 
@@ -432,7 +661,7 @@ export function CollaboratorReportForm({
         <h4 className="text-sm font-black uppercase tracking-[0.22em] text-[#95a3ba]">
           Pruebas de salida
         </h4>
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-4">
           <label className="space-y-2">
             <span className="text-[11px] font-black uppercase tracking-[0.2em] text-[#95a3ba]">
               Hora
@@ -446,16 +675,14 @@ export function CollaboratorReportForm({
               className="h-12 w-full rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--background-soft)] px-4 text-sm font-medium text-[var(--foreground)] outline-none transition focus:border-[var(--accent)] focus:bg-[var(--surface)]"
             />
           </label>
+          <div className="grid grid-cols-3 gap-2">
           <SegmentedToggle
             label="Prueba"
             value={draft.testCheck}
             onChange={(value) =>
               updateDraft((previous) => ({ ...previous, testCheck: value }))
             }
-            options={[
-              { label: "Sí", value: "si" },
-              { label: "No", value: "no" },
-            ]}
+            options={YES_NO_OPTIONS}
           />
           <SegmentedToggle
             label="Inicio"
@@ -463,10 +690,7 @@ export function CollaboratorReportForm({
             onChange={(value) =>
               updateDraft((previous) => ({ ...previous, startCheck: value }))
             }
-            options={[
-              { label: "Sí", value: "si" },
-              { label: "No", value: "no" },
-            ]}
+            options={YES_NO_OPTIONS}
           />
           <SegmentedToggle
             label="Gráfica"
@@ -474,11 +698,9 @@ export function CollaboratorReportForm({
             onChange={(value) =>
               updateDraft((previous) => ({ ...previous, graphicsCheck: value }))
             }
-            options={[
-              { label: "Sí", value: "si" },
-              { label: "No", value: "no" },
-            ]}
+            options={YES_NO_OPTIONS}
           />
+          </div>
         </div>
       </Card>
 
@@ -511,11 +733,25 @@ export function CollaboratorReportForm({
                     : "border-[var(--border)] bg-[var(--surface)] text-[var(--muted)] hover:border-[#ead2d8]",
                 )}
               >
-                <span className="flex size-9 items-center justify-center rounded-full bg-[var(--background-soft)]">
+                <span
+                  className={cn(
+                    REPORT_ICON_BUBBLE_BASE,
+                    active
+                      ? "size-9 border-[#f3cfd8] bg-[#fff1f3] text-[var(--accent)]"
+                      : "size-9 text-[#8ea0b8]",
+                  )}
+                >
                   <Icon className="size-4" />
                 </span>
                 <span className="text-sm font-bold uppercase tracking-[0.12em]">
-                  {issue.label}
+                  {issue.key === "internet" ? (
+                    <>
+                      <span className="sm:hidden">Red</span>
+                      <span className="hidden sm:inline">{issue.label}</span>
+                    </>
+                  ) : (
+                    issue.label
+                  )}
                 </span>
               </button>
             );
@@ -529,82 +765,85 @@ export function CollaboratorReportForm({
             Bloque técnico
           </h4>
           <p className="text-sm text-[#617187]">
-            Primero sube speedtest, ping y GPU. La IA intentará leerlos y, si no puede, dejará una incógnita para que completes el dato manualmente.
+            Sube la foto, la IA lo lee; si no, escríbelo.
           </p>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="grid grid-cols-3 gap-x-2 gap-y-3">
           <button
             type="button"
             onClick={() => speedtestInputRef.current?.click()}
-            className="flex items-center justify-between gap-4 rounded-[var(--panel-radius)] border border-dashed border-[var(--border)] bg-[var(--background-soft)] px-4 py-4 text-left transition hover:border-[var(--accent)] hover:bg-[var(--surface)]"
+            aria-label="Subir captura de speedtest"
+            className="flex min-w-0 flex-col items-center justify-center gap-3 rounded-[var(--panel-radius)] border border-dashed border-[var(--border)] bg-[var(--background-soft)] px-2 py-3 text-center transition hover:border-[var(--accent)] hover:bg-[var(--surface)]"
           >
-            <div className="flex items-center gap-3">
-              <span className="flex size-11 items-center justify-center rounded-[var(--panel-radius)] bg-[var(--surface)] text-[var(--accent)] shadow-sm">
-                <Upload className="size-5" />
+            <div className="flex min-w-0 flex-col items-center gap-2">
+              <span
+                className={cn(
+                  REPORT_ICON_BUBBLE_BASE,
+                  "size-10",
+                  draft.speedtestAttachmentName ? "text-[#1faa52]" : "text-[#8a6a43]",
+                )}
+              >
+                {draft.speedtestAttachmentName ? (
+                  <CheckCircle2 className="size-5" />
+                ) : (
+                  <Upload className="size-5" />
+                )}
               </span>
-              <div>
-                <p className="text-sm font-bold text-[var(--foreground)]">
-                  Speedtest
-                </p>
-                <p className="text-sm text-[#617187]">
-                  {draft.speedtestAttachmentName ?? "Subir captura"}
-                </p>
-              </div>
             </div>
             {captureState.speedtest.state === "loading" ? (
-              <Loader2 className="size-5 animate-spin text-[var(--accent)]" />
-            ) : (
-              <ImageIcon className="size-5 text-[var(--muted)]" />
-            )}
+              <Loader2 className="size-4 animate-spin text-[var(--accent)]" />
+            ) : null}
           </button>
           <button
             type="button"
             onClick={() => pingInputRef.current?.click()}
-            className="flex items-center justify-between gap-4 rounded-[var(--panel-radius)] border border-dashed border-[var(--border)] bg-[var(--background-soft)] px-4 py-4 text-left transition hover:border-[var(--accent)] hover:bg-[var(--surface)]"
+            aria-label="Subir captura de ping"
+            className="flex min-w-0 flex-col items-center justify-center gap-3 rounded-[var(--panel-radius)] border border-dashed border-[var(--border)] bg-[var(--background-soft)] px-2 py-3 text-center transition hover:border-[var(--accent)] hover:bg-[var(--surface)]"
           >
-            <div className="flex items-center gap-3">
-              <span className="flex size-11 items-center justify-center rounded-[var(--panel-radius)] bg-[var(--surface)] text-[var(--accent)] shadow-sm">
-                <Upload className="size-5" />
+            <div className="flex min-w-0 flex-col items-center gap-2">
+              <span
+                className={cn(
+                  REPORT_ICON_BUBBLE_BASE,
+                  "size-10",
+                  draft.pingAttachmentName ? "text-[#1faa52]" : "text-[#8a6a43]",
+                )}
+              >
+                {draft.pingAttachmentName ? (
+                  <CheckCircle2 className="size-5" />
+                ) : (
+                  <Upload className="size-5" />
+                )}
               </span>
-              <div>
-                <p className="text-sm font-bold text-[var(--foreground)]">
-                  Ping
-                </p>
-                <p className="text-sm text-[#617187]">
-                  {draft.pingAttachmentName ?? "Subir captura"}
-                </p>
-              </div>
             </div>
             {captureState.ping.state === "loading" ? (
-              <Loader2 className="size-5 animate-spin text-[var(--accent)]" />
-            ) : (
-              <ImageIcon className="size-5 text-[var(--muted)]" />
-            )}
+              <Loader2 className="size-4 animate-spin text-[var(--accent)]" />
+            ) : null}
           </button>
           <button
             type="button"
             onClick={() => gpuInputRef.current?.click()}
-            className="flex items-center justify-between gap-4 rounded-[var(--panel-radius)] border border-dashed border-[var(--border)] bg-[var(--background-soft)] px-4 py-4 text-left transition hover:border-[var(--accent)] hover:bg-[var(--surface)]"
+            aria-label="Subir captura de GPU"
+            className="flex min-w-0 flex-col items-center justify-center gap-3 rounded-[var(--panel-radius)] border border-dashed border-[var(--border)] bg-[var(--background-soft)] px-2 py-3 text-center transition hover:border-[var(--accent)] hover:bg-[var(--surface)]"
           >
-            <div className="flex items-center gap-3">
-              <span className="flex size-11 items-center justify-center rounded-[var(--panel-radius)] bg-[var(--surface)] text-[var(--accent)] shadow-sm">
-                <Upload className="size-5" />
+            <div className="flex min-w-0 flex-col items-center gap-2">
+              <span
+                className={cn(
+                  REPORT_ICON_BUBBLE_BASE,
+                  "size-10",
+                  draft.gpuAttachmentName ? "text-[#1faa52]" : "text-[#8a6a43]",
+                )}
+              >
+                {draft.gpuAttachmentName ? (
+                  <CheckCircle2 className="size-5" />
+                ) : (
+                  <Upload className="size-5" />
+                )}
               </span>
-              <div>
-                <p className="text-sm font-bold text-[var(--foreground)]">
-                  GPU
-                </p>
-                <p className="text-sm text-[#617187]">
-                  {draft.gpuAttachmentName ?? "Subir captura"}
-                </p>
-              </div>
             </div>
             {captureState.gpu.state === "loading" ? (
-              <Loader2 className="size-5 animate-spin text-[var(--accent)]" />
-            ) : (
-              <ImageIcon className="size-5 text-[var(--muted)]" />
-            )}
+              <Loader2 className="size-4 animate-spin text-[var(--accent)]" />
+            ) : null}
           </button>
         </div>
 
@@ -654,68 +893,56 @@ export function CollaboratorReportForm({
           }}
         />
 
-        <div className="grid gap-3 sm:grid-cols-3">
-          <div className="rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--background-soft)] px-4 py-3">
-            <p className="text-[11px] font-black uppercase tracking-[0.2em] text-[#95a3ba]">
-              Speedtest
-            </p>
-            <p className="mt-2 text-sm font-bold">{draft.speedtestValue || "?"}</p>
-            {captureState.speedtest.message ? (
-              <p
-                className={cn(
-                  "mt-2 text-xs",
-                  captureState.speedtest.state === "error"
-                    ? "text-[#aa2945]"
-                    : "text-[#617187]",
-                )}
-              >
-                {captureState.speedtest.message}
-              </p>
-            ) : null}
-          </div>
-          <div className="rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--background-soft)] px-4 py-3">
-            <p className="text-[11px] font-black uppercase tracking-[0.2em] text-[#95a3ba]">
-              Ping
-            </p>
-            <p className="mt-2 text-sm font-bold">{draft.pingValue || "?"}</p>
-            {captureState.ping.message ? (
-              <p
-                className={cn(
-                  "mt-2 text-xs",
-                  captureState.ping.state === "error"
-                    ? "text-[#aa2945]"
-                    : "text-[#617187]",
-                )}
-              >
-                {captureState.ping.message}
-              </p>
-            ) : null}
-          </div>
-          <div className="rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--background-soft)] px-4 py-3">
-            <p className="text-[11px] font-black uppercase tracking-[0.2em] text-[#95a3ba]">
-              GPU
-            </p>
-            <p className="mt-2 text-sm font-bold">{draft.gpuValue || "?"}</p>
-            {captureState.gpu.message ? (
-              <p
-                className={cn(
-                  "mt-2 text-xs",
-                  captureState.gpu.state === "error"
-                    ? "text-[#aa2945]"
-                    : "text-[#617187]",
-                )}
-              >
-                {captureState.gpu.message}
-              </p>
-            ) : null}
-          </div>
-        </div>
+        <div className="grid gap-3">
+          <section className="grid grid-cols-3 gap-x-2 gap-y-3">
+            <div className="min-w-0 rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--background-soft)] px-3 py-3">
+              <p className="text-sm font-bold">{draft.speedtestValue || "?"}</p>
+              {captureState.speedtest.message ? (
+                <p
+                  className={cn(
+                    "mt-2 break-words text-[10px] leading-tight",
+                    captureState.speedtest.state === "error"
+                      ? "text-[#aa2945]"
+                      : "text-[#617187]",
+                  )}
+                >
+                  {captureState.speedtest.message}
+                </p>
+              ) : null}
+            </div>
+            <div className="min-w-0 rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--background-soft)] px-3 py-3">
+              <p className="text-sm font-bold">{draft.pingValue || "?"}</p>
+              {captureState.ping.message ? (
+                <p
+                  className={cn(
+                    "mt-2 break-words text-[10px] leading-tight",
+                    captureState.ping.state === "error"
+                      ? "text-[#aa2945]"
+                      : "text-[#617187]",
+                  )}
+                >
+                  {captureState.ping.message}
+                </p>
+              ) : null}
+            </div>
+            <div className="min-w-0 rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--background-soft)] px-3 py-3">
+              <p className="text-sm font-bold">{draft.gpuValue || "?"}</p>
+              {captureState.gpu.message ? (
+                <p
+                  className={cn(
+                    "mt-2 break-words text-[10px] leading-tight",
+                    captureState.gpu.state === "error"
+                      ? "text-[#aa2945]"
+                      : "text-[#617187]",
+                  )}
+                >
+                  {captureState.gpu.message}
+                </p>
+              ) : null}
+            </div>
+          </section>
 
-        <div className="grid gap-4 sm:grid-cols-3">
-          <label className="space-y-2">
-            <span className="text-[11px] font-black uppercase tracking-[0.2em] text-[#95a3ba]">
-              Completar speedtest
-            </span>
+          <section className="grid grid-cols-3 gap-x-2 gap-y-3">
             <input
               type="text"
               value={draft.speedtestValue}
@@ -725,14 +952,9 @@ export function CollaboratorReportForm({
                   speedtestValue: event.target.value,
                 }))
               }
-              placeholder="Ej. 22.1 Mbps"
-              className="h-12 w-full rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--background-soft)] px-4 text-sm font-medium text-[var(--foreground)] outline-none transition focus:border-[var(--accent)] focus:bg-[var(--surface)]"
+              placeholder="22.1"
+              className="h-11 min-w-0 rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--background-soft)] px-3 text-sm font-medium text-[var(--foreground)] outline-none transition placeholder:text-[#9aa6b7] focus:border-[var(--accent)] focus:bg-[var(--surface)]"
             />
-          </label>
-          <label className="space-y-2">
-            <span className="text-[11px] font-black uppercase tracking-[0.2em] text-[#95a3ba]">
-              Completar ping
-            </span>
             <input
               type="text"
               value={draft.pingValue}
@@ -742,14 +964,9 @@ export function CollaboratorReportForm({
                   pingValue: event.target.value,
                 }))
               }
-              placeholder="Ej. 60 ms"
-              className="h-12 w-full rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--background-soft)] px-4 text-sm font-medium text-[var(--foreground)] outline-none transition focus:border-[var(--accent)] focus:bg-[var(--surface)]"
+              placeholder="60 ms"
+              className="h-11 min-w-0 rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--background-soft)] px-3 text-sm font-medium text-[var(--foreground)] outline-none transition placeholder:text-[#9aa6b7] focus:border-[var(--accent)] focus:bg-[var(--surface)]"
             />
-          </label>
-          <label className="space-y-2">
-            <span className="text-[11px] font-black uppercase tracking-[0.2em] text-[#95a3ba]">
-              Completar GPU
-            </span>
             <input
               type="text"
               value={draft.gpuValue}
@@ -759,10 +976,10 @@ export function CollaboratorReportForm({
                   gpuValue: event.target.value,
                 }))
               }
-              placeholder="Ej. 40%"
-              className="h-12 w-full rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--background-soft)] px-4 text-sm font-medium text-[var(--foreground)] outline-none transition focus:border-[var(--accent)] focus:bg-[var(--surface)]"
+              placeholder="40%"
+              className="h-11 min-w-0 rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--background-soft)] px-3 text-sm font-medium text-[var(--foreground)] outline-none transition placeholder:text-[#9aa6b7] focus:border-[var(--accent)] focus:bg-[var(--surface)]"
             />
-          </label>
+          </section>
         </div>
       </Card>
 
@@ -771,9 +988,6 @@ export function CollaboratorReportForm({
           <h4 className="text-sm font-black uppercase tracking-[0.22em] text-[#95a3ba]">
             Observaciones
           </h4>
-          <p className="text-sm text-[#617187]">
-            Separa las observaciones para que luego puedan reflejarse en reportes e incidencias.
-          </p>
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2 sm:col-span-2">
@@ -821,74 +1035,72 @@ export function CollaboratorReportForm({
               }
             />
           </div>
-          <label className="space-y-2">
-            <span className="text-[11px] font-black uppercase tracking-[0.2em] text-[#95a3ba]">
-              OTRO
-            </span>
-            <input
-              type="text"
-              value={draft.otherObservation}
-              onChange={(event) =>
+          <div className="grid grid-cols-3 gap-3 sm:col-span-2">
+            <ObservationFlagToggle
+              label="OTRO"
+              icon={CircleEllipsis}
+              active={Boolean(draft.otherObservation.trim())}
+              onToggle={() =>
                 updateDraft((previous) => ({
                   ...previous,
-                  otherObservation: event.target.value,
+                  otherObservation: previous.otherObservation.trim() ? "" : "X",
                 }))
               }
-              placeholder="Dato adicional"
-              className="h-12 w-full rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--background-soft)] px-4 text-sm font-medium text-[var(--foreground)] outline-none transition focus:border-[var(--accent)] focus:bg-[var(--surface)]"
             />
-          </label>
-          <label className="space-y-2">
-            <span className="text-[11px] font-black uppercase tracking-[0.2em] text-[#95a3ba]">
-              ST
-            </span>
-            <input
-              type="text"
-              value={draft.stObservation}
-              onChange={(event) =>
+            <ObservationFlagToggle
+              label="ST"
+              icon={ShieldAlert}
+              active={Boolean(draft.stObservation.trim())}
+              onToggle={() =>
                 updateDraft((previous) => ({
                   ...previous,
-                  stObservation: event.target.value,
+                  stObservation: previous.stObservation.trim() ? "" : "X",
                 }))
               }
-              placeholder="Dato ST"
-              className="h-12 w-full rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--background-soft)] px-4 text-sm font-medium text-[var(--foreground)] outline-none transition focus:border-[var(--accent)] focus:bg-[var(--surface)]"
             />
-          </label>
-          <label className="space-y-2 sm:col-span-2">
-            <span className="text-[11px] font-black uppercase tracking-[0.2em] text-[#95a3ba]">
-              CLUB
-            </span>
-            <input
-              type="text"
-              value={draft.clubObservation}
-              onChange={(event) =>
+            <ObservationFlagToggle
+              label="CLUB"
+              icon={Building2}
+              active={Boolean(draft.clubObservation.trim())}
+              onToggle={() =>
                 updateDraft((previous) => ({
                   ...previous,
-                  clubObservation: event.target.value,
+                  clubObservation: previous.clubObservation.trim() ? "" : "X",
                 }))
               }
-              placeholder="Dato de club"
-              className="h-12 w-full rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--background-soft)] px-4 text-sm font-medium text-[var(--foreground)] outline-none transition focus:border-[var(--accent)] focus:bg-[var(--surface)]"
             />
-          </label>
+          </div>
         </div>
       </Card>
 
-      <div className="sticky bottom-4 z-10 grid gap-3 rounded-[var(--panel-radius)] border border-[var(--border)] bg-[rgba(253,252,251,0.92)] p-3 shadow-[0_18px_42px_rgba(15,23,42,0.12)] backdrop-blur sm:grid-cols-[1fr_auto_auto]">
+      <div className="grid gap-3 rounded-[var(--panel-radius)] border border-[var(--border)] bg-white p-4 shadow-[0_18px_42px_rgba(15,23,42,0.12)]">
         <div className="flex items-center gap-2 text-sm text-[#617187]">
           {saveMessage ? <Save className="size-4 text-[#238b57]" /> : <ReceiptText className="size-4 text-[var(--accent)]" />}
           <span>{saveMessage || "Guarda un borrador local mientras conectamos el envío definitivo."}</span>
         </div>
-        <Link href={`/match/${assignment.matchId}`} className="sm:justify-self-end">
-          <Button variant="secondary" className="h-12 w-full sm:w-auto">
-            Abrir partido
+        <div className="grid grid-cols-3 gap-2">
+          <button
+            type="button"
+            onClick={saveDraft}
+            className="inline-flex h-12 min-w-0 items-center justify-center gap-2 rounded-[var(--panel-radius)] border border-[#2b6be7] bg-[#2b6be7] px-2 text-sm font-semibold text-white shadow-[0_10px_22px_rgba(43,107,231,0.22)] transition hover:border-[#1f5ad1] hover:bg-[#1f5ad1]"
+          >
+            <Save className="mr-2 size-4" />
+            Guardar
+          </button>
+          <Link href={`/mi-jornada/${assignment.matchId}/reportar`} className="block min-w-0">
+            <span className="inline-flex h-12 w-full min-w-0 items-center justify-center gap-2 rounded-[var(--panel-radius)] border border-[#f0d27a] bg-[#f3c332] px-2 text-sm font-semibold text-[#3b2c00] shadow-[0_10px_22px_rgba(243,195,50,0.2)] transition hover:border-[#e3b71f] hover:bg-[#e3b71f]">
+              <SquarePen className="size-4" />
+              Editar
+            </span>
+          </Link>
+          <Button
+            className="h-12 px-2 bg-[var(--accent)] text-white shadow-[0_12px_24px_rgba(230,18,56,0.22)] hover:bg-[var(--accent-strong)]"
+            onClick={handleSendDraft}
+          >
+            <SendHorizontal className="mr-2 size-4" />
+            Enviar
           </Button>
-        </Link>
-        <Button className="h-12" onClick={saveDraft}>
-          <Save className="mr-2 size-4" />
-          Guardar borrador
-        </Button>
+        </div>
       </div>
     </div>
   );

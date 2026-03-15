@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Filter, Plus, Search } from "lucide-react";
+import { Plus, Search } from "lucide-react";
 
 import { SectionAiAssistant } from "@/components/ai/section-ai-assistant";
 import { PageCanvasTone } from "@/components/layout/page-canvas-tone";
@@ -102,7 +102,7 @@ export default async function TeamsPage({ searchParams }: PageProps) {
           <>
           <form
             action="/teams"
-            className="flex w-full items-center gap-2 rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--surface)] p-1.5 shadow-sm md:min-w-[22rem] md:flex-1"
+            className="flex w-full items-center rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--surface)] p-1.5 shadow-sm md:min-w-[22rem] md:flex-1"
           >
             {activeLeague ? (
               <input type="hidden" name="league" value={activeLeague} />
@@ -116,14 +116,6 @@ export default async function TeamsPage({ searchParams }: PageProps) {
                 className="h-10 border-0 bg-transparent px-0 shadow-none focus-visible:ring-0"
               />
             </div>
-            <button
-              type="submit"
-              className="inline-flex h-10 items-center gap-2 rounded-[var(--panel-radius)] border border-[#f0d9de] bg-white px-4 text-sm font-bold text-[var(--foreground)] transition hover:border-[#efc2cb] hover:bg-[#fff6f8]"
-            >
-              <Filter className="size-4 text-[var(--accent)]" />
-              <span className="hidden sm:inline">Filtrar equipos</span>
-              <span className="sm:hidden">Filtrar</span>
-            </button>
           </form>
 
           <SectionAiAssistant

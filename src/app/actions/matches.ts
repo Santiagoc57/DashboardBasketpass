@@ -7,7 +7,10 @@ import {
   redirectWithNotice,
   rethrowNavigationError,
 } from "@/app/actions/helpers";
-import { MATCH_STATUS_OPTIONS, PRODUCTION_MODE_OPTIONS } from "@/lib/constants";
+import {
+  MATCH_STATUS_OPTIONS,
+  normalizeProductionMode,
+} from "@/lib/constants";
 import { buildKickoffAt } from "@/lib/date";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { requireEditor } from "@/lib/auth";
@@ -53,21 +56,7 @@ function assertMatchStatus(value: string) {
 }
 
 function assertProductionMode(value: string) {
-  const normalized = value.trim();
-
-  if (!normalized) {
-    return null;
-  }
-
-  if (
-    PRODUCTION_MODE_OPTIONS.includes(
-      normalized as (typeof PRODUCTION_MODE_OPTIONS)[number],
-    )
-  ) {
-    return normalized;
-  }
-
-  return null;
+  return normalizeProductionMode(value);
 }
 
 function getGridRedirectForCreatedMatch(formData: FormData, fallback: string) {

@@ -92,7 +92,7 @@ export function TeamCard({
           "--team-league-accent": hoverAccent,
         } as CSSProperties
       }
-      className="panel-surface group overflow-hidden border border-[var(--border)] bg-[var(--surface)] transition duration-300 hover:-translate-y-0.5 sm:flex"
+      className="panel-surface group overflow-hidden border border-[var(--border)] bg-[#f7f5f6] transition duration-300 hover:-translate-y-0.5 sm:flex"
     >
       <div className="relative flex h-56 flex-col items-center justify-center gap-5 bg-[#f7f5f6] p-8 sm:h-auto sm:w-44 sm:border-r sm:border-[var(--border)]">
         <TeamLogoMark

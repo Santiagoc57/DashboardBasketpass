@@ -388,15 +388,17 @@ export default async function CollaboratorDayPage({ searchParams }: PageProps) {
             <SectionPageHeader
               title={(
                 <>
-                  <span className="hidden text-xs font-bold uppercase tracking-[0.32em] text-[var(--accent)] md:block">
-                    Hola bienvenido
+                  <span className="block text-xs font-bold uppercase tracking-[0.32em] text-[var(--accent)]">
+                    Hola esta tu jornada
                   </span>
-                  <span className="block md:mt-2.5">{greetingName}</span>
+                  <span className="mt-2 block text-[1.6rem] leading-[1.05] md:mt-2.5 md:text-[1.6rem]">
+                    {greetingName}
+                  </span>
                 </>
               )}
               description={contentUpdatedLabel}
               className="order-1 gap-0 md:block"
-              contentClassName="text-left"
+              contentClassName="mx-auto text-center md:mx-0 md:text-left"
               descriptionClassName="mt-3 block w-full max-w-none text-center text-xs font-bold uppercase tracking-[0.14em] text-[#95a3ba] md:mx-0 md:text-left md:text-sm md:font-medium md:normal-case md:tracking-normal"
             />
             <div className="order-3 md:order-2 md:justify-self-end">{dateControls}</div>

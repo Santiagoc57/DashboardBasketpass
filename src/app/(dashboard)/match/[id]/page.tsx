@@ -36,7 +36,11 @@ import { SubmitButton } from "@/components/ui/submit-button";
 import { Textarea } from "@/components/ui/textarea";
 import { requireUserContext } from "@/lib/auth";
 import { ALL_CLUB_OPTIONS, CLUB_COMPETITIONS } from "@/lib/club-catalog";
-import { MATCH_STATUS_OPTIONS, PRODUCTION_MODE_OPTIONS } from "@/lib/constants";
+import {
+  getProductionModeLabel,
+  MATCH_STATUS_OPTIONS,
+  PRODUCTION_MODE_OPTIONS,
+} from "@/lib/constants";
 import { getMatchDetailData } from "@/lib/data/dashboard";
 import { formatMatchDate, formatMatchTime } from "@/lib/date";
 import { getRoleDisplayName } from "@/lib/display";
@@ -473,7 +477,7 @@ export default async function MatchDetailPage({
                 {match.status}
               </Badge>
               <Badge>{match.competition ?? "Sin liga"}</Badge>
-              <Badge>{match.production_mode ?? "Modo libre"}</Badge>
+              <Badge>{getProductionModeLabel(match.production_mode) || "Modo libre"}</Badge>
             </div>
             <div className="flex flex-wrap items-center gap-4">
               <TeamLogoMark
@@ -637,7 +641,7 @@ export default async function MatchDetailPage({
                 </span>
                 <Select
                   name="productionMode"
-                  defaultValue={match.production_mode ?? ""}
+                  defaultValue={getProductionModeLabel(match.production_mode)}
                   disabled={!user.canEdit}
                 >
                   <option value="">Sin modo</option>

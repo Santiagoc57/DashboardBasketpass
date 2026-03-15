@@ -3,6 +3,26 @@ import { redirect } from "next/navigation";
 import type { AppRole, ProfileRow } from "@/lib/database.types";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
+function buildFallbackProfile(user: {
+  id: string;
+  email?: string | null;
+  user_metadata?: { full_name?: string | null } | null;
+}): ProfileRow {
+  const fallbackName =
+    user.user_metadata?.full_name?.trim() ||
+    user.email?.split("@")[0] ||
+    "Usuario";
+  const now = new Date().toISOString();
+
+  return {
+    id: user.id,
+    full_name: fallbackName,
+    role: "viewer",
+    created_at: now,
+    updated_at: now,
+  };
+}
+
 export async function getUserContext() {
   const supabase = await createSupabaseServerClient();
   const {
@@ -19,6 +39,7 @@ export async function getUserContext() {
     };
   }
 
+  const fallbackProfile = buildFallbackProfile(user);
   let profile: ProfileRow | null = null;
   const profileQuery = await supabase
     .from("profiles")
@@ -27,7 +48,14 @@ export async function getUserContext() {
     .maybeSingle();
 
   if (profileQuery.error) {
-    throw profileQuery.error;
+    console.error("[auth] failed to load profile", profileQuery.error);
+    return {
+      userId: user.id,
+      email: user.email ?? null,
+      profile: fallbackProfile,
+      role: fallbackProfile.role,
+      canEdit: false,
+    };
   }
 
   profile = (profileQuery.data as ProfileRow | null) ?? null;
@@ -45,10 +73,11 @@ export async function getUserContext() {
       .single();
 
     if (insert.error) {
-      throw insert.error;
+      console.error("[auth] failed to create profile", insert.error);
+      profile = fallbackProfile;
+    } else {
+      profile = insert.data as ProfileRow;
     }
-
-    profile = insert.data as ProfileRow;
   }
 
   return {

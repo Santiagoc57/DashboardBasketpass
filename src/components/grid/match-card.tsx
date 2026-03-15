@@ -17,9 +17,9 @@ import { LeagueLogoMarkClient } from "@/components/league-logo-mark-client";
 import { QuickMatchFieldEditor } from "@/components/grid/quick-match-field-editor";
 import { badgeBaseClassName } from "@/components/ui/badge";
 import { HoverAvatarBadge } from "@/components/ui/hover-avatar-badge";
+import { getProductionModeLabel } from "@/lib/constants";
 import { formatMatchTime } from "@/lib/date";
 import { getRoleDisplayName } from "@/lib/display";
-import { PRODUCTION_MODE_OPTIONS } from "@/lib/constants";
 import { getTeamLeagueLabel } from "@/lib/team-directory";
 import type { MatchListItem } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -174,11 +174,7 @@ function getCompactPersonName(name: string) {
 }
 
 function formatProductionModeLabel(mode: string | null | undefined) {
-  if (!mode) {
-    return "";
-  }
-
-  return mode === "Encoder" ? "ENCODER" : mode;
+  return getProductionModeLabel(mode);
 }
 
 function Section({
@@ -489,7 +485,7 @@ export function MatchCard({
             <div>
               <p className="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] text-[#a7b4c8]">
                 <Video className="size-3.5 text-[#a7b4c8]" />
-                Producción
+                Modo
               </p>
               <div className="mt-2">
                 <span
@@ -498,21 +494,7 @@ export function MatchCard({
                     "border border-[#dbe1ea] bg-[#f7f8fa] text-[#637083]",
                   )}
                 >
-                  {canEdit ? (
-                    <QuickMatchFieldEditor
-                      field="productionMode"
-                      value={match.production_mode ?? ""}
-                      matchId={match.id}
-                      redirectTo={redirectTo}
-                      title="Cambiar modo"
-                      inputType="select"
-                      options={[...PRODUCTION_MODE_OPTIONS]}
-                    >
-                      <span>{formatProductionModeLabel(match.production_mode)}</span>
-                    </QuickMatchFieldEditor>
-                  ) : (
-                    formatProductionModeLabel(match.production_mode)
-                  )}
+                  {formatProductionModeLabel(match.production_mode)}
                 </span>
               </div>
             </div>

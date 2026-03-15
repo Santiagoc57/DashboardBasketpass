@@ -2,7 +2,7 @@ import {
   getDateInputValue,
   getMonthInputValue,
 } from "@/lib/date";
-import { DEFAULT_TIMEZONE, PRODUCTION_MODE_OPTIONS } from "@/lib/constants";
+import { DEFAULT_TIMEZONE, getProductionModeLabel, normalizeProductionMode } from "@/lib/constants";
 
 type RawSearchParams =
   | Record<string, string | string[] | undefined>
@@ -34,11 +34,7 @@ export function parseGridSearchParams(searchParams: RawSearchParams) {
   const defaultDate =
     view === "month" ? getMonthInputValue() : getDateInputValue();
   const rawMode = getParam(searchParams, "mode") ?? "";
-  const mode = PRODUCTION_MODE_OPTIONS.includes(
-    rawMode as (typeof PRODUCTION_MODE_OPTIONS)[number],
-  )
-    ? rawMode
-    : "";
+  const mode = getProductionModeLabel(normalizeProductionMode(rawMode));
 
   return {
     view,

@@ -6,12 +6,22 @@ export type AnnouncementSummary = Pick<
   "id" | "title" | "body" | "active" | "updated_at" | "created_at"
 >;
 
-function isMissingAnnouncementsTable(error: unknown) {
+function isAnnouncementsUnavailable(error: unknown) {
+  if (typeof error !== "object" || error === null) {
+    return false;
+  }
+
+  const code = "code" in error ? error.code : null;
+  const message =
+    "message" in error && typeof error.message === "string"
+      ? error.message.toLowerCase()
+      : "";
+
   return (
-    typeof error === "object" &&
-    error !== null &&
-    "code" in error &&
-    error.code === "42P01"
+    code === "42P01" ||
+    code === "42501" ||
+    message.includes("permission denied") ||
+    message.includes("row-level security")
   );
 }
 
@@ -30,11 +40,10 @@ async function fetchLatestAnnouncementQuery(activeOnly: boolean) {
   const result = await query.maybeSingle();
 
   if (result.error) {
-    if (isMissingAnnouncementsTable(result.error)) {
-      return null;
+    if (!isAnnouncementsUnavailable(result.error)) {
+      console.error("[announcements] failed to load announcement", result.error);
     }
-
-    throw result.error;
+    return null;
   }
 
   return (result.data as AnnouncementSummary | null) ?? null;

@@ -13,7 +13,6 @@ import {
   ChevronRight,
   ChevronDown,
   Clock3,
-  Copy,
   Hash,
   LayoutGrid,
   Mail,
@@ -31,6 +30,7 @@ import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 
 import { LeagueLogoMarkClient } from "@/components/league-logo-mark-client";
 import { ClientTeamLogoMark } from "@/components/team-logo-mark-client";
+import { CollaboratorReportForm } from "@/components/collaborators/collaborator-report-form";
 import { badgeBaseClassName } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { HoverAvatarBadge } from "@/components/ui/hover-avatar-badge";
@@ -38,6 +38,7 @@ import type {
   CollaboratorAssignmentItem,
   CollaboratorGroupContact,
 } from "@/lib/data/collaborators";
+import { getProductionModeLabel } from "@/lib/constants";
 import { getRoleDisplayName } from "@/lib/display";
 import { buildWhatsAppUrl, cn, normalizeText } from "@/lib/utils";
 
@@ -128,9 +129,9 @@ function MobileDayNavigator({
       <Link
         href={previousDayHref}
         aria-label="Ir al día anterior"
-        className="inline-flex size-12 shrink-0 items-center justify-center rounded-full border border-[#bcc6d7] bg-white text-[#7a8799] shadow-sm transition hover:border-[#94a3b8] hover:text-[var(--foreground)]"
+        className="inline-flex size-12 shrink-0 items-center justify-center rounded-full border border-[#bcc6d7] bg-white text-[#7a8799] leading-none shadow-sm transition hover:border-[#94a3b8] hover:text-[var(--foreground)]"
       >
-        <ChevronLeft className="size-6" strokeWidth={1.7} />
+        <ChevronLeft className="size-[1.05rem] translate-x-px" strokeWidth={1.8} />
       </Link>
 
       <div className="min-w-0 flex-1 text-center">
@@ -165,9 +166,9 @@ function MobileDayNavigator({
       <Link
         href={nextDayHref}
         aria-label="Ir al día siguiente"
-        className="inline-flex size-12 shrink-0 items-center justify-center rounded-full border border-[#bcc6d7] bg-white text-[#7a8799] shadow-sm transition hover:border-[#94a3b8] hover:text-[var(--foreground)]"
+        className="inline-flex size-12 shrink-0 items-center justify-center rounded-full border border-[#bcc6d7] bg-white text-[#7a8799] leading-none shadow-sm transition hover:border-[#94a3b8] hover:text-[var(--foreground)]"
       >
-        <ChevronRight className="size-6" strokeWidth={1.7} />
+        <ChevronRight className="size-[1.05rem] -translate-x-px" strokeWidth={1.8} />
       </Link>
     </div>
   );
@@ -320,11 +321,13 @@ function getAssignmentTablePersonValue(value: string | null | undefined) {
 }
 
 function formatAssignmentProductionModeLabel(mode: string | null | undefined) {
-  if (!mode?.trim()) {
+  const label = getProductionModeLabel(mode);
+
+  if (!label) {
     return "SIN MODO";
   }
 
-  return mode === "Encoder" ? "ENCODER" : mode.toUpperCase();
+  return label;
 }
 
 function formatAssignmentProductionMeta(assignment: CollaboratorAssignmentItem) {
@@ -335,38 +338,6 @@ function formatAssignmentProductionMeta(assignment: CollaboratorAssignmentItem) 
       : "sin camaras";
 
   return `${roleLabel} · ${cameraLabel}`;
-}
-
-function downloadContactsFile(
-  assignment: CollaboratorAssignmentItem,
-  contacts: CollaboratorGroupContact[],
-) {
-  const rows = [
-    ["Rol", "Nombre", "Celular", "Correo"].join(","),
-    ...contacts.map((contact) =>
-      [
-        `"${getRoleDisplayName(contact.roleName)}"`,
-        `"${contact.personName ?? "Sin asignar"}"`,
-        `"${contact.phone ?? ""}"`,
-        `"${contact.email ?? ""}"`,
-      ].join(","),
-    ),
-  ].join("\n");
-
-  const blob = new Blob([rows], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = `grupo-${assignment.homeTeam}-${assignment.awayTeam}`
-    .normalize("NFD")
-    .replaceAll(/[\u0300-\u036f]/g, "")
-    .replaceAll(/[^a-zA-Z0-9]+/g, "-")
-    .replaceAll(/^-+|-+$/g, "")
-    .toLowerCase();
-  document.body.appendChild(anchor);
-  anchor.click();
-  document.body.removeChild(anchor);
-  URL.revokeObjectURL(url);
 }
 
 function AssignmentDetailPill({
@@ -446,7 +417,7 @@ function getAssignmentOperationalItems(assignment: CollaboratorAssignmentItem) {
     assignment.relatorName ?? assignment.talentLabel?.split("/")[0]?.trim() ?? null,
   );
   const producerLabel = abbreviatePersonName(assignment.producerName);
-  const productionLabel = assignment.productionMode ?? "Modo libre";
+  const productionLabel = getProductionModeLabel(assignment.productionMode) || "Modo libre";
   const roleLabel = getRoleDisplayName(assignment.roleName) || "Por definir";
   const cameraLabel =
     assignment.cameraCount > 0
@@ -456,7 +427,7 @@ function getAssignmentOperationalItems(assignment: CollaboratorAssignmentItem) {
   return [
     {
       icon: Video,
-      label: "Produ",
+      label: "Modo",
       value: productionLabel,
       tone: "success" as const,
     },
@@ -529,9 +500,11 @@ function AssignmentOperationalSummary({
 function AssignmentCard({
   assignment,
   onOpenGroup,
+  onOpenReport,
 }: {
   assignment: CollaboratorAssignmentItem;
   onOpenGroup: (assignmentId: string) => void;
+  onOpenReport: (assignmentId: string) => void;
 }) {
   const leagueLabel = assignment.competition ?? "Sin liga";
   const leagueAccent = getAssignmentLeagueAccentColor(leagueLabel);
@@ -584,7 +557,7 @@ function AssignmentCard({
               <div className="flex shrink-0 flex-col items-center justify-center">
                 <div className="h-px w-8 bg-[#dfe5ed]" />
                 <span className="py-1.5 text-[18px] font-black italic text-[var(--accent)]">
-                  VS
+                  vs
                 </span>
                 <div className="h-px w-8 bg-[#dfe5ed]" />
               </div>
@@ -634,17 +607,22 @@ function AssignmentCard({
           onClick={() => onOpenGroup(assignment.assignmentId)}
           className="inline-flex h-10 items-center justify-center gap-2 rounded-[var(--panel-radius)] bg-[#1faa52] px-3 text-xs font-black text-white shadow-[0_14px_28px_rgba(31,170,82,0.18)] transition hover:brightness-105"
         >
-          <MessageCircleMore className="size-4" />
+          <span className="inline-flex size-6 items-center justify-center rounded-full bg-[#eef2f5] shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]">
+            <MessageCircleMore className="size-3.5 text-[#1faa52]" />
+          </span>
           Grupo
         </button>
 
-        <Link
-          href={`/mi-jornada/${assignment.matchId}/reportar`}
+        <button
+          type="button"
+          onClick={() => onOpenReport(assignment.assignmentId)}
           className="inline-flex h-10 items-center justify-center gap-2 rounded-[var(--panel-radius)] bg-[#7a36da] px-3 text-xs font-black text-white shadow-[0_14px_28px_rgba(122,54,218,0.22)] transition hover:brightness-105"
         >
-          <Megaphone className="size-4 text-white" />
+          <span className="inline-flex size-6 items-center justify-center rounded-full bg-[#eef2f5] shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]">
+            <Megaphone className="size-3.5 text-[#7a36da]" />
+          </span>
           Reportar
-        </Link>
+        </button>
       </div>
     </Card>
   );
@@ -693,10 +671,12 @@ function AssignmentTable({
   assignments,
   selectedAssignmentId,
   onOpenGroup,
+  onOpenReport,
 }: {
   assignments: CollaboratorAssignmentItem[];
   selectedAssignmentId: string | null;
   onOpenGroup: (assignmentId: string) => void;
+  onOpenReport: (assignmentId: string) => void;
 }) {
   return (
     <div className="flex min-h-[42rem] flex-col gap-3 rounded-[var(--panel-radius)]">
@@ -903,7 +883,7 @@ function AssignmentTable({
                   <div>
                     <p className="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] text-[#a7b4c8]">
                       <Video className="size-3.5 text-[#a7b4c8]" />
-                      Producción
+                      Modo
                     </p>
                     <div className="mt-2">
                       <span
@@ -957,15 +937,18 @@ function AssignmentTable({
                 >
                   <MessageCircleMore className="size-4" />
                 </button>
-                <Link
-                  href={`/mi-jornada/${assignment.matchId}/reportar`}
-                  onClick={(event) => event.stopPropagation()}
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onOpenReport(assignment.assignmentId);
+                  }}
                   className="inline-flex size-10 items-center justify-center rounded-full bg-[#7a36da] text-white shadow-[0_12px_24px_rgba(122,54,218,0.22)] transition hover:brightness-105"
                   aria-label="Abrir reporte"
                   title="Abrir reporte"
                 >
                   <Megaphone className="size-4" />
-                </Link>
+                </button>
               </div>
             </div>
           </article>
@@ -980,6 +963,34 @@ function AssignmentTable({
         <div className="min-h-[calc(42rem-10.5rem)] rounded-[var(--panel-radius)] border border-transparent" />
       )}
     </div>
+  );
+}
+
+function AssignmentAssistantShell({
+  children,
+  onClose,
+}: {
+  children: ReactNode;
+  onClose: () => void;
+}) {
+  return (
+    <>
+      <div
+        className="fixed inset-0 z-[90] flex items-end justify-center bg-[#101828]/55 p-3 backdrop-blur-sm xl:hidden"
+        onClick={onClose}
+      >
+        <div
+          className="max-h-[calc(100vh-1.5rem)] w-full max-w-md overflow-y-auto"
+          onClick={(event) => event.stopPropagation()}
+        >
+          {children}
+        </div>
+      </div>
+
+      <aside className="hidden min-w-0 self-start xl:block xl:sticky xl:top-20">
+        {children}
+      </aside>
+    </>
   );
 }
 
@@ -1124,7 +1135,6 @@ function GroupAssistantDrawer({
   onClose: () => void;
 }) {
   const contacts = getAssignmentContacts(assignment);
-  const groupHref = buildWhatsAppUrl(assignment.ownerPhone);
   const leagueAccent = getAssignmentLeagueAccentColor(assignment.competition);
 
   useEffect(() => {
@@ -1147,12 +1157,12 @@ function GroupAssistantDrawer({
 
   const drawerContent = (
     <div className="min-w-0 rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--surface)] shadow-[0_18px_40px_rgba(20,24,35,0.08)]">
-      <div className="border-b border-[var(--border)] p-6">
-        <div className="mb-4 flex items-center justify-between gap-4">
-          <div className="flex flex-wrap items-center gap-2">
+      <div className="relative border-b border-[var(--border)] p-6">
+        <div className="mb-4 flex items-center justify-center gap-4 xl:justify-between">
+          <div className="flex flex-wrap items-center justify-center gap-2 xl:justify-start">
             {assignment.productionMode ? (
               <span className="inline-flex rounded-full border border-[#f3cfd8] bg-[#fff3f6] px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-[var(--accent)]">
-                {assignment.productionMode}
+                {getProductionModeLabel(assignment.productionMode)}
               </span>
             ) : null}
             <span
@@ -1168,24 +1178,24 @@ function GroupAssistantDrawer({
           <button
             type="button"
             onClick={onClose}
-            className="inline-flex size-10 items-center justify-center rounded-full bg-[var(--background-soft)] text-[#94a3b8]"
+            className="absolute right-6 top-6 inline-flex size-10 items-center justify-center rounded-full bg-[var(--background-soft)] text-[#94a3b8]"
             aria-label="Cerrar asistente de grupo"
           >
             <X className="size-4" />
           </button>
         </div>
 
-        <div className="space-y-1">
+        <div className="space-y-1 text-center xl:text-left">
           <p className="text-[1.6rem] font-black leading-[1.05] tracking-[-0.04em] text-[var(--foreground)]">
             {assignment.homeTeam}
           </p>
-          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-[1.6rem] font-black leading-[1.05] tracking-[-0.04em] text-[var(--foreground)]">
-            <span className="text-[var(--accent)]">VS</span>
+          <div className="flex flex-wrap items-baseline justify-center gap-x-2 gap-y-1 text-[1.6rem] font-black leading-[1.05] tracking-[-0.04em] text-[var(--foreground)] xl:justify-start">
+            <span className="text-[var(--accent)]">vs</span>
             <span>{assignment.awayTeam}</span>
           </div>
         </div>
 
-        <div className="mt-4 flex items-center gap-4 text-sm text-[#70819b]">
+        <div className="mt-4 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-sm text-[#70819b] xl:justify-start">
           <span className="inline-flex items-center gap-2">
             <CalendarDays className="size-4 text-[#b1b8c5]" />
             {formatAssignmentDrawerDate(assignment)}
@@ -1195,7 +1205,7 @@ function GroupAssistantDrawer({
             {assignment.timeLabel}
           </span>
         </div>
-        <div className="mt-2 inline-flex items-start gap-2 text-sm text-[#70819b]">
+        <div className="mt-2 inline-flex w-full items-start justify-center gap-2 text-sm text-[#70819b] xl:w-auto xl:justify-start">
           <MapPin className="mt-0.5 size-4 shrink-0 text-[#b1b8c5]" />
           <span>{assignment.venue ?? "Sede por definir"}</span>
         </div>
@@ -1309,40 +1319,14 @@ function GroupAssistantDrawer({
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3 pt-1">
-              <button
-                type="button"
-                onClick={() => downloadContactsFile(assignment, contacts)}
-                className="inline-flex h-12 items-center justify-center gap-2 rounded-[var(--panel-radius)] bg-[#7a36da] px-4 text-sm font-black text-white shadow-[0_14px_28px_rgba(122,54,218,0.2)] transition hover:brightness-105"
-              >
-                <Copy className="size-4" />
-                Bajar contactos
-              </button>
-              {groupHref ? (
-                <Link
-                  href={groupHref}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex h-12 items-center justify-center gap-2 rounded-[var(--panel-radius)] bg-[#1faa52] px-4 text-sm font-black text-white shadow-[0_14px_28px_rgba(31,170,82,0.18)] transition hover:brightness-105"
-                >
-                  <MessageCircleMore className="size-4" />
-                  Abrir WhatsApp
-                </Link>
-              ) : (
-                <span className="inline-flex h-12 items-center justify-center gap-2 rounded-[var(--panel-radius)] border border-[var(--border)] bg-[#eef7f0] px-4 text-sm font-black text-[#7ca488]">
-                  <MessageCircleMore className="size-4" />
-                  Abrir WhatsApp
-                </span>
-              )}
-            </div>
           </div>
         ) : (
           <div className="space-y-5">
             <section className="space-y-4">
-              <DrawerSectionHeading>Producción</DrawerSectionHeading>
+              <DrawerSectionHeading>Modo</DrawerSectionHeading>
               <DrawerHighlightCard
-                label="Modo actual"
-                value={assignment.productionMode ?? "Sin definir"}
+                label="Modo"
+                value={getProductionModeLabel(assignment.productionMode) || "Sin definir"}
               />
               <div className="grid grid-cols-2 gap-3">
                 <DrawerInfoCard
@@ -1445,25 +1429,83 @@ function GroupAssistantDrawer({
     </div>
   );
 
-  return (
-    <>
-      <div
-        className="fixed inset-0 z-[90] flex items-end justify-center bg-[#101828]/55 p-3 backdrop-blur-sm xl:hidden"
-        onClick={onClose}
-      >
-        <div
-          className="max-h-[calc(100vh-1.5rem)] w-full max-w-md overflow-y-auto"
-          onClick={(event) => event.stopPropagation()}
-        >
-          {drawerContent}
+  return <AssignmentAssistantShell onClose={onClose}>{drawerContent}</AssignmentAssistantShell>;
+}
+
+function ReportAssistantDrawer({
+  assignment,
+  onClose,
+}: {
+  assignment: CollaboratorAssignmentItem;
+  onClose: () => void;
+}) {
+  const leagueAccent = getAssignmentLeagueAccentColor(assignment.competition);
+  const drawerContent = (
+    <div className="min-w-0 rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--surface)] shadow-[0_18px_40px_rgba(20,24,35,0.08)]">
+      <div className="relative border-b border-[var(--border)] p-6">
+        <div className="mb-4 flex items-center justify-center gap-4 xl:justify-between">
+          <div className="flex flex-wrap items-center justify-center gap-2 xl:justify-start">
+            {assignment.productionMode ? (
+              <span className="inline-flex rounded-full border border-[#f3cfd8] bg-[#fff3f6] px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-[var(--accent)]">
+                {getProductionModeLabel(assignment.productionMode)}
+              </span>
+            ) : null}
+            <span
+              className="inline-flex rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em]"
+              style={{
+                backgroundColor: `${leagueAccent}14`,
+                color: leagueAccent,
+              }}
+            >
+              {assignment.competition ?? "Sin liga"}
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="absolute right-6 top-6 inline-flex size-10 items-center justify-center rounded-full bg-[var(--background-soft)] text-[#94a3b8]"
+            aria-label="Cerrar reporte"
+          >
+            <X className="size-4" />
+          </button>
+        </div>
+
+        <div className="space-y-1 text-center xl:text-left">
+          <p className="text-[1.6rem] font-black leading-[1.05] tracking-[-0.04em] text-[var(--foreground)]">
+            {assignment.homeTeam}
+          </p>
+          <div className="flex flex-wrap items-baseline justify-center gap-x-2 gap-y-1 text-[1.6rem] font-black leading-[1.05] tracking-[-0.04em] text-[var(--foreground)] xl:justify-start">
+            <span className="text-[var(--accent)]">vs</span>
+            <span>{assignment.awayTeam}</span>
+          </div>
+        </div>
+
+        <div className="mt-4 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-sm text-[#70819b] xl:justify-start">
+          <span className="inline-flex items-center gap-2">
+            <CalendarDays className="size-4 text-[#b1b8c5]" />
+            {formatAssignmentDrawerDate(assignment)}
+          </span>
+          <span className="inline-flex items-center gap-2">
+            <Clock3 className="size-4 text-[#b1b8c5]" />
+            {assignment.timeLabel}
+          </span>
+        </div>
+        <div className="mt-2 inline-flex w-full items-start justify-center gap-2 text-sm text-[#70819b] xl:w-auto xl:justify-start">
+          <MapPin className="mt-0.5 size-4 shrink-0 text-[#b1b8c5]" />
+          <span>{assignment.venue ?? "Sede por definir"}</span>
         </div>
       </div>
 
-      <aside className="hidden min-w-0 self-start xl:block xl:sticky xl:top-20">
-        {drawerContent}
-      </aside>
-    </>
+      <div className="space-y-5 px-5 py-5">
+        <CollaboratorReportForm
+          assignment={assignment}
+          showMatchSummary={false}
+        />
+      </div>
+    </div>
   );
+
+  return <AssignmentAssistantShell onClose={onClose}>{drawerContent}</AssignmentAssistantShell>;
 }
 
 export function MyDayAssignmentsPanel({
@@ -1478,6 +1520,9 @@ export function MyDayAssignmentsPanel({
   const [selectedGroupAssignmentId, setSelectedGroupAssignmentId] = useState<string | null>(
     null,
   );
+  const [selectedReportAssignmentId, setSelectedReportAssignmentId] = useState<string | null>(
+    null,
+  );
   const [drawerTab, setDrawerTab] = useState<GroupDrawerTab>("group");
   const [viewMode, setViewMode] = useState<MyDayViewMode>("cards");
   const [tableViewEnabled, setTableViewEnabled] = useState(false);
@@ -1486,9 +1531,14 @@ export function MyDayAssignmentsPanel({
     () => [...todayAssignments, ...upcomingAssignments],
     [todayAssignments, upcomingAssignments],
   );
-  const selectedAssignment =
+  const selectedGroupAssignment =
     allAssignments.find((assignment) => assignment.assignmentId === selectedGroupAssignmentId) ??
     null;
+  const selectedReportAssignment =
+    allAssignments.find((assignment) => assignment.assignmentId === selectedReportAssignmentId) ??
+    null;
+  const selectedPanelAssignmentId =
+    selectedReportAssignmentId ?? selectedGroupAssignmentId ?? null;
   const effectiveViewMode: MyDayViewMode =
     tableViewEnabled && viewMode === "table" ? "table" : "cards";
 
@@ -1510,8 +1560,14 @@ export function MyDayAssignmentsPanel({
   }, []);
 
   function handleOpenGroup(assignmentId: string) {
+    setSelectedReportAssignmentId(null);
     setSelectedGroupAssignmentId(assignmentId);
     setDrawerTab("group");
+  }
+
+  function handleOpenReport(assignmentId: string) {
+    setSelectedGroupAssignmentId(null);
+    setSelectedReportAssignmentId(assignmentId);
   }
 
   const cardGridClassName = "flex flex-wrap items-start gap-3";
@@ -1520,7 +1576,7 @@ export function MyDayAssignmentsPanel({
     <div
       className={cn(
         "grid gap-6",
-        selectedAssignment ? "xl:grid-cols-[minmax(0,1fr)_390px]" : "grid-cols-1",
+        selectedPanelAssignmentId ? "xl:grid-cols-[minmax(0,1fr)_390px]" : "grid-cols-1",
       )}
     >
       <div className="space-y-8">
@@ -1576,14 +1632,16 @@ export function MyDayAssignmentsPanel({
                     key={`${assignment.assignmentId}-${assignment.matchId}`}
                     assignment={assignment}
                     onOpenGroup={handleOpenGroup}
+                    onOpenReport={handleOpenReport}
                   />
                 ))}
               </div>
             ) : (
               <AssignmentTable
                 assignments={todayAssignments}
-                selectedAssignmentId={selectedGroupAssignmentId}
+                selectedAssignmentId={selectedPanelAssignmentId}
                 onOpenGroup={handleOpenGroup}
+                onOpenReport={handleOpenReport}
               />
             )
           ) : (
@@ -1633,26 +1691,34 @@ export function MyDayAssignmentsPanel({
                     key={`${assignment.assignmentId}-${assignment.matchId}`}
                     assignment={assignment}
                     onOpenGroup={handleOpenGroup}
+                    onOpenReport={handleOpenReport}
                   />
                 ))}
               </div>
             ) : (
               <AssignmentTable
                 assignments={upcomingAssignments}
-                selectedAssignmentId={selectedGroupAssignmentId}
+                selectedAssignmentId={selectedPanelAssignmentId}
                 onOpenGroup={handleOpenGroup}
+                onOpenReport={handleOpenReport}
               />
             )}
           </section>
         ) : null}
       </div>
 
-      {selectedAssignment ? (
+      {selectedGroupAssignment ? (
         <GroupAssistantDrawer
-          assignment={selectedAssignment}
+          assignment={selectedGroupAssignment}
           tab={drawerTab}
           onChangeTab={setDrawerTab}
           onClose={() => setSelectedGroupAssignmentId(null)}
+        />
+      ) : null}
+      {selectedReportAssignment ? (
+        <ReportAssistantDrawer
+          assignment={selectedReportAssignment}
+          onClose={() => setSelectedReportAssignmentId(null)}
         />
       ) : null}
     </div>

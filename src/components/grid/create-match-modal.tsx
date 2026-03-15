@@ -1,15 +1,16 @@
 "use client";
 
 import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   CalendarDays,
   Camera,
   CircleAlert,
   Loader2,
   MapPin,
+  Mic2,
   Plus,
   Sparkles,
-  UserRound,
   Users,
   WandSparkles,
   X,
@@ -20,6 +21,8 @@ import {
   deleteMatchAction,
   updateMatchAction,
 } from "@/app/actions/matches";
+import { LeagueLogoMarkClient } from "@/components/league-logo-mark-client";
+import { ClientTeamLogoMark } from "@/components/team-logo-mark-client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -27,9 +30,10 @@ import { SubmitButton } from "@/components/ui/submit-button";
 import { Textarea } from "@/components/ui/textarea";
 import { ALL_CLUB_OPTIONS, CLUB_COMPETITIONS } from "@/lib/club-catalog";
 import {
+  COMMENTARY_PLAN_OPTIONS,
   DEFAULT_MATCH_DURATION_MINUTES,
   DEFAULT_TIMEZONE,
-  MATCH_STATUS_OPTIONS,
+  normalizeCommentaryPlan,
   PRODUCTION_MODE_OPTIONS,
 } from "@/lib/constants";
 import { formatMatchDate, formatMatchTime } from "@/lib/date";
@@ -102,6 +106,22 @@ type MatchIntakeFields = {
   notes: string;
 };
 
+const CAMERA_FIELD_CONFIGS = [
+  { label: "Cámara 1", name: "camara1Id" },
+  { label: "Cámara 2", name: "camara2Id" },
+  { label: "Cámara 3", name: "camara3Id" },
+  { label: "Cámara 4", name: "camara4Id" },
+  { label: "Cámara 5", name: "camara5Id" },
+] as const;
+
+function getVisibleCameraCount(fields: MatchIntakeFields) {
+  const highestFilledIndex = CAMERA_FIELD_CONFIGS.reduce((highest, field, index) => {
+    return fields[field.name].trim() ? index + 1 : highest;
+  }, 0);
+
+  return Math.max(2, highestFilledIndex);
+}
+
 function buildInitialFields(initialDate: string): MatchIntakeFields {
   return {
     externalMatchId: "",
@@ -165,7 +185,7 @@ function buildFieldsFromMatch(match: MatchListItem): MatchIntakeFields {
     camara3Id: getAssignedPersonId(match, "Camara 3"),
     camara4Id: getAssignedPersonId(match, "Camara 4"),
     camara5Id: getAssignedPersonId(match, "Camara 5"),
-    commentaryPlan: match.commentary_plan ?? "",
+    commentaryPlan: normalizeCommentaryPlan(match.commentary_plan),
     relatorId: getAssignedPersonId(match, "Relator"),
     comentario1Id: getAssignedPersonId(match, "Comentario 1"),
     comentario2Id: getAssignedPersonId(match, "Comentario 2"),
@@ -188,14 +208,10 @@ function SectionBlock({
   children: React.ReactNode;
 }) {
   return (
-    <section className="relative overflow-visible pl-5">
-      <div
-        aria-hidden="true"
-        className="absolute left-0 top-6 h-16 w-9 rounded-l-[16px] rounded-r-[12px] bg-[var(--accent)]/18"
-      />
+    <section className="relative overflow-visible">
       <div className="relative z-[1] space-y-4 rounded-[20px] border border-[var(--border)] bg-[var(--surface)] px-6 py-6 shadow-[0_12px_32px_rgba(15,23,42,0.06)]">
-        <div className="flex items-start gap-3">
-          <div className="mt-0.5 flex size-10 items-center justify-center rounded-full bg-[var(--background-soft)] text-[var(--accent)]">
+        <div className="flex items-center gap-3">
+          <div className="flex size-10 items-center justify-center rounded-full bg-[var(--background-soft)] text-[var(--accent)]">
             {icon}
           </div>
           <div>
@@ -296,10 +312,23 @@ export function CreateMatchModal({
   const [isLookingUp, setIsLookingUp] = useState(false);
   const [competitionTouched, setCompetitionTouched] = useState(false);
   const [venueTouched, setVenueTouched] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
+  const [visibleCameraCount, setVisibleCameraCount] = useState(() =>
+    getVisibleCameraCount(defaultFields),
+  );
 
   useEffect(() => {
     setFields(defaultFields);
+    setVisibleCameraCount(getVisibleCameraCount(defaultFields));
   }, [defaultFields]);
+
+  useEffect(() => {
+    setIsMounted(true);
+
+    return () => {
+      setIsMounted(false);
+    };
+  }, []);
 
   useEffect(() => {
     if (!isOpen) {
@@ -357,14 +386,10 @@ export function CreateMatchModal({
     setFields((current) => ({
       ...current,
       homeTeam: value,
-      venue:
-        venueTouched || current.venue.trim()
-          ? current.venue
-          : suggestedVenue ?? current.venue,
-      competition:
-        competitionTouched || current.competition.trim()
-          ? current.competition
-          : suggestedCompetition ?? current.competition,
+      venue: venueTouched ? current.venue : suggestedVenue ?? current.venue,
+      competition: competitionTouched
+        ? current.competition
+        : suggestedCompetition ?? current.competition,
     }));
   }
 
@@ -424,15 +449,14 @@ export function CreateMatchModal({
           productionCode:
             matchPayload.productionCode?.trim() || current.productionCode,
           competition:
-            competitionTouched && current.competition.trim()
+            competitionTouched
               ? current.competition
               : suggestedCompetition,
           homeTeam: nextHomeTeam,
           awayTeam: matchPayload.awayTeam?.trim() || current.awayTeam,
           date: matchPayload.date?.trim() || current.date,
           time: matchPayload.time?.trim() || current.time,
-          venue:
-            venueTouched && current.venue.trim() ? current.venue : suggestedVenue,
+          venue: venueTouched ? current.venue : suggestedVenue,
         };
       });
 
@@ -456,6 +480,7 @@ export function CreateMatchModal({
   function resetAndClose() {
     setIsOpen(false);
     setFields(defaultFields);
+    setVisibleCameraCount(getVisibleCameraCount(defaultFields));
     setLookupMessage("");
     setLookupAttempted(false);
     setCompetitionTouched(false);
@@ -507,8 +532,9 @@ export function CreateMatchModal({
         </Button>
       )}
 
-      {isOpen ? (
-        <div className="fixed inset-0 z-[90] flex items-start justify-center bg-[rgba(15,23,42,0.48)] px-4 py-8 backdrop-blur-sm">
+      {isOpen && isMounted
+        ? createPortal(
+        <div className="fixed inset-0 z-[300] flex items-start justify-center bg-[rgba(15,23,42,0.48)] px-4 py-8 backdrop-blur-sm">
           <div
             className="absolute inset-0"
             aria-hidden="true"
@@ -517,10 +543,6 @@ export function CreateMatchModal({
           <div className="relative z-[1] flex max-h-[calc(100vh-4rem)] w-full max-w-[1120px] flex-col overflow-hidden rounded-[24px] border border-[var(--border)] bg-[var(--surface)] shadow-[0_32px_80px_rgba(15,23,42,0.22)]">
               <div className="flex items-start justify-between gap-6 border-b border-[var(--border)] px-7 py-6">
                 <div className="space-y-2">
-                  <div className="inline-flex items-center gap-2 rounded-full bg-[var(--accent-soft)] px-3 py-1 text-[11px] font-bold uppercase tracking-[0.28em] text-[var(--accent)]">
-                    <Sparkles className="size-3.5" />
-                    {isEditing ? "Editar partido" : "Nuevo partido"}
-                  </div>
                   <div>
                     <h2 className="text-3xl font-extrabold tracking-tight text-[var(--foreground)]">
                       {isEditing ? "Editar partido" : "Crear partido"}
@@ -645,21 +667,32 @@ export function CreateMatchModal({
                           required
                           alert={missingFields.includes("competition")}
                         >
-                          <Input
-                            name="competition"
-                            list="match-competition-catalog"
-                            value={fields.competition}
-                            onChange={(event) => {
-                              setCompetitionTouched(true);
-                              updateField("competition", event.target.value);
-                            }}
-                            placeholder="Liga Nacional"
-                            className={cn(
-                              fieldSurfaceClass,
-                              missingFields.includes("competition") &&
-                                missingFieldClass,
-                            )}
-                          />
+                          <div className="relative">
+                            <Input
+                              name="competition"
+                              list="match-competition-catalog"
+                              value={fields.competition}
+                              onChange={(event) => {
+                                setCompetitionTouched(true);
+                                updateField("competition", event.target.value);
+                              }}
+                              placeholder="Liga Nacional"
+                              className={cn(
+                                fieldSurfaceClass,
+                                "pr-16",
+                                missingFields.includes("competition") &&
+                                  missingFieldClass,
+                              )}
+                            />
+                            {fields.competition.trim() ? (
+                              <div className="pointer-events-none absolute inset-y-0 right-3 flex items-center">
+                                <LeagueLogoMarkClient
+                                  league={fields.competition}
+                                  className="size-9 rounded-[10px]"
+                                />
+                              </div>
+                            ) : null}
+                          </div>
                         </LabeledField>
                       </div>
 
@@ -669,44 +702,72 @@ export function CreateMatchModal({
                           required
                           alert={missingFields.includes("homeTeam")}
                         >
-                          <Input
-                            name="homeTeam"
-                            list="match-club-catalog"
-                            value={fields.homeTeam}
-                            onChange={(event) =>
-                              handleHomeTeamChange(event.target.value)
-                            }
-                            placeholder="Equipo local"
-                            className={cn(
-                              fieldSurfaceClass,
-                              missingFields.includes("homeTeam") &&
-                                missingFieldClass,
-                            )}
-                          />
+                          <div className="relative">
+                            <Input
+                              name="homeTeam"
+                              list="match-club-catalog"
+                              value={fields.homeTeam}
+                              onChange={(event) =>
+                                handleHomeTeamChange(event.target.value)
+                              }
+                              placeholder="Equipo local"
+                              className={cn(
+                                fieldSurfaceClass,
+                                "pr-16",
+                                missingFields.includes("homeTeam") &&
+                                  missingFieldClass,
+                              )}
+                            />
+                            {fields.homeTeam.trim() ? (
+                              <div className="pointer-events-none absolute inset-y-0 right-3 flex items-center">
+                                <ClientTeamLogoMark
+                                  teamName={fields.homeTeam}
+                                  competition={fields.competition}
+                                  className="size-9 rounded-[10px]"
+                                  imageClassName="p-1"
+                                  initialsClassName="text-[10px] tracking-[0.16em]"
+                                />
+                              </div>
+                            ) : null}
+                          </div>
                         </LabeledField>
                         <LabeledField
                           label="Visitante"
                           required
                           alert={missingFields.includes("awayTeam")}
                         >
-                          <Input
-                            name="awayTeam"
-                            list="match-club-catalog"
-                            value={fields.awayTeam}
-                            onChange={(event) =>
-                              updateField("awayTeam", event.target.value)
-                            }
-                            placeholder="Equipo visitante"
-                            className={cn(
-                              fieldSurfaceClass,
-                              missingFields.includes("awayTeam") &&
-                                missingFieldClass,
-                            )}
-                          />
+                          <div className="relative">
+                            <Input
+                              name="awayTeam"
+                              list="match-club-catalog"
+                              value={fields.awayTeam}
+                              onChange={(event) =>
+                                updateField("awayTeam", event.target.value)
+                              }
+                              placeholder="Equipo visitante"
+                              className={cn(
+                                fieldSurfaceClass,
+                                "pr-16",
+                                missingFields.includes("awayTeam") &&
+                                  missingFieldClass,
+                              )}
+                            />
+                            {fields.awayTeam.trim() ? (
+                              <div className="pointer-events-none absolute inset-y-0 right-3 flex items-center">
+                                <ClientTeamLogoMark
+                                  teamName={fields.awayTeam}
+                                  competition={fields.competition}
+                                  className="size-9 rounded-[10px]"
+                                  imageClassName="p-1"
+                                  initialsClassName="text-[10px] tracking-[0.16em]"
+                                />
+                              </div>
+                            ) : null}
+                          </div>
                         </LabeledField>
                       </div>
 
-                      <div className="grid gap-4 md:grid-cols-4">
+                      <div className="grid gap-4 md:grid-cols-3">
                         <LabeledField
                           label="Día"
                           required
@@ -769,23 +830,8 @@ export function CreateMatchModal({
                             ))}
                           </Select>
                         </LabeledField>
-                        <LabeledField label="Estado">
-                          <Select
-                            name="status"
-                            value={fields.status}
-                            onChange={(event) =>
-                              updateField("status", event.target.value)
-                            }
-                            className={fieldSurfaceClass}
-                          >
-                            {MATCH_STATUS_OPTIONS.map((status) => (
-                              <option key={status} value={status}>
-                                {status}
-                              </option>
-                            ))}
-                          </Select>
-                        </LabeledField>
                       </div>
+                      <input type="hidden" name="status" value={fields.status} />
 
                       <div className="grid gap-4">
                         <LabeledField
@@ -871,60 +917,57 @@ export function CreateMatchModal({
                       title="Cámaras"
                     >
                       <div className="grid gap-4">
-                        <PersonSelectField
-                          label="Cámara 1"
-                          name="camara1Id"
-                          value={fields.camara1Id}
-                          people={peopleOptions}
-                          onChange={updateField}
-                        />
-                        <PersonSelectField
-                          label="Cámara 2"
-                          name="camara2Id"
-                          value={fields.camara2Id}
-                          people={peopleOptions}
-                          onChange={updateField}
-                        />
-                        <PersonSelectField
-                          label="Cámara 3"
-                          name="camara3Id"
-                          value={fields.camara3Id}
-                          people={peopleOptions}
-                          onChange={updateField}
-                        />
-                        <PersonSelectField
-                          label="Cámara 4"
-                          name="camara4Id"
-                          value={fields.camara4Id}
-                          people={peopleOptions}
-                          onChange={updateField}
-                        />
-                        <PersonSelectField
-                          label="Cámara 5"
-                          name="camara5Id"
-                          value={fields.camara5Id}
-                          people={peopleOptions}
-                          onChange={updateField}
-                        />
+                        {CAMERA_FIELD_CONFIGS.slice(0, visibleCameraCount).map((field) => (
+                          <PersonSelectField
+                            key={field.name}
+                            label={field.label}
+                            name={field.name}
+                            value={fields[field.name]}
+                            people={peopleOptions}
+                            onChange={updateField}
+                          />
+                        ))}
+                        {visibleCameraCount < CAMERA_FIELD_CONFIGS.length ? (
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            className="h-11 justify-center gap-2 border-dashed border-[#d7dde7] text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--accent)]"
+                            onClick={() =>
+                              setVisibleCameraCount((current) =>
+                                Math.min(current + 1, CAMERA_FIELD_CONFIGS.length),
+                              )
+                            }
+                          >
+                            <Plus className="size-4" />
+                            Agregar cámara
+                          </Button>
+                        ) : null}
                       </div>
                     </SectionBlock>
 
                     <SectionBlock
-                      icon={<UserRound className="size-4.5" />}
+                      icon={<Mic2 className="size-4.5" />}
                       title="Relatos / comentarios"
                     >
-                      <div className="space-y-4">
-                        <LabeledField label="Relatos / Comentarios">
-                          <Input
+                      <div className="grid gap-4">
+                        <div>
+                          <Select
                             name="commentaryPlan"
                             value={fields.commentaryPlan}
                             onChange={(event) =>
                               updateField("commentaryPlan", event.target.value)
                             }
-                            placeholder="Cancha, estudio, remoto..."
+                            aria-label="Modalidad de relatos"
                             className={fieldSurfaceClass}
-                          />
-                        </LabeledField>
+                          >
+                            <option value="">Sin definir</option>
+                            {COMMENTARY_PLAN_OPTIONS.map((option) => (
+                              <option key={option} value={option}>
+                                {option}
+                              </option>
+                            ))}
+                          </Select>
+                        </div>
                         <PersonSelectField
                           label="Relator"
                           name="relatorId"
@@ -1034,8 +1077,10 @@ export function CreateMatchModal({
               </div>
             </form>
           </div>
-        </div>
-      ) : null}
+        </div>,
+        document.body,
+      )
+        : null}
     </>
   );
 }
