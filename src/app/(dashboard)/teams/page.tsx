@@ -1,19 +1,15 @@
 import Link from "next/link";
-import { Plus, Search } from "lucide-react";
+import { Search } from "lucide-react";
 
 import { SectionAiAssistant } from "@/components/ai/section-ai-assistant";
+import { CreateTeamModal } from "@/components/teams/create-team-modal";
 import { PageCanvasTone } from "@/components/layout/page-canvas-tone";
 import { SectionPageHeader } from "@/components/layout/section-page-header";
-import { TeamCard } from "@/components/teams/team-card";
-import { EmptyState } from "@/components/ui/empty-state";
+import { TeamsWorkspaceClient } from "@/components/teams/teams-workspace-client";
 import { Input } from "@/components/ui/input";
 import { getUserContext } from "@/lib/auth";
 import { getPeopleData } from "@/lib/data/dashboard";
 import { getSettingsSnapshot } from "@/lib/settings";
-import {
-  buildTeamResponsibleLookup,
-  getTeamResponsibleContact,
-} from "@/lib/team-responsibles";
 import {
   getTeamLeagueAccentColor,
   getTeamLeagueCanvasTone,
@@ -66,7 +62,6 @@ export default async function TeamsPage({ searchParams }: PageProps) {
   const activeLeague = readSearchValue(resolvedSearchParams.league);
   const teams = getTeamDirectoryData({ query, league: activeLeague });
   const people = user.userId ? await getPeopleData() : [];
-  const responsibleLookup = buildTeamResponsibleLookup(people);
   const settings = await getSettingsSnapshot();
   const tabs = getTeamDirectoryTabs();
   const leagueAccent = activeLeague
@@ -75,11 +70,6 @@ export default async function TeamsPage({ searchParams }: PageProps) {
   const leagueCanvasTone = activeLeague
     ? getTeamLeagueCanvasTone(activeLeague)
     : null;
-  const registeredCount = teams.filter((team) => Boolean(team.manager)).length;
-  const incidentCount = teams.reduce(
-    (sum, team) => sum + team.incident_count,
-    0,
-  );
   const aiContext = teams.map((team) => ({
     equipo: team.official_name,
     liga: team.competition,
@@ -135,113 +125,68 @@ export default async function TeamsPage({ searchParams }: PageProps) {
             buttonVariant="icon"
           />
 
-          <button
-            type="button"
-            disabled
-            title="La carga manual llegará con el módulo de equipos persistidos."
-            className="hidden h-[52px] items-center gap-2 rounded-[var(--panel-radius)] bg-[var(--accent)] px-5 text-sm font-extrabold text-white opacity-65 shadow-[0_14px_28px_rgba(230,18,56,0.18)] sm:inline-flex"
-          >
-            <Plus className="size-4" />
-            Registrar equipo
-          </button>
+          <CreateTeamModal
+            canEdit={user.canEdit}
+            defaultCompetition={activeLeague}
+          />
           </>
         }
       />
 
-      <div className="flex overflow-x-auto border-b border-[#f0d9de]">
-        <Link
-          href={buildTeamsHref(resolvedSearchParams, { league: undefined })}
-          className={cn(
-            "whitespace-nowrap border-b-2 px-6 py-3 text-sm font-bold transition",
-            !activeLeague
-              ? "border-[var(--accent)] text-[var(--accent)]"
-              : "border-transparent text-[#617187] hover:text-[var(--accent)]",
-          )}
-        >
-          Todos ({TEAM_DIRECTORY.length})
-        </Link>
-        {tabs.map((tab) => (
+      <div className="flex items-center gap-3 border-b border-[#f0d9de]">
+        <div className="flex min-w-0 flex-1 overflow-x-auto">
           <Link
-            key={tab.value}
-            href={buildTeamsHref(resolvedSearchParams, { league: tab.value })}
-            style={
-              activeLeague === tab.value && leagueAccent
-                ? {
-                    borderColor: leagueAccent,
-                    color: leagueAccent,
-                  }
-                : undefined
-            }
+            href={buildTeamsHref(resolvedSearchParams, { league: undefined })}
             className={cn(
               "whitespace-nowrap border-b-2 px-6 py-3 text-sm font-bold transition",
-              activeLeague === tab.value
+              !activeLeague
                 ? "border-[var(--accent)] text-[var(--accent)]"
                 : "border-transparent text-[#617187] hover:text-[var(--accent)]",
             )}
           >
-            {tab.label} ({tab.count})
+            Todos ({TEAM_DIRECTORY.length})
           </Link>
-        ))}
+          {tabs.map((tab) => (
+            <Link
+              key={tab.value}
+              href={buildTeamsHref(resolvedSearchParams, { league: tab.value })}
+              style={
+                activeLeague === tab.value && leagueAccent
+                  ? {
+                      borderColor: leagueAccent,
+                      color: leagueAccent,
+                    }
+                  : undefined
+              }
+              className={cn(
+                "whitespace-nowrap border-b-2 px-6 py-3 text-sm font-bold transition",
+                activeLeague === tab.value
+                  ? "border-[var(--accent)] text-[var(--accent)]"
+                  : "border-transparent text-[#617187] hover:text-[var(--accent)]",
+              )}
+            >
+              {tab.label} ({tab.count})
+            </Link>
+          ))}
+        </div>
+
+        {user.canEdit ? (
+          <div className="shrink-0 pb-3">
+            <CreateTeamModal
+              canEdit={user.canEdit}
+              defaultCompetition={activeLeague}
+              triggerVariant="icon"
+            />
+          </div>
+        ) : null}
       </div>
 
-      {teams.length ? (
-        <>
-          <div className="grid gap-6 lg:grid-cols-2 2xl:grid-cols-3">
-            {teams.map((team) => (
-              <TeamCard
-                key={team.id}
-                team={team}
-                activeLeague={activeLeague || undefined}
-                responsibleContact={getTeamResponsibleContact(
-                  team.official_name,
-                  team.manager,
-                  responsibleLookup,
-                )}
-              />
-            ))}
-          </div>
-
-          <section className="panel-surface grid gap-4 border border-[var(--border)] bg-[var(--background-soft)] p-6 sm:grid-cols-2 xl:grid-cols-4">
-            <div className="text-center">
-              <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#94a3b8]">
-                Equipos visibles
-              </p>
-              <p className="mt-2 text-3xl font-black text-[var(--foreground)]">
-                {teams.length}
-              </p>
-            </div>
-            <div className="text-center">
-              <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#94a3b8]">
-                Ligas activas
-              </p>
-              <p className="mt-2 text-3xl font-black text-[var(--foreground)]">
-                {new Set(teams.map((team) => team.competition)).size}
-              </p>
-            </div>
-            <div className="text-center">
-              <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#94a3b8]">
-                Incidencias
-              </p>
-              <p className="mt-2 text-3xl font-black text-[var(--accent)]">
-                {incidentCount}
-              </p>
-            </div>
-            <div className="text-center">
-              <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#94a3b8]">
-                Con responsable
-              </p>
-              <p className="mt-2 text-3xl font-black text-[var(--foreground)]">
-                {registeredCount}
-              </p>
-            </div>
-          </section>
-        </>
-      ) : (
-        <EmptyState
-          title="No encontramos equipos para esta búsqueda"
-          description="Prueba con otra liga o elimina el término de búsqueda para volver al directorio completo."
-        />
-      )}
+      <TeamsWorkspaceClient
+        initialTeams={teams}
+        people={people}
+        activeLeague={activeLeague}
+        query={query}
+      />
     </div>
   );
 }

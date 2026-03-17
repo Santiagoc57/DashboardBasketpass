@@ -12,7 +12,7 @@ import {
   UserRound,
 } from "lucide-react";
 
-import { TeamLogoMark } from "@/components/team-logo-mark";
+import { ClientTeamLogoMark } from "@/components/team-logo-mark-client";
 import type { TeamResponsibleContact } from "@/lib/team-responsibles";
 import {
   getTeamLeagueAccentColor,
@@ -92,10 +92,10 @@ export function TeamCard({
           "--team-league-accent": hoverAccent,
         } as CSSProperties
       }
-      className="panel-surface group overflow-hidden border border-[var(--border)] bg-[#f7f5f6] transition duration-300 hover:-translate-y-0.5 sm:flex"
+      className="panel-surface group overflow-hidden border border-[var(--border)] bg-white transition duration-300 hover:-translate-y-0.5 sm:flex"
     >
-      <div className="relative flex h-56 flex-col items-center justify-center gap-5 bg-[#f7f5f6] p-8 sm:h-auto sm:w-44 sm:border-r sm:border-[var(--border)]">
-        <TeamLogoMark
+      <div className="relative flex h-56 flex-col items-center justify-center gap-5 bg-white p-8 sm:h-auto sm:w-44 sm:border-r sm:border-[var(--border)]">
+        <ClientTeamLogoMark
           teamName={team.official_name}
           competition={team.competition}
           className="panel-surface relative z-10 size-28 border-[#ebe6e8] bg-white"
@@ -152,7 +152,7 @@ export function TeamCard({
             </div>
             <div className="flex items-center gap-2">
               <UserRound className="size-4 shrink-0" />
-              <span className="min-w-0 truncate">Resp: {responsibleLabel}</span>
+              <span className="min-w-0 truncate">{responsibleLabel}</span>
               {responsibleContact?.phone ? (
                 <a
                   href={buildWhatsAppUrl(responsibleContact.phone)}

@@ -1,4 +1,4 @@
-import type { Database } from "@/lib/database.types";
+import type { AppRole, Database } from "@/lib/database.types";
 
 export const APP_NAME = "Basket Production";
 export const APP_RELEASE_LABEL = "Consola operativa v0.1.0";
@@ -84,6 +84,35 @@ export const DASHBOARD_NAV = [
   { href: "/roles", label: "Roles" },
   { href: "/settings", label: "Configuración" },
 ] as const;
+
+const COLLABORATOR_ALLOWED_DASHBOARD_PREFIXES = [
+  "/mi-jornada",
+  "/teams",
+] as const;
+
+export function isCollaboratorLimitedRole(role?: AppRole | null) {
+  return role === "collaborator";
+}
+
+export function isDashboardPathAllowedForRole(
+  pathname: string,
+  role?: AppRole | null,
+) {
+  if (!isCollaboratorLimitedRole(role)) {
+    return true;
+  }
+
+  return COLLABORATOR_ALLOWED_DASHBOARD_PREFIXES.some((prefix) =>
+    pathname === prefix || pathname.startsWith(`${prefix}/`),
+  );
+}
+
+export function isDashboardNavHrefAllowedForRole(
+  href: string,
+  role?: AppRole | null,
+) {
+  return isDashboardPathAllowedForRole(href, role);
+}
 
 export const RESERVED_IMPORT_HEADERS = new Set([
   "fecha",

@@ -133,7 +133,7 @@ export function CreateMatchForm({
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="space-y-2">
               <span className="text-sm font-bold text-[var(--foreground)]">
-                Modo
+                Producción
               </span>
               <Select
                 name="productionMode"

@@ -1482,16 +1482,6 @@ export function IncidentsWorkspace({
       </label>
 
       <div className="flex shrink-0 items-center gap-3">
-        <button
-          type="button"
-          onClick={() => void exportVisibleIncidents(sortedIncidents)}
-          disabled={!sortedIncidents.length || isExporting}
-          aria-label={isExporting ? "Exportando incidencias" : "Exportar incidencias"}
-          title={isExporting ? "Exportando incidencias" : "Exportar incidencias"}
-          className="inline-flex size-[52px] items-center justify-center rounded-[var(--panel-radius)] bg-[var(--accent)] text-white shadow-[0_14px_28px_rgba(230,18,56,0.18)] transition hover:bg-[var(--accent-strong)]"
-        >
-          <Download className="size-4" />
-        </button>
         <SectionAiAssistant
           section="Incidencias"
           title="Consulta las incidencias visibles"
@@ -1509,6 +1499,16 @@ export function IncidentsWorkspace({
           hasGeminiKey={hasGeminiKey}
           buttonVariant="icon"
         />
+        <button
+          type="button"
+          onClick={() => void exportVisibleIncidents(sortedIncidents)}
+          disabled={!sortedIncidents.length || isExporting}
+          aria-label={isExporting ? "Exportando incidencias" : "Exportar incidencias"}
+          title={isExporting ? "Exportando incidencias" : "Exportar incidencias"}
+          className="inline-flex size-[52px] items-center justify-center rounded-[var(--panel-radius)] bg-[#7c3aed] text-white shadow-[0_14px_28px_rgba(124,58,237,0.22)] transition hover:bg-[#6d28d9]"
+        >
+          <Download className="size-4" />
+        </button>
       </div>
     </div>
   );

@@ -316,7 +316,10 @@ export function MatchCard({
                       className="size-12 rounded-full 2xl:size-14"
                     />
                   )}
-                  <p className="mt-2 text-center text-[0.84rem] font-black leading-[1.04] tracking-[-0.03em] text-[var(--foreground)] 2xl:mt-3 2xl:text-[0.98rem]">
+                  <p
+                    title={match.home_team}
+                    className="mt-2 min-h-[2.1em] text-center text-[0.84rem] font-black leading-[1.04] tracking-[-0.03em] text-[var(--foreground)] [display:-webkit-box] overflow-hidden text-ellipsis [-webkit-box-orient:vertical] [-webkit-line-clamp:2] 2xl:mt-3 2xl:min-h-[2.16em] 2xl:text-[0.98rem]"
+                  >
                     {match.home_team}
                   </p>
                 </div>
@@ -349,7 +352,10 @@ export function MatchCard({
                       className="size-12 rounded-full 2xl:size-14"
                     />
                   )}
-                  <p className="mt-2 text-center text-[0.84rem] font-black leading-[1.04] tracking-[-0.03em] text-[var(--foreground)] 2xl:mt-3 2xl:text-[0.98rem]">
+                  <p
+                    title={match.away_team}
+                    className="mt-2 min-h-[2.1em] text-center text-[0.84rem] font-black leading-[1.04] tracking-[-0.03em] text-[var(--foreground)] [display:-webkit-box] overflow-hidden text-ellipsis [-webkit-box-orient:vertical] [-webkit-line-clamp:2] 2xl:mt-3 2xl:min-h-[2.16em] 2xl:text-[0.98rem]"
+                  >
                     {match.away_team}
                   </p>
                 </div>

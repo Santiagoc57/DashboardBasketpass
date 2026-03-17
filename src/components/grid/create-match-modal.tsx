@@ -60,7 +60,7 @@ const CORE_FIELD_LABELS: Record<(typeof CORE_REQUIRED_FIELDS)[number], string> =
   awayTeam: "Visitante",
   date: "Día",
   time: "Hora",
-  productionMode: "Modo",
+  productionMode: "Producción",
   venue: "Sede",
 };
 
@@ -644,7 +644,7 @@ export function CreateMatchModal({
                     >
                       <div className="grid gap-4 md:grid-cols-2">
                         <LabeledField
-                          label="Producción"
+                          label="ID"
                           required
                           alert={missingFields.includes("productionCode")}
                         >
@@ -806,7 +806,7 @@ export function CreateMatchModal({
                           />
                         </LabeledField>
                         <LabeledField
-                          label="Modo"
+                          label="Producción"
                           required
                           alert={missingFields.includes("productionMode")}
                         >
@@ -950,7 +950,7 @@ export function CreateMatchModal({
                       title="Relatos / comentarios"
                     >
                       <div className="grid gap-4">
-                        <div>
+                        <LabeledField label="Tipo de relato">
                           <Select
                             name="commentaryPlan"
                             value={fields.commentaryPlan}
@@ -967,7 +967,7 @@ export function CreateMatchModal({
                               </option>
                             ))}
                           </Select>
-                        </div>
+                        </LabeledField>
                         <PersonSelectField
                           label="Relator"
                           name="relatorId"

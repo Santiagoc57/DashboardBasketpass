@@ -49,6 +49,7 @@ export function DashboardShell({
     user?.email?.split("@")[0] ||
     "Usuario";
   const roleLabel = getAppRoleDisplayName(user?.role).toUpperCase();
+  const limitedCollaborator = user?.role === "collaborator";
 
   return (
     <div className="min-h-screen bg-[var(--page-canvas)]">
@@ -69,7 +70,7 @@ export function DashboardShell({
           </div>
 
           <div className="flex flex-1 flex-col justify-between px-5 py-6">
-            <DashboardNav />
+            <DashboardNav role={user?.role ?? null} />
           </div>
         </aside>
 
@@ -87,19 +88,22 @@ export function DashboardShell({
 
               <div className="ml-auto flex items-center gap-4 sm:gap-5">
                 <DashboardAnnouncementBell announcement={announcement} />
-                <Link
-                  href="/settings"
-                  className="hidden size-11 items-center justify-center rounded-2xl bg-[var(--surface)] text-[#52627b] transition hover:bg-[var(--background-soft)] hover:text-[var(--foreground)] sm:flex"
-                  title="Configuración"
-                >
-                  <Settings2 className="size-5" />
-                </Link>
+                {!limitedCollaborator ? (
+                  <Link
+                    href="/settings"
+                    className="hidden size-11 items-center justify-center rounded-2xl bg-[var(--surface)] text-[#52627b] transition hover:bg-[var(--background-soft)] hover:text-[var(--foreground)] sm:flex"
+                    title="Configuración"
+                  >
+                    <Settings2 className="size-5" />
+                  </Link>
+                ) : null}
                 <div className="hidden h-10 w-px bg-[var(--border)] sm:block" />
                 <UserProfileChip
                   userId={user?.userId ?? null}
                   fullName={displayName}
                   email={user?.email ?? null}
                   roleLabel={roleLabel}
+                  role={user?.role ?? null}
                   mobileMenu
                   className="sm:hidden"
                 />
@@ -108,6 +112,7 @@ export function DashboardShell({
                   fullName={displayName}
                   email={user?.email ?? null}
                   roleLabel={roleLabel}
+                  role={user?.role ?? null}
                   className="hidden sm:flex"
                 />
                 {user?.userId ? (

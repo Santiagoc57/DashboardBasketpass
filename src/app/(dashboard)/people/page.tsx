@@ -17,7 +17,6 @@ import { deletePersonAction, upsertPersonAction } from "@/app/actions/people";
 import { SectionAiAssistant } from "@/components/ai/section-ai-assistant";
 import { SectionPageHeader } from "@/components/layout/section-page-header";
 import { SetupPanel } from "@/components/layout/setup-panel";
-import { PeopleAdminWarningModal } from "@/components/people/people-admin-warning-modal";
 import { PeopleDirectoryView } from "@/components/people/people-directory-view";
 import { CreatePersonModal } from "@/components/people/create-person-modal";
 import { PeopleTable } from "@/components/people/people-table";
@@ -282,6 +281,35 @@ export default async function PeoplePage({ searchParams }: PageProps) {
                 />
               </div>
             </form>
+            {people.length ? (
+              <>
+                <a
+                  href={exportHref}
+                  download="basket-production-personal.csv"
+                  aria-label="Descargar lista de personal"
+                  title="Descargar lista de personal"
+                  className="inline-flex size-[52px] items-center justify-center rounded-[var(--panel-radius)] bg-[#7c3aed] text-white shadow-[0_14px_28px_rgba(124,58,237,0.22)] transition hover:bg-[#6d28d9]"
+                >
+                  <Download className="size-4" />
+                </a>
+                <SectionAiAssistant
+                  section="Personal"
+                  title="Consulta el personal visible"
+                  description="Haz preguntas sobre roles, coberturas, disponibilidad, teléfonos o correos del personal cargado en esta pantalla."
+                  placeholder="Ej. ¿Qué rol tiene Santiago Córdoba y quién cubre Boca Juniors?"
+                  contextLabel="Personal visible en la vista actual"
+                  context={aiContext}
+                  guidance="Prioriza rol principal, responsable de equipos, estado, teléfono, email y notas. Si preguntan por una persona, responde solo con lo visible en esta pantalla."
+                  examples={[
+                    "¿Qué rol tiene Santiago Córdoba?",
+                    "¿Quién cubre Boca Juniors?",
+                    "¿Qué datos hay de Juan Camilo y Samuel Venegas?",
+                  ]}
+                  hasGeminiKey={settings.hasGeminiKey}
+                  buttonVariant="icon"
+                />
+              </>
+            ) : null}
             {user.canEdit ? (
               <CreatePersonModal
                 canEdit={user.canEdit}
@@ -289,34 +317,6 @@ export default async function PeoplePage({ searchParams }: PageProps) {
                 roleOptions={ROLE_OPTIONS}
                 teamOptions={TEAM_OPTIONS}
               />
-            ) : null}
-            {people.length ? (
-            <>
-              <SectionAiAssistant
-                section="Personal"
-                title="Consulta el personal visible"
-                description="Haz preguntas sobre roles, coberturas, disponibilidad, teléfonos o correos del personal cargado en esta pantalla."
-                placeholder="Ej. ¿Qué rol tiene Santiago Córdoba y quién cubre Boca Juniors?"
-                contextLabel="Personal visible en la vista actual"
-                context={aiContext}
-                guidance="Prioriza rol principal, responsable de equipos, estado, teléfono, email y notas. Si preguntan por una persona, responde solo con lo visible en esta pantalla."
-                examples={[
-                  "¿Qué rol tiene Santiago Córdoba?",
-                  "¿Quién cubre Boca Juniors?",
-                  "¿Qué datos hay de Juan Camilo y Samuel Venegas?",
-                ]}
-                hasGeminiKey={settings.hasGeminiKey}
-                buttonVariant="icon"
-              />
-              <a
-                href={exportHref}
-                download="basket-production-personal.csv"
-                className="inline-flex h-[52px] items-center gap-2 rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--surface)] px-4 py-2.5 text-sm font-semibold text-[#415067] shadow-sm transition hover:border-[#f0d9de] hover:bg-[#fff7f8]"
-              >
-                <Download className="size-4" />
-                Exportar Lista
-              </a>
-            </>
             ) : null}
           </>
         }
@@ -358,7 +358,7 @@ export default async function PeoplePage({ searchParams }: PageProps) {
       </div>
 
       <SectionTableCard
-        title={viewMode === "directory" ? "Directorio de Personal" : "Lista de Personal"}
+        title={viewMode === "directory" ? "Directorio de Personal" : "Personal de Basquetpass"}
         badge={
           <div className="flex flex-wrap items-center gap-2">
             <span className="inline-flex items-center gap-1.5 rounded-full border border-[#d8dee8] bg-[#f6f8fb] px-3 py-1 text-xs font-bold text-[#596980]">
@@ -392,43 +392,50 @@ export default async function PeoplePage({ searchParams }: PageProps) {
                 <LayoutGrid className="size-3.5" />
                 Directorio
               </Link>
-              {user.role === "admin" ? (
-                <PeopleAdminWarningModal
-                  triggerClassName="ml-1 inline-flex h-full w-8 rounded-[calc(var(--panel-radius)-4px)] border-0 bg-transparent text-[var(--muted)] hover:bg-[var(--surface)] hover:text-[var(--foreground)]"
-                />
-              ) : null}
             </div>
-            {user.canEdit && selectedPerson ? (
+            {user.canEdit ? (
               <>
-                <Link
-                  href={selectedPeopleHref ?? currentPeopleHref}
-                  className="inline-flex size-9 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--surface)] text-[#7b8798] transition hover:border-[#f0d9de] hover:bg-[#fff7f8] hover:text-[var(--accent)]"
-                  title={`Editar ${selectedPerson.full_name}`}
-                >
-                  <PencilLine className="size-4" />
-                </Link>
-                <form
-                  action={deletePersonAction}
-                  onSubmit={(event) => {
-                    const confirmed = window.confirm(
-                      `Vas a eliminar el registro de ${selectedPerson.full_name}. Este cambio puede ser permanente y afectar futuras asignaciones. ¿Quieres continuar?`,
-                    );
-
-                    if (!confirmed) {
-                      event.preventDefault();
-                    }
-                  }}
-                >
-                  <input type="hidden" name="personId" value={selectedPerson.id} />
-                  <input type="hidden" name="redirectTo" value={currentPeopleHref} />
-                  <button
-                    type="submit"
-                    className="inline-flex size-9 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--surface)] text-[#7b8798] transition hover:border-[#f0d9de] hover:bg-[#fff0f3] hover:text-[#bf1e41]"
-                    title={`Eliminar ${selectedPerson.full_name}`}
+                {selectedPerson ? (
+                  <Link
+                    href={selectedPeopleHref ?? currentPeopleHref}
+                    className="inline-flex size-9 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--surface)] text-[#7b8798] transition hover:border-[#f0d9de] hover:bg-[#fff7f8] hover:text-[var(--accent)]"
+                    title={`Editar ${selectedPerson.full_name}`}
                   >
-                    <Trash2 className="size-4" />
-                  </button>
-                </form>
+                    <PencilLine className="size-4" />
+                  </Link>
+                ) : (
+                  <span
+                    aria-label="Selecciona una persona para editar"
+                    title="Selecciona una persona para editar"
+                    className="inline-flex size-9 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--surface)] text-[#c2cad7] opacity-70"
+                  >
+                    <PencilLine className="size-4" />
+                  </span>
+                )}
+                {selectedPerson ? (
+                  <form
+                    action={deletePersonAction}
+                    onSubmit={(event) => {
+                      const confirmed = window.confirm(
+                        `Vas a eliminar el registro de ${selectedPerson.full_name}. Este cambio puede ser permanente y afectar futuras asignaciones. ¿Quieres continuar?`,
+                      );
+
+                      if (!confirmed) {
+                        event.preventDefault();
+                      }
+                    }}
+                  >
+                    <input type="hidden" name="personId" value={selectedPerson.id} />
+                    <input type="hidden" name="redirectTo" value={currentPeopleHref} />
+                    <button
+                      type="submit"
+                      className="inline-flex size-9 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--surface)] text-[#7b8798] transition hover:border-[#f0d9de] hover:bg-[#fff0f3] hover:text-[#bf1e41]"
+                      title={`Eliminar ${selectedPerson.full_name}`}
+                    >
+                      <Trash2 className="size-4" />
+                    </button>
+                  </form>
+                ) : null}
               </>
             ) : null}
           </div>

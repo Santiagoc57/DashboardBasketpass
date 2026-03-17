@@ -12,6 +12,8 @@ import {
   Shield,
 } from "lucide-react";
 
+import type { AppRole } from "@/lib/database.types";
+import { isDashboardNavHrefAllowedForRole } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 
 const navItems = [
@@ -25,16 +27,28 @@ const navItems = [
 ] as const;
 
 const mobileNavItems = navItems.filter((item) =>
-  ["/grid", "/mi-jornada", "/reports"].includes(item.href),
+  ["/grid", "/mi-jornada", "/reports", "/teams"].includes(item.href),
 );
 
-export function DashboardNav({ mobile = false }: { mobile?: boolean }) {
+export function DashboardNav({
+  mobile = false,
+  role,
+}: {
+  mobile?: boolean;
+  role?: AppRole | null;
+}) {
   const pathname = usePathname();
+  const allowedItems = navItems.filter((item) =>
+    isDashboardNavHrefAllowedForRole(item.href, role),
+  );
+  const allowedMobileItems = mobileNavItems.filter((item) =>
+    isDashboardNavHrefAllowedForRole(item.href, role),
+  );
 
   if (mobile) {
     return (
       <nav className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        {mobileNavItems.map((item) => {
+        {allowedMobileItems.map((item) => {
           const active = pathname.startsWith(item.href);
           const Icon = item.icon;
 
@@ -60,7 +74,7 @@ export function DashboardNav({ mobile = false }: { mobile?: boolean }) {
 
   return (
     <nav className="space-y-2">
-      {navItems.map((item) => {
+      {allowedItems.map((item) => {
         const active = pathname.startsWith(item.href);
         const Icon = item.icon;
 

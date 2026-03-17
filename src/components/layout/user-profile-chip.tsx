@@ -6,6 +6,8 @@ import { BriefcaseBusiness, Camera, LogOut, Settings2, Shield, UserRound } from 
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { signOutAction } from "@/app/actions/auth";
+import type { AppRole } from "@/lib/database.types";
+import { isCollaboratorLimitedRole } from "@/lib/constants";
 import {
   AVATAR_CHANGE_EVENT,
   getAvatarStorageKey,
@@ -26,6 +28,7 @@ export function UserProfileChip({
   fullName,
   email,
   roleLabel,
+  role,
   className,
   mobileMenu = false,
 }: {
@@ -33,6 +36,7 @@ export function UserProfileChip({
   fullName: string;
   email: string | null;
   roleLabel: string;
+  role?: AppRole | null;
   className?: string;
   mobileMenu?: boolean;
 }) {
@@ -147,6 +151,7 @@ export function UserProfileChip({
       )}
     </div>
   );
+  const limitedCollaborator = isCollaboratorLimitedRole(role);
 
   if (mobileMenu) {
     return (
@@ -180,14 +185,16 @@ export function UserProfileChip({
               <Shield className="size-4 text-[#617187]" />
               Equipos
             </Link>
-            <Link
-              href="/settings"
-              onClick={() => setMenuOpen(false)}
-              className="flex w-full items-center gap-3 rounded-[calc(var(--panel-radius)-4px)] px-3 py-3 text-sm font-semibold text-[var(--foreground)] transition hover:bg-[var(--background-soft)]"
-            >
-              <Settings2 className="size-4 text-[#617187]" />
-              Configuración
-            </Link>
+            {!limitedCollaborator ? (
+              <Link
+                href="/settings"
+                onClick={() => setMenuOpen(false)}
+                className="flex w-full items-center gap-3 rounded-[calc(var(--panel-radius)-4px)] px-3 py-3 text-sm font-semibold text-[var(--foreground)] transition hover:bg-[var(--background-soft)]"
+              >
+                <Settings2 className="size-4 text-[#617187]" />
+                Configuración
+              </Link>
+            ) : null}
             <form action={signOutAction}>
               <button
                 type="submit"

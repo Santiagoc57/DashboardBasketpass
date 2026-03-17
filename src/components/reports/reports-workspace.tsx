@@ -1356,6 +1356,23 @@ export function ReportsWorkspace({
     };
   }, [baseFilteredReports, incidentChartLimit, incidentChartMetric, periodMode]);
 
+  const incidentChartFrame = {
+    width: 960,
+    height: 390,
+    marginTop: 8,
+    marginRight: 4,
+    marginBottom: 32,
+    marginLeft: 22,
+  } as const;
+  const incidentChartPlotWidth =
+    incidentChartFrame.width -
+    incidentChartFrame.marginLeft -
+    incidentChartFrame.marginRight;
+  const incidentChartPlotHeight =
+    incidentChartFrame.height -
+    incidentChartFrame.marginTop -
+    incidentChartFrame.marginBottom;
+
   const leagueDistribution = useMemo(() => {
     const leagueMap = new Map<string, number>();
 
@@ -2243,7 +2260,7 @@ export function ReportsWorkspace({
         disabled={!baseFilteredReports.length || isExporting}
         aria-label={isExporting ? "Exportando reportes" : "Exportar reportes"}
         title={isExporting ? "Exportando reportes" : "Exportar reportes"}
-        className="inline-flex size-12 items-center justify-center rounded-[var(--panel-radius)] bg-[var(--accent)] text-white shadow-[0_14px_28px_rgba(230,18,56,0.18)] transition hover:bg-[var(--accent-strong)]"
+        className="inline-flex size-12 items-center justify-center rounded-[var(--panel-radius)] bg-[#7c3aed] text-white shadow-[0_14px_28px_rgba(124,58,237,0.22)] transition hover:bg-[#6d28d9]"
       >
         <Download className="size-4" />
       </button>
@@ -2262,16 +2279,6 @@ export function ReportsWorkspace({
         />
       </label>
       <div className="flex shrink-0 items-center gap-3">
-        <button
-          type="button"
-          onClick={() => void exportVisibleReports(sortedReports)}
-          disabled={!sortedReports.length || isExporting}
-          aria-label={isExporting ? "Exportando reportes" : "Exportar reportes"}
-          title={isExporting ? "Exportando reportes" : "Exportar reportes"}
-          className="inline-flex size-[52px] items-center justify-center rounded-[var(--panel-radius)] bg-[var(--accent)] text-white shadow-[0_14px_28px_rgba(230,18,56,0.18)] transition hover:bg-[var(--accent-strong)]"
-        >
-          <Download className="size-4" />
-        </button>
         <SectionAiAssistant
           section="Reportes"
           title="Consulta los reportes visibles"
@@ -2288,6 +2295,16 @@ export function ReportsWorkspace({
           hasGeminiKey={hasGeminiKey}
           buttonVariant="icon"
         />
+        <button
+          type="button"
+          onClick={() => void exportVisibleReports(sortedReports)}
+          disabled={!sortedReports.length || isExporting}
+          aria-label={isExporting ? "Exportando reportes" : "Exportar reportes"}
+          title={isExporting ? "Exportando reportes" : "Exportar reportes"}
+          className="inline-flex size-[52px] items-center justify-center rounded-[var(--panel-radius)] bg-[#7c3aed] text-white shadow-[0_14px_28px_rgba(124,58,237,0.22)] transition hover:bg-[#6d28d9]"
+        >
+          <Download className="size-4" />
+        </button>
       </div>
     </>
   );
@@ -2834,8 +2851,8 @@ export function ReportsWorkspace({
                 />
               </section>
 
-              <article className="panel-surface border border-[var(--border)] bg-[var(--surface)] p-8">
-                <div className="mb-8 flex items-center justify-between gap-4">
+              <article className="panel-surface border border-[var(--border)] bg-[var(--surface)] p-6">
+                <div className="mb-6 flex items-center justify-between gap-4">
                   <div>
                     <h3 className="text-2xl font-black text-[var(--foreground)]">
                       Evolución de reportes por liga{" "}
@@ -2890,9 +2907,9 @@ export function ReportsWorkspace({
                   </div>
                 </div>
 
-                <div className="rounded-[var(--panel-radius)] bg-transparent p-6">
+                <div className="rounded-[var(--panel-radius)] bg-transparent">
                   {incidentLeagueChart.series.length ? (
-                    <div className="space-y-6">
+                    <div className="space-y-5">
                       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                         {incidentLeagueChart.series.map((item) => (
                           <div
@@ -2917,16 +2934,21 @@ export function ReportsWorkspace({
                         ))}
                       </div>
 
-                      <div className="h-[320px] rounded-[var(--panel-radius)] bg-white px-2 py-4">
-                        <svg viewBox="0 0 720 260" className="h-full w-full overflow-visible">
+                      <div className="h-[420px] rounded-[var(--panel-radius)] bg-white px-1 py-2 sm:px-0.5">
+                        <svg
+                          viewBox={`0 0 ${incidentChartFrame.width} ${incidentChartFrame.height}`}
+                          className="h-full w-full overflow-visible"
+                        >
                           {[0, 0.25, 0.5, 0.75, 1].map((ratio) => {
-                            const y = 20 + 180 * ratio;
+                            const y =
+                              incidentChartFrame.marginTop +
+                              incidentChartPlotHeight * ratio;
 
                             return (
                               <line
                                 key={ratio}
-                                x1="12"
-                                x2="714"
+                                x1={incidentChartFrame.marginLeft}
+                                x2={incidentChartFrame.width - incidentChartFrame.marginRight}
                                 y1={y}
                                 y2={y}
                                 stroke="#edf1f6"
@@ -2939,13 +2961,16 @@ export function ReportsWorkspace({
                             const values = item.points.map((point) => point.value);
                             const path = buildChartLinePath(
                               values,
-                              702,
-                              180,
+                              incidentChartPlotWidth,
+                              incidentChartPlotHeight,
                               incidentLeagueChart.maxValue,
                             );
 
                             return (
-                              <g key={item.league} transform="translate(12 20)">
+                              <g
+                                key={item.league}
+                                transform={`translate(${incidentChartFrame.marginLeft} ${incidentChartFrame.marginTop})`}
+                              >
                                 <path
                                   d={path}
                                   fill="none"
@@ -2958,11 +2983,15 @@ export function ReportsWorkspace({
                                 {values.map((value, index) => {
                                   const x =
                                     values.length === 1
-                                      ? 702 / 2
-                                      : (702 / Math.max(values.length - 1, 1)) * index;
+                                      ? incidentChartPlotWidth / 2
+                                      : (incidentChartPlotWidth /
+                                          Math.max(values.length - 1, 1)) *
+                                        index;
                                   const y =
-                                    180 -
-                                    (value / Math.max(incidentLeagueChart.maxValue, 1)) * 180;
+                                    incidentChartPlotHeight -
+                                    (value /
+                                      Math.max(incidentLeagueChart.maxValue, 1)) *
+                                      incidentChartPlotHeight;
 
                                   return (
                                     <circle
@@ -2983,14 +3012,17 @@ export function ReportsWorkspace({
                           {incidentLeagueChart.labels.map((label, index, labels) => {
                             const x =
                               labels.length === 1
-                                ? 360
-                                : 12 + (702 / Math.max(labels.length - 1, 1)) * index;
+                                ? incidentChartFrame.marginLeft + incidentChartPlotWidth / 2
+                                : incidentChartFrame.marginLeft +
+                                  (incidentChartPlotWidth /
+                                    Math.max(labels.length - 1, 1)) *
+                                    index;
 
                             return (
                               <text
                                 key={label}
                                 x={x}
-                                y="235"
+                                y={incidentChartFrame.height - 4}
                                 textAnchor="middle"
                                 className="fill-[#94a3b8] text-[11px] font-black tracking-[0.12em]"
                               >
@@ -3003,12 +3035,15 @@ export function ReportsWorkspace({
                             const value = Math.round(
                               incidentLeagueChart.maxValue * (1 - ratio) * 10,
                             ) / 10;
-                            const y = 24 + 180 * ratio;
+                            const y =
+                              incidentChartFrame.marginTop +
+                              incidentChartPlotHeight * ratio +
+                              4;
 
                             return (
                               <text
                                 key={`${ratio}-${index}`}
-                                x="0"
+                              x={2}
                                 y={y}
                                 textAnchor="start"
                                 className="fill-[#94a3b8] text-[11px] font-black"

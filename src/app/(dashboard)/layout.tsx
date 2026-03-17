@@ -2,6 +2,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { DashboardShell } from "@/components/layout/dashboard-shell";
+import { isDashboardPathAllowedForRole } from "@/lib/constants";
 import { getUserContext } from "@/lib/auth";
 import { getActiveAnnouncement } from "@/lib/data/announcements";
 import { appEnv, isSupabaseConfigured } from "@/lib/env";
@@ -23,6 +24,10 @@ export default async function DashboardLayout({
 
   if (isSupabaseConfigured && !user?.userId && !allowsGuestMiJornada) {
     redirect("/login");
+  }
+
+  if (user?.userId && !isDashboardPathAllowedForRole(pathname, user.role)) {
+    redirect("/mi-jornada");
   }
 
   return (

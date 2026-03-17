@@ -29,7 +29,7 @@ export function parseNotice(searchParams: RawSearchParams) {
 
 export function parseGridSearchParams(searchParams: RawSearchParams) {
   const view = (
-    getParam(searchParams, "view") === "month" ? "month" : "day"
+    getParam(searchParams, "view") === "day" ? "day" : "month"
   ) as "day" | "month";
   const defaultDate =
     view === "month" ? getMonthInputValue() : getDateInputValue();

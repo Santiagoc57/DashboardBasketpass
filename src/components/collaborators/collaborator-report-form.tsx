@@ -2,10 +2,12 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
   Building2,
   CalendarDays,
+  ChevronDown,
   CheckCircle2,
   Circle,
   CircleEllipsis,
@@ -38,13 +40,14 @@ type ToggleValue = "si" | "no";
 type IncidentLevel = "sin" | "baja" | "alta" | "critica";
 type TechnicalCaptureKind = "speedtest" | "ping" | "gpu";
 type ReadingState = "idle" | "loading" | "error" | "done";
+type SignalOption = "BP" | "BP / IMG";
 
 type DraftState = {
   incidentLevel: IncidentLevel;
   paid: ToggleValue;
   feedDetected: ToggleValue;
   problems: Record<IssueKey, boolean>;
-  signalLabel: string;
+  signalLabel: SignalOption;
   aptoLineal: ToggleValue;
   testTime: string;
   testCheck: ToggleValue;
@@ -90,6 +93,8 @@ const YES_NO_OPTIONS: Array<{ label: string; value: ToggleValue }> = [
   { label: "NO", value: "no" },
 ];
 
+const SIGNAL_OPTIONS: SignalOption[] = ["BP", "BP / IMG"];
+
 const REPORT_ICON_BUBBLE_BASE =
   "inline-flex items-center justify-center rounded-full border border-[#ece6df] bg-[#faf7f3] shadow-[0_4px_12px_rgba(43,30,17,0.06)]";
 
@@ -104,34 +109,44 @@ const INCIDENT_LEVEL_OPTIONS: Array<{
     value: "sin",
     label: "Sin",
     icon: CheckCircle2,
-    activeClassName: "border-[#d5ebdd] bg-[#f3fcf6] text-[#1b7d43]",
-    activeIconClassName: "border-[#ece6df] bg-[#faf7f3] text-[#1b7d43]",
+    activeClassName: "border-[#bfe4ca] bg-[#eefaf2] text-[#1b7d43]",
+    activeIconClassName: "border-[#1b7d43] bg-[#1b7d43] text-white",
   },
   {
     value: "baja",
     label: "Baja",
     icon: Circle,
-    activeClassName: "border-[#dde5ef] bg-[#f8fafc] text-[#70819b]",
-    activeIconClassName: "border-[#ece6df] bg-[#faf7f3] text-[#6b5d5f]",
+    activeClassName: "border-[#d7dee8] bg-[#f4f7fa] text-[#70819b]",
+    activeIconClassName: "border-[#70819b] bg-[#70819b] text-white",
   },
   {
     value: "alta",
     label: "Alta",
     icon: AlertTriangle,
-    activeClassName: "border-[#f3cfd8] bg-[#fff1f3] text-[#cf2246]",
-    activeIconClassName: "border-[#ece6df] bg-[#faf7f3] text-[#cf2246]",
+    activeClassName: "border-[#f0c4ce] bg-[#fff0f3] text-[#cf2246]",
+    activeIconClassName: "border-[#cf2246] bg-[#cf2246] text-white",
   },
   {
     value: "critica",
     label: "Crítica",
     icon: ShieldAlert,
-    activeClassName: "border-[#ead8f8] bg-[#fbf2ff] text-[#a12ad6]",
-    activeIconClassName: "border-[#ece6df] bg-[#faf7f3] text-[#a12ad6]",
+    activeClassName: "border-[#e1cdf4] bg-[#fbf2ff] text-[#a12ad6]",
+    activeIconClassName: "border-[#a12ad6] bg-[#a12ad6] text-white",
   },
 ];
 
 function getDraftKey(assignmentId: string) {
   return `basket-production.collaborator-report.${assignmentId}`;
+}
+
+function normalizeSignalLabel(value: string | null | undefined): SignalOption {
+  const normalized = value?.trim().toUpperCase().replace(/\s+/g, " ");
+
+  if (normalized === "BP/IMG" || normalized === "BP / IMG") {
+    return "BP / IMG";
+  }
+
+  return "BP";
 }
 
 function buildDefaultDraft(): DraftState {
@@ -140,12 +155,12 @@ function buildDefaultDraft(): DraftState {
     paid: "si",
     feedDetected: "si",
     problems: DEFAULT_PROBLEMS,
-    signalLabel: "",
+    signalLabel: "BP",
     aptoLineal: "si",
     testTime: "",
-    testCheck: "si",
-    startCheck: "si",
-    graphicsCheck: "si",
+    testCheck: "no",
+    startCheck: "no",
+    graphicsCheck: "no",
     speedtestValue: "",
     pingValue: "",
     gpuValue: "",
@@ -172,6 +187,7 @@ function parseSavedDraft(raw: string | null): DraftState | null {
     return {
       ...buildDefaultDraft(),
       ...parsed,
+      signalLabel: normalizeSignalLabel(parsed.signalLabel),
       generalObservations:
         parsed.generalObservations ?? parsed.notes ?? "",
       problems: {
@@ -309,7 +325,7 @@ function BinaryStateButton({
         type="button"
         onClick={onToggle}
         className={cn(
-          "flex w-full items-center gap-3 rounded-[var(--panel-radius)] border px-4 py-3 text-left transition",
+          "flex h-[62px] w-full items-center gap-3 rounded-[var(--panel-radius)] border px-4 text-left transition",
           active
             ? "border-[#d5ebdd] bg-[#f3fcf6] text-[#1b7d43]"
             : "border-[var(--border)] bg-[var(--surface)] text-[var(--muted)] hover:border-[#d7d0ca]",
@@ -327,6 +343,53 @@ function BinaryStateButton({
         <span className="text-sm font-black uppercase tracking-[0.12em]">
           {active ? "SI" : "NO"}
         </span>
+      </button>
+    </div>
+  );
+}
+
+function SelectStateField({
+  label,
+  icon: Icon,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  icon: typeof MonitorPlay;
+  value: string;
+  options: readonly string[];
+  onChange: (value: string) => void;
+}) {
+  const currentIndex = Math.max(
+    0,
+    options.findIndex((option) => option === value),
+  );
+
+  return (
+    <div className="space-y-2">
+      <span className="block text-[11px] font-black uppercase tracking-[0.2em] text-[#95a3ba]">
+        {label}
+      </span>
+      <button
+        type="button"
+        onClick={() => onChange(options[(currentIndex + 1) % options.length] ?? options[0])}
+        className="flex h-[62px] w-full items-center justify-between gap-3 rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--surface)] px-4 text-left transition hover:border-[#d7d0ca] focus:border-[var(--accent)]"
+      >
+        <span className="flex min-w-0 items-center gap-3">
+          <span
+            className={cn(
+              REPORT_ICON_BUBBLE_BASE,
+              "size-9 shrink-0 text-[#6b5d5f]",
+            )}
+          >
+            <Icon className="size-4" />
+          </span>
+          <span className="truncate text-sm font-black uppercase tracking-[0.12em] text-[#6b5d5f]">
+            {value}
+          </span>
+        </span>
+        <ChevronDown className="size-4 shrink-0 text-[#8b96aa]" />
       </button>
     </div>
   );
@@ -383,6 +446,7 @@ export function CollaboratorReportForm({
   const pingInputRef = useRef<HTMLInputElement | null>(null);
   const gpuInputRef = useRef<HTMLInputElement | null>(null);
   const hasHydratedRef = useRef(false);
+  const router = useRouter();
   const [draft, setDraft] = useState<DraftState>(() => {
     if (typeof window === "undefined") {
       return buildDefaultDraft();
@@ -401,11 +465,19 @@ export function CollaboratorReportForm({
     gpu: { state: "idle", message: "" },
   });
   const [saveMessage, setSaveMessage] = useState<string>("");
+  const [saveTone, setSaveTone] = useState<"neutral" | "success" | "error">(
+    "neutral",
+  );
+  const [isSending, setIsSending] = useState(false);
   const draftKey = useMemo(() => getDraftKey(assignment.assignmentId), [assignment.assignmentId]);
   const latestDraftRef = useRef(draft);
 
   const persistDraft = useCallback(
-    (value: DraftState, message?: string) => {
+    (
+      value: DraftState,
+      message?: string,
+      tone: "success" | "error" = "success",
+    ) => {
       if (typeof window === "undefined") {
         return;
       }
@@ -419,6 +491,7 @@ export function CollaboratorReportForm({
 
       if (message) {
         setSaveMessage(message);
+        setSaveTone(tone);
       }
     },
     [draftKey],
@@ -432,11 +505,55 @@ export function CollaboratorReportForm({
     persistDraft(latestDraftRef.current, "Borrador guardado en este dispositivo.");
   };
 
-  const handleSendDraft = () => {
-    persistDraft(
-      latestDraftRef.current,
-      "Reporte listo. El envío definitivo se conectará en la siguiente fase.",
-    );
+  const handleSendDraft = async () => {
+    if (isSending) {
+      return;
+    }
+
+    persistDraft(latestDraftRef.current);
+    setIsSending(true);
+    setSaveMessage("Enviando reporte...");
+    setSaveTone("neutral");
+
+    try {
+      const response = await fetch("/api/collaborator-reports", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          assignmentId: assignment.assignmentId,
+          matchId: assignment.matchId,
+          draft: latestDraftRef.current,
+        }),
+      });
+
+      const payload = (await response.json()) as
+        | { ok: true; message?: string }
+        | { error?: string };
+
+      if (!response.ok || !("ok" in payload)) {
+        setSaveMessage(
+          "error" in payload && payload.error
+            ? payload.error
+            : "No pudimos enviar el reporte en este momento.",
+        );
+        setSaveTone("error");
+        return;
+      }
+
+      persistDraft(
+        latestDraftRef.current,
+        payload.message ?? "Reporte enviado y jornada actualizada.",
+        "success",
+      );
+      router.refresh();
+    } catch {
+      setSaveMessage("No pudimos enviar el reporte en este momento.");
+      setSaveTone("error");
+    } finally {
+      setIsSending(false);
+    }
   };
 
   useEffect(() => {
@@ -553,8 +670,8 @@ export function CollaboratorReportForm({
               Reportar novedades
             </h3>
             <p className="text-sm text-[#617187]">
-              Carga rápida para {assignment.homeTeam} vs {assignment.awayTeam}. Este
-              primer flujo guarda borrador local mientras conectamos la persistencia final.
+              Carga rápida para {assignment.homeTeam} vs {assignment.awayTeam}. Puedes
+              guardar borrador local o enviar el reporte definitivo desde aquí.
             </p>
           </div>
 
@@ -628,33 +745,31 @@ export function CollaboratorReportForm({
         <h4 className="text-sm font-black uppercase tracking-[0.22em] text-[#95a3ba]">
           Contexto del partido
         </h4>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <label className="space-y-2">
-            <span className="text-[11px] font-black uppercase tracking-[0.2em] text-[#95a3ba]">
-              Señal
-            </span>
-            <input
-              type="text"
-              value={draft.signalLabel}
-              onChange={(event) =>
-                updateDraft((previous) => ({
-                  ...previous,
-                  signalLabel: event.target.value,
-                }))
-              }
-              placeholder="Ej. BP / IMG / SPT"
-              className="h-12 w-full rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--background-soft)] px-4 text-sm font-medium text-[var(--foreground)] outline-none transition focus:border-[var(--accent)] focus:bg-[var(--surface)]"
-            />
-          </label>
+        <div className="grid grid-cols-2 gap-3">
+          <SelectStateField
+            label="Señal"
+            icon={MonitorPlay}
+            value={draft.signalLabel}
+            options={SIGNAL_OPTIONS}
+            onChange={(value) =>
+              updateDraft((previous) => ({
+                ...previous,
+                signalLabel: normalizeSignalLabel(value),
+              }))
+            }
+          />
+          <BinaryStateButton
+            label="Apto lineal"
+            icon={CheckCircle2}
+            active={draft.aptoLineal === "si"}
+            onToggle={() =>
+              updateDraft((previous) => ({
+                ...previous,
+                aptoLineal: previous.aptoLineal === "si" ? "no" : "si",
+              }))
+            }
+          />
         </div>
-        <SegmentedToggle
-          label="Apto lineal"
-          value={draft.aptoLineal}
-          onChange={(value) =>
-            updateDraft((previous) => ({ ...previous, aptoLineal: value }))
-          }
-          options={YES_NO_OPTIONS}
-        />
       </Card>
 
       <Card className="space-y-5 p-5">
@@ -1075,8 +1190,19 @@ export function CollaboratorReportForm({
 
       <div className="grid gap-3 rounded-[var(--panel-radius)] border border-[var(--border)] bg-white p-4 shadow-[0_18px_42px_rgba(15,23,42,0.12)]">
         <div className="flex items-center gap-2 text-sm text-[#617187]">
-          {saveMessage ? <Save className="size-4 text-[#238b57]" /> : <ReceiptText className="size-4 text-[var(--accent)]" />}
-          <span>{saveMessage || "Guarda un borrador local mientras conectamos el envío definitivo."}</span>
+          {isSending ? (
+            <Loader2 className="size-4 animate-spin text-[var(--accent)]" />
+          ) : saveTone === "error" ? (
+            <AlertTriangle className="size-4 text-[var(--accent)]" />
+          ) : saveMessage ? (
+            <Save className="size-4 text-[#238b57]" />
+          ) : (
+            <ReceiptText className="size-4 text-[var(--accent)]" />
+          )}
+          <span>
+            {saveMessage ||
+              "Guarda un borrador local o envía el reporte definitivo."}
+          </span>
         </div>
         <div className="grid grid-cols-3 gap-2">
           <button
@@ -1088,17 +1214,22 @@ export function CollaboratorReportForm({
             Guardar
           </button>
           <Link href={`/mi-jornada/${assignment.matchId}/reportar`} className="block min-w-0">
-            <span className="inline-flex h-12 w-full min-w-0 items-center justify-center gap-2 rounded-[var(--panel-radius)] border border-[#f0d27a] bg-[#f3c332] px-2 text-sm font-semibold text-[#3b2c00] shadow-[0_10px_22px_rgba(243,195,50,0.2)] transition hover:border-[#e3b71f] hover:bg-[#e3b71f]">
+            <span className="inline-flex h-12 w-full min-w-0 items-center justify-center gap-2 rounded-[var(--panel-radius)] border border-[#f0d27a] bg-[#f3c332] px-2 text-sm font-semibold text-white shadow-[0_10px_22px_rgba(243,195,50,0.2)] transition hover:border-[#e3b71f] hover:bg-[#e3b71f]">
               <SquarePen className="size-4" />
               Editar
             </span>
           </Link>
           <Button
-            className="h-12 px-2 bg-[var(--accent)] text-white shadow-[0_12px_24px_rgba(230,18,56,0.22)] hover:bg-[var(--accent-strong)]"
+            className="h-12 px-2 bg-[var(--accent)] text-white shadow-[0_12px_24px_rgba(230,18,56,0.22)] hover:bg-[var(--accent-strong)] disabled:cursor-wait disabled:opacity-80"
             onClick={handleSendDraft}
+            disabled={isSending}
           >
-            <SendHorizontal className="mr-2 size-4" />
-            Enviar
+            {isSending ? (
+              <Loader2 className="mr-2 size-4 animate-spin" />
+            ) : (
+              <SendHorizontal className="mr-2 size-4" />
+            )}
+            {isSending ? "Enviando" : "Enviar"}
           </Button>
         </div>
       </div>

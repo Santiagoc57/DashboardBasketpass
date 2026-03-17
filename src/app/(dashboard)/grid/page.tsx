@@ -1,14 +1,17 @@
 import Link from "next/link";
 import { addDays, addMonths } from "date-fns";
+import { Search } from "lucide-react";
 
 import { SectionAiAssistant } from "@/components/ai/section-ai-assistant";
 import { CreateMatchModal } from "@/components/grid/create-match-modal";
 import { GridCalendarPicker } from "@/components/grid/grid-calendar-picker";
+import { GridExportButton } from "@/components/grid/grid-export-button";
 import { MatchCard } from "@/components/grid/match-card";
 import { ProductionInsightsPanel } from "@/components/grid/production-insights-panel";
 import { SectionPageHeader } from "@/components/layout/section-page-header";
 import { SetupPanel } from "@/components/layout/setup-panel";
 import { EmptyState } from "@/components/ui/empty-state";
+import { Input } from "@/components/ui/input";
 import { PageMessage } from "@/components/ui/page-message";
 import {
   buildKickoffAt,
@@ -224,6 +227,7 @@ export default async function GridPage({ searchParams }: PageProps) {
       ).length,
     })),
   );
+  const visibleMatches = dayGroups.flatMap((group) => group.items);
 
   return (
     <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_20rem] 2xl:grid-cols-[minmax(0,1fr)_22rem]">
@@ -233,37 +237,43 @@ export default async function GridPage({ searchParams }: PageProps) {
           description="Organiza la jornada, asigna roles y supervisa la carga operativa del día."
           actions={
             <>
-              <div className="flex h-[52px] rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--background-soft)] p-1">
-                <Link
-                  href={todayHref}
-                  className={cn(
-                    "inline-flex h-full items-center rounded-[calc(var(--panel-radius)-4px)] px-4 text-sm font-semibold transition",
-                    filters.view === "day"
-                      ? "bg-[var(--surface)] text-[var(--foreground)] shadow-sm"
-                      : "text-[var(--muted)] hover:text-[var(--foreground)]",
-                  )}
-                >
-                  Hoy
-                </Link>
-                <Link
-                  href={monthHref}
-                  className={cn(
-                    "inline-flex h-full items-center rounded-[calc(var(--panel-radius)-4px)] px-4 text-sm font-semibold transition",
-                    filters.view === "month"
-                      ? "bg-[var(--surface)] text-[var(--foreground)] shadow-sm"
-                      : "text-[var(--muted)] hover:text-[var(--foreground)]",
-                  )}
-                >
-                  Mes
-                </Link>
-              </div>
-              <GridCalendarPicker
-                key={calendarPickerKey}
-                selectedDate={filters.view === "day" ? filters.date : null}
-                initialMonth={initialCalendarMonth}
-                initialSummary={initialCalendarSummary}
-                baseSearchParams={baseSearchParams}
-              />
+              <form
+                action="/grid"
+                className="flex min-w-[320px] flex-1 items-center rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--surface)] p-1.5 shadow-sm"
+              >
+                <input type="hidden" name="view" value={filters.view} />
+                <input type="hidden" name="date" value={filters.date} />
+                {filters.league ? (
+                  <input type="hidden" name="league" value={filters.league} />
+                ) : null}
+                {filters.mode ? (
+                  <input type="hidden" name="mode" value={filters.mode} />
+                ) : null}
+                {filters.status ? (
+                  <input type="hidden" name="status" value={filters.status} />
+                ) : null}
+                {filters.owner ? (
+                  <input type="hidden" name="owner" value={filters.owner} />
+                ) : null}
+                {filters.timezone ? (
+                  <input type="hidden" name="timezone" value={filters.timezone} />
+                ) : null}
+                <div className="flex min-w-0 flex-1 items-center gap-2 rounded-[var(--panel-radius)] bg-[var(--background-soft)] px-3">
+                  <Search className="size-4 text-[var(--accent)]" />
+                  <Input
+                    name="q"
+                    defaultValue={filters.q}
+                    placeholder="Buscar partido, ID, liga o responsable..."
+                    className="h-10 border-0 bg-transparent px-0 shadow-none focus-visible:ring-0"
+                  />
+                </div>
+              </form>
+              {visibleMatches.length ? (
+                <GridExportButton
+                  matches={visibleMatches}
+                  periodLabel={summaryDateLabel}
+                />
+              ) : null}
               <SectionAiAssistant
                 section="Producción"
                 title="Consulta la producción visible"
@@ -296,23 +306,57 @@ export default async function GridPage({ searchParams }: PageProps) {
 
         <section className="min-w-0 space-y-6">
           {dayGroups.length ? (
-            dayGroups.map((group) => (
+            dayGroups.map((group, groupIndex) => (
               <div key={group.key} className="space-y-4">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-wrap items-center justify-between gap-4">
                   <div>
-                    <p className="text-xs font-bold uppercase tracking-[0.28em] text-[var(--muted)]">
-                      Jornada
-                    </p>
-                    <h3 className="mt-2 text-2xl font-extrabold text-[var(--accent)]">
+                    <h3 className="text-2xl font-extrabold text-[var(--accent)]">
                       {formatDayHeading(
                         group.items[0].kickoff_at,
                         group.items[0].timezone,
                       )}
                     </h3>
                   </div>
-                  <span className="text-sm font-medium text-[var(--muted)]">
-                    {group.items.length} partidos
-                  </span>
+                  <div className="flex flex-wrap items-center justify-end gap-3">
+                    <span className="text-sm font-medium text-[var(--muted)]">
+                      {group.items.length} partidos
+                    </span>
+                    {groupIndex === 0 ? (
+                      <>
+                        <div className="flex h-[52px] rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--background-soft)] p-1">
+                          <Link
+                            href={todayHref}
+                            className={cn(
+                              "inline-flex h-full items-center rounded-[calc(var(--panel-radius)-4px)] px-4 text-sm font-semibold transition",
+                              filters.view === "day"
+                                ? "bg-[var(--surface)] text-[var(--foreground)] shadow-sm"
+                                : "text-[var(--muted)] hover:text-[var(--foreground)]",
+                            )}
+                          >
+                            Hoy
+                          </Link>
+                          <Link
+                            href={monthHref}
+                            className={cn(
+                              "inline-flex h-full items-center rounded-[calc(var(--panel-radius)-4px)] px-4 text-sm font-semibold transition",
+                              filters.view === "month"
+                                ? "bg-[var(--surface)] text-[var(--foreground)] shadow-sm"
+                                : "text-[var(--muted)] hover:text-[var(--foreground)]",
+                            )}
+                          >
+                            Mes
+                          </Link>
+                        </div>
+                        <GridCalendarPicker
+                          key={calendarPickerKey}
+                          selectedDate={filters.view === "day" ? filters.date : null}
+                          initialMonth={initialCalendarMonth}
+                          initialSummary={initialCalendarSummary}
+                          baseSearchParams={baseSearchParams}
+                        />
+                      </>
+                    ) : null}
+                  </div>
                 </div>
                 <div className="grid gap-4">
                   {group.items.map((match) => (

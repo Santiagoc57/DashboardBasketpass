@@ -731,7 +731,10 @@ function AssignmentTable({
                           competition={assignment.competition}
                           className="size-12 rounded-full 2xl:size-14"
                         />
-                        <p className="mt-2 text-center text-[0.9rem] font-black leading-[1.08] tracking-[-0.03em] text-[var(--foreground)]">
+                        <p
+                          title={assignment.homeTeam}
+                          className="mt-2 min-h-[2.16em] text-center text-[0.9rem] font-black leading-[1.08] tracking-[-0.03em] text-[var(--foreground)] [display:-webkit-box] overflow-hidden text-ellipsis [-webkit-box-orient:vertical] [-webkit-line-clamp:2]"
+                        >
                           {assignment.homeTeam}
                         </p>
                       </div>
@@ -746,7 +749,10 @@ function AssignmentTable({
                           competition={assignment.competition}
                           className="size-12 rounded-full 2xl:size-14"
                         />
-                        <p className="mt-2 text-center text-[0.9rem] font-black leading-[1.08] tracking-[-0.03em] text-[var(--foreground)]">
+                        <p
+                          title={assignment.awayTeam}
+                          className="mt-2 min-h-[2.16em] text-center text-[0.9rem] font-black leading-[1.08] tracking-[-0.03em] text-[var(--foreground)] [display:-webkit-box] overflow-hidden text-ellipsis [-webkit-box-orient:vertical] [-webkit-line-clamp:2]"
+                        >
                           {assignment.awayTeam}
                         </p>
                       </div>
@@ -1178,7 +1184,7 @@ function GroupAssistantDrawer({
           <button
             type="button"
             onClick={onClose}
-            className="absolute right-6 top-6 inline-flex size-10 items-center justify-center rounded-full bg-[var(--background-soft)] text-[#94a3b8]"
+            className="absolute right-3 top-3 inline-flex size-10 items-center justify-center rounded-full bg-[var(--background-soft)] text-[#94a3b8] sm:right-4 sm:top-4"
             aria-label="Cerrar asistente de grupo"
           >
             <X className="size-4" />
@@ -1463,7 +1469,7 @@ function ReportAssistantDrawer({
           <button
             type="button"
             onClick={onClose}
-            className="absolute right-6 top-6 inline-flex size-10 items-center justify-center rounded-full bg-[var(--background-soft)] text-[#94a3b8]"
+            className="absolute right-3 top-3 inline-flex size-10 items-center justify-center rounded-full bg-[var(--background-soft)] text-[#94a3b8] sm:right-4 sm:top-4"
             aria-label="Cerrar reporte"
           >
             <X className="size-4" />
