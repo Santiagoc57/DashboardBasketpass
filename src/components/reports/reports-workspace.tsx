@@ -65,6 +65,7 @@ type ReportSortKey =
 type SortDirection = "asc" | "desc";
 type ReportPeriodMode = "day" | "week" | "month";
 type ReportView = "summary" | "control" | "incidents";
+export type ReportsWorkspaceView = ReportView;
 type ReportDrawerTab = "details" | "activity";
 type IncidentChartMetric = "count" | "rate";
 type ReportControlColumn =
@@ -146,6 +147,12 @@ const REPORT_CONTROL_COMPACT_COLUMN_WIDTH_WEIGHT: Record<
   severity: 1,
   action: 0.45,
 };
+const REPORT_CONTROL_LAPTOP_HIDDEN_COLUMNS = new Set<ReportControlColumn>([
+  "idBp",
+  "paid",
+  "feed",
+  "action",
+]);
 
 const REPORT_EXPORT_COLUMNS = [
   {
@@ -759,7 +766,7 @@ function MetricCard({
       >
         {value}
       </p>
-      <div className="mt-5 flex min-w-0 items-center justify-between gap-4">
+      <div className="mt-5 min-w-0 space-y-3">
         <span
           className={cn(
             "inline-flex min-w-0 items-center rounded-xl px-2.5 py-1 text-[11px] font-bold whitespace-nowrap",
@@ -768,7 +775,7 @@ function MetricCard({
         >
           {chip}
         </span>
-        <div className="h-1.5 w-20 shrink-0 overflow-hidden rounded-full bg-[#e7edf5] xl:w-24">
+        <div className="h-1.5 w-full overflow-hidden rounded-full bg-[#e7edf5]">
           <div
             className={cn("h-full rounded-full", barClassName)}
             style={{ width: `${Math.max(8, Math.min(barWidth, 100))}%` }}
@@ -816,13 +823,15 @@ export function ReportsWorkspace({
   activities,
   incidents,
   hasGeminiKey,
+  initialView = "summary",
 }: {
   reports: ReportRecord[];
   activities: ReportActivity[];
   incidents: IncidentRecord[];
   hasGeminiKey: boolean;
+  initialView?: ReportView;
 }) {
-  const [activeView, setActiveView] = useState<ReportView>("summary");
+  const [activeView, setActiveView] = useState<ReportView>(initialView);
   const [incidentsHeaderActionsPortalTarget, setIncidentsHeaderActionsPortalTarget] =
     useState<HTMLDivElement | null>(null);
   const [incidentsDrawerPortalTarget, setIncidentsDrawerPortalTarget] =
@@ -1709,6 +1718,8 @@ export function ReportsWorkspace({
         }}
         className={cn(
           headerPadding,
+          REPORT_CONTROL_LAPTOP_HIDDEN_COLUMNS.has(column) &&
+            "hidden 2xl:table-cell",
           isDropTarget && "bg-[#fff6f8]",
           column === "action" && "text-right",
         )}
@@ -1785,12 +1796,16 @@ export function ReportsWorkspace({
   }, [columnOrder, selectedReport]);
 
   const renderReportControlCell = (report: ReportRecord, column: ReportControlColumn) => {
+    const cellClassName = cn(
+      REPORT_CONTROL_LAPTOP_HIDDEN_COLUMNS.has(column) &&
+        "hidden 2xl:table-cell",
+    );
     const editable = report.severity !== "Sin incidencia";
 
     switch (column) {
       case "league":
         return (
-          <td key={column} className="px-6 py-5">
+          <td key={column} className={cn("px-4 py-4 xl:px-5 2xl:px-6 2xl:py-5", cellClassName)}>
             <LeagueLogoMarkClient
               league={report.league}
               className="h-[3.3rem] w-[4.8rem]"
@@ -1799,7 +1814,7 @@ export function ReportsWorkspace({
         );
       case "id":
         return (
-          <td key={column} className="px-6 py-5">
+          <td key={column} className={cn("px-4 py-4 xl:px-5 2xl:px-6 2xl:py-5", cellClassName)}>
             <span className="inline-flex rounded-full border border-[#f3cfd8] bg-[#fff3f6] px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-[var(--accent)]">
               {report.id_feed}
             </span>
@@ -1807,7 +1822,7 @@ export function ReportsWorkspace({
         );
       case "idBp":
         return (
-          <td key={column} className="px-6 py-5">
+          <td key={column} className={cn("px-4 py-4 xl:px-5 2xl:px-6 2xl:py-5", cellClassName)}>
             <span className="inline-flex rounded-full border border-[#d7e2f6] bg-[#f4f8ff] px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-[#2b6be7]">
               {report.id_bp}
             </span>
@@ -1815,7 +1830,7 @@ export function ReportsWorkspace({
         );
       case "date":
         return (
-          <td key={column} className="px-6 py-5">
+          <td key={column} className={cn("px-4 py-4 xl:px-5 2xl:px-6 2xl:py-5", cellClassName)}>
             <span className="inline-flex text-sm font-black uppercase tracking-[0.12em] text-[#617187]">
               {formatCompactReportDate(report.event_date)}
             </span>
@@ -1825,7 +1840,12 @@ export function ReportsWorkspace({
         return (
           <td
             key={column}
-            className={selectedReport ? "px-5 py-5" : "px-8 py-5"}
+            className={cn(
+              selectedReport
+                ? "px-4 py-4 xl:px-5 2xl:px-5 2xl:py-5"
+                : "px-4 py-4 xl:px-6 2xl:px-8 2xl:py-5",
+              cellClassName,
+            )}
           >
             <MatchSummaryCell
               matchLabel={report.match_label}
@@ -1837,7 +1857,7 @@ export function ReportsWorkspace({
         );
       case "responsible":
         return (
-          <td key={column} className="px-6 py-5">
+          <td key={column} className={cn("px-4 py-4 xl:px-5 2xl:px-6 2xl:py-5", cellClassName)}>
             <div className="flex min-w-0 items-center gap-3">
               <HoverAvatarBadge
                 initials={getInitials(report.responsible_name)}
@@ -1853,7 +1873,7 @@ export function ReportsWorkspace({
         );
       case "paid":
         return (
-          <td key={column} className="px-6 py-5">
+          <td key={column} className={cn("px-4 py-4 xl:px-5 2xl:px-6 2xl:py-5", cellClassName)}>
             <div className="flex min-h-10 items-center justify-center">
               {report.paid ? (
                 <CircleCheckBig className="size-6 text-[#10b981]" />
@@ -1865,7 +1885,7 @@ export function ReportsWorkspace({
         );
       case "feed":
         return (
-          <td key={column} className="px-6 py-5">
+          <td key={column} className={cn("px-4 py-4 xl:px-5 2xl:px-6 2xl:py-5", cellClassName)}>
             <div className="flex min-h-10 items-center justify-center">
               {report.feed_detected ? (
                 <CircleCheckBig className="size-6 text-[#10b981]" />
@@ -1877,13 +1897,13 @@ export function ReportsWorkspace({
         );
       case "severity":
         return (
-          <td key={column} className="px-6 py-5">
+          <td key={column} className={cn("px-4 py-4 xl:px-5 2xl:px-6 2xl:py-5", cellClassName)}>
             <SeverityBadge severity={report.severity} />
           </td>
         );
       case "action":
         return (
-          <td key={column} className="px-8 py-5 text-right">
+          <td key={column} className={cn("px-4 py-4 text-right xl:px-6 2xl:px-8 2xl:py-5", cellClassName)}>
             <button
               type="button"
               title={editable ? "Editar reporte" : "Ver reporte"}
@@ -2213,7 +2233,7 @@ export function ReportsWorkspace({
   );
 
   const summaryActions = (
-    <>
+    <div className="flex flex-wrap items-start justify-end gap-3">
       {periodSelector}
       <div className="relative">
         <select
@@ -2229,32 +2249,34 @@ export function ReportsWorkspace({
         </select>
         <ChevronDown className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-[#94a3b8]" />
       </div>
-      <SectionAiAssistant
-        section="Reportes"
-        title="Consulta el resumen actual"
-        description="Haz preguntas ejecutivas sobre volumen, calidad, pagos, feed y responsables usando el corte visible."
-        placeholder="Ej. ¿Qué liga concentra más reportes con incidencia en este periodo?"
-        contextLabel="Resumen filtrado de reportes"
-        context={aiContext}
-        guidance="Responde con foco ejecutivo: volumen, incidencia, pagos, feed detectado, responsables y ligas más relevantes."
-        examples={[
-          "¿Qué liga tiene más cierres con incidencia?",
-          "¿Cuántos reportes críticos están sin pago?",
-          "¿Quién lidera el ranking de responsables visibles?",
-        ]}
-        hasGeminiKey={hasGeminiKey}
-        buttonVariant="icon"
-      />
-      <ToolbarIconButton
-        type="button"
-        onClick={() => void exportVisibleReports(baseFilteredReports)}
-        disabled={!baseFilteredReports.length || isExporting}
-        aria-label={isExporting ? "Exportando reportes" : "Exportar reportes"}
-        title={isExporting ? "Exportando reportes" : "Exportar reportes"}
-      >
-        <Download className="size-4" />
-      </ToolbarIconButton>
-    </>
+      <div className="flex shrink-0 items-center gap-3 self-start">
+        <SectionAiAssistant
+          section="Reportes"
+          title="Consulta el resumen actual"
+          description="Haz preguntas ejecutivas sobre volumen, calidad, pagos, feed y responsables usando el corte visible."
+          placeholder="Ej. ¿Qué liga concentra más reportes con incidencia en este periodo?"
+          contextLabel="Resumen filtrado de reportes"
+          context={aiContext}
+          guidance="Responde con foco ejecutivo: volumen, incidencia, pagos, feed detectado, responsables y ligas más relevantes."
+          examples={[
+            "¿Qué liga tiene más cierres con incidencia?",
+            "¿Cuántos reportes críticos están sin pago?",
+            "¿Quién lidera el ranking de responsables visibles?",
+          ]}
+          hasGeminiKey={hasGeminiKey}
+          buttonVariant="icon"
+        />
+        <ToolbarIconButton
+          type="button"
+          onClick={() => void exportVisibleReports(baseFilteredReports)}
+          disabled={!baseFilteredReports.length || isExporting}
+          aria-label={isExporting ? "Exportando reportes" : "Exportar reportes"}
+          title={isExporting ? "Exportando reportes" : "Exportar reportes"}
+        >
+          <Download className="size-4" />
+        </ToolbarIconButton>
+      </div>
+    </div>
   );
 
   const controlActions = (
@@ -2264,7 +2286,7 @@ export function ReportsWorkspace({
         value={query}
         onChange={(event) => setQuery(event.target.value)}
         placeholder="Buscar ID feed, ID BP, liga o responsable..."
-        className="min-w-[280px] flex-none"
+        className="w-full xl:min-w-[18rem] 2xl:min-w-[280px]"
         inputClassName="text-sm font-medium text-[var(--foreground)] placeholder:text-[#94a3b8]"
       />
       <div className="flex shrink-0 items-center gap-3">
@@ -2306,7 +2328,7 @@ export function ReportsWorkspace({
 
   const summaryDescription =
     activeView === "summary"
-      ? "Panel ejecutivo de control, calidad y seguimiento financiero de cierres audiovisuales."
+      ? "Panel ejecutivo de control, calidad y seguimiento"
       : activeView === "control"
         ? "Revisa cierres, responsables, pagos y detección de feed del corte visible."
         : "Sigue incidencias, severidad, pruebas y observaciones del periodo visible."
@@ -2354,7 +2376,7 @@ export function ReportsWorkspace({
 
   const controlWorkspaceContent = (
     <div className="flex min-w-0 flex-col gap-8">
-      <section className="grid gap-6 sm:grid-cols-2 xl:grid-cols-4">
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard
           title="Total partidos"
           value={controlMetrics.totalMatches}
@@ -2477,6 +2499,10 @@ export function ReportsWorkspace({
                   {columnOrder.map((column) => (
                     <col
                       key={column}
+                      className={cn(
+                        REPORT_CONTROL_LAPTOP_HIDDEN_COLUMNS.has(column) &&
+                          "hidden 2xl:table-column",
+                      )}
                       style={{ width: reportColumnWidths[column] }}
                     />
                   ))}
@@ -2533,8 +2559,8 @@ export function ReportsWorkspace({
   );
 
   const selectedReportDrawer = selectedReport ? (
-    <aside className="min-w-0 self-start xl:sticky xl:top-24">
-      <div className="panel-surface fixed inset-x-4 bottom-4 top-20 z-40 flex flex-col overflow-hidden border border-[var(--border)] bg-[var(--surface)] xl:static xl:h-[calc(100vh-8rem)] xl:w-full">
+    <aside className="min-w-0 self-start 2xl:sticky 2xl:top-24">
+      <div className="panel-surface fixed inset-x-4 bottom-4 top-20 z-40 flex flex-col overflow-hidden border border-[var(--border)] bg-[var(--surface)] 2xl:static 2xl:h-[calc(100vh-8rem)] 2xl:w-full">
         <div className="border-b border-[var(--border)] p-6">
           <div className="mb-4 flex items-center justify-between gap-4">
             <div className="flex flex-wrap items-center gap-2">
@@ -2610,7 +2636,7 @@ export function ReportsWorkspace({
           ]}
         />
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6 xl:max-h-none">
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5 sm:px-6 sm:py-6 2xl:max-h-none">
           {reportDrawerTab === "details" ? (
             <div className="space-y-8">
               <section className="space-y-4">
@@ -2761,10 +2787,12 @@ export function ReportsWorkspace({
             title={summaryTitle}
             description={summaryDescription}
             actions={headerActions}
+            className="xl:items-start"
+            actionsClassName="xl:items-start"
           />
           {tabsNavigation}
         <div className="space-y-8">
-          <section className="grid gap-8 xl:grid-cols-[minmax(0,1.7fr)_minmax(320px,1fr)]">
+          <section className="grid gap-8 xl:grid-cols-[minmax(0,1.62fr)_minmax(19.5rem,0.98fr)] 2xl:grid-cols-[minmax(0,1.7fr)_minmax(320px,1fr)]">
             <div className="space-y-8">
               <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4 [&>*]:h-full">
                 <MetricCard
@@ -2792,7 +2820,7 @@ export function ReportsWorkspace({
                   barWidth={summaryMetrics.feedPercent}
                 />
                 <MetricCard
-                  title="Pago"
+                  title="Pago de partidos"
                   value={summaryMetrics.paidCount}
                   chip={`${summaryMetrics.paidPercent}% del total`}
                   chipTone="success"
@@ -2801,19 +2829,18 @@ export function ReportsWorkspace({
                 />
               </section>
 
-              <article className="panel-surface border border-[var(--border)] bg-[var(--surface)] p-6">
+              <article className="panel-surface border border-[var(--border)] bg-[var(--surface)] p-5 xl:p-6">
                 <div className="mb-6 flex items-center justify-between gap-4">
                   <div>
                     <h3 className="text-2xl font-black text-[var(--foreground)]">
-                      Evolución de reportes por liga{" "}
-                      {periodMode === "day"
-                        ? "por hora"
-                        : periodMode === "week"
-                          ? "por día"
-                          : "por semana"}
+                      Evolución de reportes
                     </h3>
                     <p className="mt-1 text-sm font-medium text-[#617187]">
-                      Comparativo temporal de ligas y su volumen de reportes dentro del corte visible.
+                      {periodMode === "day"
+                        ? "Por hora"
+                        : periodMode === "week"
+                          ? "Por día"
+                          : "Por semana"}
                     </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-3">
@@ -2857,7 +2884,7 @@ export function ReportsWorkspace({
                 <div className="rounded-[var(--panel-radius)] bg-transparent">
                   {incidentLeagueChart.series.length ? (
                     <div className="space-y-5">
-                      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
                         {incidentLeagueChart.series.map((item) => (
                           <div
                             key={item.league}
@@ -3012,7 +3039,7 @@ export function ReportsWorkspace({
               </article>
             </div>
 
-            <article className="panel-surface border border-[var(--border)] bg-[var(--surface)] px-8 pb-8 pt-6">
+            <article className="panel-surface border border-[var(--border)] bg-[var(--surface)] px-5 pb-5 pt-5 xl:sticky xl:top-24 xl:self-start xl:px-6 xl:pb-6 2xl:px-8 2xl:pb-8 2xl:pt-6">
               <h3 className="text-2xl font-black text-[var(--foreground)]">
                 Resumen de reportes
               </h3>
@@ -3195,8 +3222,8 @@ export function ReportsWorkspace({
             </article>
           </section>
 
-          <section className="grid gap-8 xl:grid-cols-[minmax(0,1.7fr)_minmax(340px,1fr)]">
-            <article className="panel-surface border border-[var(--border)] bg-[var(--surface)] p-8">
+          <section className="grid gap-8 2xl:grid-cols-[minmax(0,1.7fr)_minmax(340px,1fr)]">
+            <article className="panel-surface border border-[var(--border)] bg-[var(--surface)] p-5 xl:p-6 2xl:p-8">
               <div className="mb-6 flex items-center justify-between">
                 <h3 className="text-2xl font-black text-[var(--foreground)]">
                   Reportes por personal
@@ -3261,7 +3288,7 @@ export function ReportsWorkspace({
           className={cn(
             "grid gap-6 transition-colors",
             hasNonSummaryDrawer
-              ? "xl:grid-cols-[minmax(0,1fr)_390px]"
+              ? "2xl:grid-cols-[minmax(0,1fr)_390px]"
               : "grid-cols-1",
           )}
         >

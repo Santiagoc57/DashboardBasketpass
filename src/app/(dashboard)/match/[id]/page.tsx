@@ -40,8 +40,8 @@ import { ALL_CLUB_OPTIONS, CLUB_COMPETITIONS } from "@/lib/club-catalog";
 import {
   getProductionModeLabel,
   MATCH_STATUS_OPTIONS,
+  PRODUCTION_LABEL,
   PRODUCTION_MODE_OPTIONS,
-  PRODUCTION_SHORT_LABEL,
 } from "@/lib/constants";
 import { getMatchDetailData } from "@/lib/data/dashboard";
 import { formatMatchDate, formatMatchTime } from "@/lib/date";
@@ -646,7 +646,7 @@ export default async function MatchDetailPage({
               </label>
               <label className="space-y-2">
                 <span className="text-xs font-bold uppercase tracking-[0.22em] text-[var(--muted)]">
-                  {PRODUCTION_SHORT_LABEL}
+                  {PRODUCTION_LABEL}
                 </span>
                 <Select
                   name="productionMode"

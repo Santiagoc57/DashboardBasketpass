@@ -16,20 +16,10 @@ import { CreateTeamModal } from "@/components/teams/create-team-modal";
 import type { TeamResponsibleContact } from "@/lib/team-responsibles";
 import {
   getTeamLeagueAccentColor,
-  getTeamLeagueColorSet,
   splitTeamCompetitions,
   type TeamDirectoryItem,
 } from "@/lib/team-directory";
 import { buildWhatsAppUrl, cn } from "@/lib/utils";
-
-function getLeagueBadgeStyle(competition: string): CSSProperties {
-  const colors = getTeamLeagueColorSet(competition);
-
-  return {
-    backgroundColor: colors.soft,
-    color: colors.accent,
-  };
-}
 
 function getIncidentBadgeClass(incidentCount: number) {
   if (incidentCount >= 4) {
@@ -52,7 +42,7 @@ function TeamLinkIcon({
 }) {
   if (!href) {
     return (
-      <span className="inline-flex size-9 items-center justify-center rounded-full border border-[#e6e4e6] bg-white text-[#b7b4b8] opacity-75">
+      <span className="inline-flex size-8 items-center justify-center rounded-full border border-[#e6e4e6] bg-white text-[#b7b4b8] opacity-75 xl:size-9">
         {children}
       </span>
     );
@@ -63,7 +53,7 @@ function TeamLinkIcon({
       href={href}
       target="_blank"
       rel="noreferrer"
-      className="inline-flex size-9 items-center justify-center rounded-full border border-[#e6e4e6] bg-white text-[#8b94a6] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
+      className="inline-flex size-8 items-center justify-center rounded-full border border-[#e6e4e6] bg-white text-[#8b94a6] transition hover:border-[var(--accent)] hover:text-[var(--accent)] xl:size-9"
     >
       {children}
     </a>
@@ -94,17 +84,17 @@ export function TeamCard({
           "--team-league-accent": hoverAccent,
         } as CSSProperties
       }
-      className="panel-surface group overflow-hidden border border-[var(--border)] bg-white transition duration-300 hover:-translate-y-0.5 sm:flex"
+      className="panel-surface group overflow-hidden border border-[var(--border)] bg-white transition duration-300 hover:-translate-y-0.5 sm:grid sm:grid-cols-[8.75rem_minmax(0,1fr)] xl:grid-cols-[9rem_minmax(0,1fr)]"
     >
-      <div className="relative flex h-56 flex-col items-center justify-center gap-5 bg-white p-8 sm:h-auto sm:w-44 sm:border-r sm:border-[var(--border)]">
+      <div className="relative flex h-[13.25rem] flex-col items-center justify-center gap-3.5 bg-white px-5 py-6 sm:h-full sm:min-h-[13.75rem] sm:border-r sm:border-[var(--border)] sm:px-3.5 sm:py-5 xl:px-4 xl:py-6">
         {team.logo_data_url ? (
-          <div className="panel-surface relative z-10 size-28 overflow-hidden border-[#ebe6e8] bg-white">
+          <div className="panel-surface relative z-10 size-[5.75rem] overflow-hidden border-[#ebe6e8] bg-white xl:size-[6.1rem]">
             <Image
               src={team.logo_data_url}
               alt={`Escudo de ${team.official_name}`}
               fill
               unoptimized
-              sizes="112px"
+              sizes="104px"
               className="object-contain p-3"
             />
           </div>
@@ -112,13 +102,13 @@ export function TeamCard({
           <ClientTeamLogoMark
             teamName={team.official_name}
             competition={team.competition}
-            className="panel-surface relative z-10 size-28 border-[#ebe6e8] bg-white"
+            className="panel-surface relative z-10 size-[5.75rem] border-[#ebe6e8] bg-white xl:size-[6.1rem]"
             imageClassName="p-3"
             initialsClassName="text-base tracking-[0.14em]"
           />
         )}
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5 xl:gap-3">
           <TeamLinkIcon href={team.website}>
             <Globe className="size-4" />
           </TeamLinkIcon>
@@ -131,21 +121,10 @@ export function TeamCard({
         </div>
       </div>
 
-      <div className="flex flex-1 flex-col justify-between p-6">
-        <div>
-          <div className="mb-2 flex items-start justify-between gap-3">
-            <div className="flex flex-wrap items-center gap-2">
-              {leagueBadges.map((league) => (
-                <span
-                  key={`${team.id}-${league}`}
-                  style={getLeagueBadgeStyle(league)}
-                  className="inline-flex rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.16em]"
-                >
-                  {league}
-                </span>
-              ))}
-            </div>
-            <div className="flex items-center gap-2">
+      <div className="flex flex-1 flex-col justify-between p-5 xl:p-5">
+        <div className="space-y-3.5">
+          <div className="flex justify-start">
+            <div className="flex shrink-0 items-center gap-2">
               <span
                 className={cn(
                   "inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-bold",
@@ -167,38 +146,42 @@ export function TeamCard({
             </div>
           </div>
 
-          <h3 className="text-xl font-extrabold tracking-tight text-[var(--foreground)] transition group-hover:text-[var(--team-league-accent)]">
-            {team.official_name}
-          </h3>
+          <div className="min-w-0 pr-1">
+            <h3 className="text-[1.12rem] font-extrabold leading-[1.06] tracking-[-0.03em] text-[var(--foreground)] transition group-hover:text-[var(--team-league-accent)] xl:text-[1.24rem] 2xl:text-[1.32rem]">
+              {team.official_name}
+            </h3>
+          </div>
 
-          <div className="mt-3 space-y-2 text-sm text-[#70819b]">
-            <div className="flex items-center gap-2">
+          <div className="space-y-3 text-sm text-[#70819b]">
+            <div className="flex items-center gap-2.5">
               <MapPinned className="size-4 shrink-0" />
               <span>{team.stadium ?? "Sin estadio cargado"}</span>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2.5">
               <UserRound className="size-4 shrink-0" />
               <span className="min-w-0 truncate">{responsibleLabel}</span>
-              {responsibleContact?.phone ? (
-                <a
-                  href={buildWhatsAppUrl(responsibleContact.phone)}
-                  target="_blank"
-                  rel="noreferrer"
-                  aria-label={`Escribir por WhatsApp a ${responsibleContact.fullName}`}
-                  className="inline-flex size-8 shrink-0 items-center justify-center rounded-full bg-[#ecfdf3] text-[#16a34a] transition hover:bg-[#dcfce7]"
-                >
-                  <MessageCircle className="size-4" />
-                </a>
-              ) : null}
-              {responsibleContact?.email ? (
-                <a
-                  href={`mailto:${responsibleContact.email}`}
-                  aria-label={`Escribir por correo a ${responsibleContact.fullName}`}
-                  className="inline-flex size-8 shrink-0 items-center justify-center rounded-full bg-[#eef2ff] text-[#4f46e5] transition hover:bg-[#e0e7ff]"
-                >
-                  <Mail className="size-4" />
-                </a>
-              ) : null}
+              <div className="ml-auto flex shrink-0 items-center gap-1.5">
+                {responsibleContact?.phone ? (
+                  <a
+                    href={buildWhatsAppUrl(responsibleContact.phone)}
+                    target="_blank"
+                    rel="noreferrer"
+                    aria-label={`Escribir por WhatsApp a ${responsibleContact.fullName}`}
+                    className="inline-flex size-8 items-center justify-center rounded-full bg-[#ecfdf3] text-[#16a34a] transition hover:bg-[#dcfce7]"
+                  >
+                    <MessageCircle className="size-4" />
+                  </a>
+                ) : null}
+                {responsibleContact?.email ? (
+                  <a
+                    href={`mailto:${responsibleContact.email}`}
+                    aria-label={`Escribir por correo a ${responsibleContact.fullName}`}
+                    className="inline-flex size-8 items-center justify-center rounded-full bg-[#eef2ff] text-[#4f46e5] transition hover:bg-[#e0e7ff]"
+                  >
+                    <Mail className="size-4" />
+                  </a>
+                ) : null}
+              </div>
             </div>
           </div>
         </div>

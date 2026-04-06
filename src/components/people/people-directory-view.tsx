@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Power, UserRound } from "lucide-react";
+import { Pencil, Power, Send } from "lucide-react";
 
 import { togglePersonActiveAction } from "@/app/actions/people";
 import {
@@ -7,14 +7,46 @@ import {
   getInitials,
   getRolePresentation,
   getWhatsAppHref,
-  Mail,
   MapPin,
-  MessageCircle,
 } from "@/components/people/people-view-helpers";
 import { getRoleDisplayName } from "@/lib/display";
 import { parsePersonNotesMeta } from "@/lib/people-notes";
 import type { PersonListItem } from "@/lib/types";
-import { cn } from "@/lib/utils";
+import { cn, normalizeText } from "@/lib/utils";
+
+const NAME_CONNECTORS = new Set([
+  "de",
+  "del",
+  "la",
+  "las",
+  "los",
+  "da",
+  "das",
+  "do",
+  "dos",
+  "van",
+  "von",
+  "y",
+]);
+
+function getDirectoryDisplayName(value: string | null | undefined) {
+  if (!value?.trim()) {
+    return "Sin nombre";
+  }
+
+  const parts = value.trim().split(/\s+/).filter(Boolean);
+
+  if (parts.length <= 2) {
+    return value.trim();
+  }
+
+  const surname =
+    parts
+      .slice(1)
+      .find((part) => !NAME_CONNECTORS.has(normalizeText(part))) ?? parts[1];
+
+  return `${parts[0]} ${surname}`;
+}
 
 function buildDirectoryHref(input: { query?: string; edit?: string }) {
   const search = new URLSearchParams();
@@ -77,7 +109,7 @@ export function PeopleDirectoryView({
   canEdit: boolean;
 }) {
   return (
-    <div className="flex flex-wrap gap-5 p-6">
+    <div className="grid gap-5 p-6 md:grid-cols-2 xl:grid-cols-4">
       {people.map((person) => {
         const meta = parsePersonNotesMeta(person.notes);
         const displayRole = meta.role || person.primary_role || "";
@@ -95,6 +127,7 @@ export function PeopleDirectoryView({
         const cityLabel = city || "Sin ciudad";
         const actionHref = whatsappHref ?? profileHref;
         const actionLabel = whatsappHref ? "Enviar mensaje" : "Ver perfil";
+        const directoryDisplayName = getDirectoryDisplayName(person.full_name);
         const currentDirectoryHref = buildDirectoryHref({
           query,
           edit: isSelected ? person.id : undefined,
@@ -104,60 +137,31 @@ export function PeopleDirectoryView({
           <article
             key={person.id}
             className={cn(
-              "group relative w-full max-w-full overflow-hidden rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--surface)] shadow-[0_10px_24px_rgba(28,13,16,0.05)] transition duration-200 hover:-translate-y-0.5 hover:shadow-[0_14px_28px_rgba(28,13,16,0.07)] sm:w-[330px] sm:max-w-[330px]",
+              "group relative min-w-0 w-full max-w-full overflow-hidden rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--surface)] shadow-[0_10px_24px_rgba(28,13,16,0.05)] transition duration-200 hover:-translate-y-0.5 hover:shadow-[0_14px_28px_rgba(28,13,16,0.07)]",
               isSelected && "border-[#f0d9de] ring-1 ring-[#f4d2da]",
             )}
           >
             <div className="absolute -right-10 -top-10 size-40 rounded-full bg-[rgba(231,19,58,0.03)] blur-3xl" />
             <div className="absolute -bottom-10 -left-10 size-40 rounded-full bg-[rgba(231,19,58,0.04)] blur-3xl" />
 
-            <div className="relative h-32 bg-[linear-gradient(135deg,rgba(231,19,58,0.12),transparent_72%)]">
-              <div className="absolute left-6 top-6 flex items-center gap-2 text-[var(--accent)]">
-                <rolePresentation.Icon className="size-4" />
-                <span className="text-[11px] font-bold uppercase tracking-[0.16em]">
-                  {roleLabel}
-                </span>
-              </div>
-              <form action={togglePersonActiveAction} className="absolute right-5 top-5">
-                <input type="hidden" name="personId" value={person.id} />
-                <input
-                  type="hidden"
-                  name="active"
-                  value={person.active ? "off" : "on"}
-                />
-                <input type="hidden" name="redirectTo" value={currentDirectoryHref} />
-                <button
-                  type="submit"
-                  disabled={!canEdit}
-                  aria-label={`${person.active ? "Desactivar" : "Activar"} a ${person.full_name}`}
-                  title={person.active ? "Desactivar" : "Activar"}
-                  className={cn(
-                    "inline-flex size-9 items-center justify-center rounded-full border transition",
-                    state.toggleButtonClassName,
-                    !canEdit && "cursor-not-allowed opacity-60",
-                  )}
-                >
-                  <Power className="size-4" />
-                </button>
-              </form>
-            </div>
+            <div className="relative h-24 bg-[linear-gradient(135deg,rgba(231,19,58,0.12),transparent_72%)]" />
 
-            <div className="relative flex justify-center -mt-16">
+            <div className="relative flex justify-center -mt-12">
               <div
                 className={cn(
-                  "rounded-full p-1.5 shadow-[0_8px_18px_rgba(15,23,42,0.05)]",
+                  "rounded-full p-1 shadow-[0_8px_18px_rgba(15,23,42,0.05)]",
                   state.avatarShellClassName,
                 )}
               >
                 <div
                   className={cn(
-                    "flex size-32 items-center justify-center overflow-hidden rounded-full border-4",
+                    "flex size-24 items-center justify-center overflow-hidden rounded-full border-[3px]",
                     state.avatarInnerClassName,
                   )}
                 >
                   <span
                     className={cn(
-                      "text-[2.4rem] font-black tracking-[-0.06em]",
+                      "text-[2rem] font-black tracking-[-0.06em]",
                       state.avatarTextClassName,
                     )}
                   >
@@ -167,14 +171,23 @@ export function PeopleDirectoryView({
               </div>
             </div>
 
-            <div className="px-8 pb-8 pt-6 text-center">
+            <div className="px-6 pb-6 pt-4 text-center">
               <div>
-                <h3 className="text-[1.65rem] font-black leading-[1.05] tracking-[-0.03em] text-[var(--foreground)]">
-                  {person.full_name}
+                <h3
+                  title={person.full_name}
+                  className="truncate whitespace-nowrap text-[1.2rem] font-black leading-[1.05] tracking-[-0.03em] text-[var(--foreground)] xl:text-[1.3rem]"
+                >
+                  {directoryDisplayName}
                 </h3>
+                <div className="mt-1.5 flex items-center justify-center gap-1.5 text-[var(--accent)]">
+                  <rolePresentation.Icon className="size-3.5" />
+                  <p className="truncate text-[11px] font-bold uppercase tracking-[0.16em]">
+                    {roleLabel}
+                  </p>
+                </div>
               </div>
 
-              <div className="mt-4 flex items-center justify-center gap-1.5 text-xs font-medium text-[#7b8798]">
+              <div className="mt-2.5 flex items-center justify-center gap-1.5 text-xs font-medium text-[#7b8798]">
                 {cityIndicator.emoji ? (
                   <span className="inline-flex size-4 items-center justify-center text-sm leading-none">
                     {cityIndicator.emoji}
@@ -187,16 +200,13 @@ export function PeopleDirectoryView({
                 </p>
               </div>
 
-              <div className="mt-8 space-y-3">
+              <div className="mt-5 space-y-2.5">
                 {person.email ? (
                   <a
                     href={`mailto:${person.email}`}
-                    className="group flex items-center gap-4 rounded-[var(--panel-radius)] border border-[#eef1f5] p-3 text-left transition hover:bg-[#fafbfc]"
+                    className="group flex min-h-[4.75rem] items-center justify-center rounded-[var(--panel-radius)] border border-[#eef1f5] px-4 py-2.5 text-center transition hover:bg-[#fafbfc]"
                   >
-                    <div className="flex size-10 items-center justify-center rounded-full bg-[#eef2ff] text-[#4f46e5] transition group-hover:bg-[#e0e7ff]">
-                      <Mail className="size-4" />
-                    </div>
-                    <div className="min-w-0">
+                    <div className="min-w-0 space-y-1">
                       <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#a0abba]">
                         Correo institucional
                       </p>
@@ -206,11 +216,8 @@ export function PeopleDirectoryView({
                     </div>
                   </a>
                 ) : (
-                  <div className="flex items-center gap-4 rounded-[var(--panel-radius)] border border-[#eef1f5] p-3 text-left">
-                    <div className="flex size-10 items-center justify-center rounded-full bg-[#f4f7fb] text-[#94a3b8]">
-                      <Mail className="size-4" />
-                    </div>
-                    <div className="min-w-0">
+                  <div className="flex min-h-[4.75rem] items-center justify-center rounded-[var(--panel-radius)] border border-[#eef1f5] px-4 py-2.5 text-center">
+                    <div className="min-w-0 space-y-1">
                       <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#a0abba]">
                         Correo institucional
                       </p>
@@ -226,12 +233,9 @@ export function PeopleDirectoryView({
                     href={whatsappHref ?? undefined}
                     target="_blank"
                     rel="noreferrer"
-                    className="group flex items-center gap-4 rounded-[var(--panel-radius)] border border-[#eef1f5] p-3 text-left transition hover:bg-[#fafbfc]"
+                    className="group flex min-h-[4.75rem] items-center justify-center rounded-[var(--panel-radius)] border border-[#eef1f5] px-4 py-2.5 text-center transition hover:bg-[#fafbfc]"
                   >
-                    <div className="flex size-10 items-center justify-center rounded-full bg-[#ecfdf3] text-[#16a34a] transition group-hover:bg-[#dcfce7]">
-                      <MessageCircle className="size-4" />
-                    </div>
-                    <div className="min-w-0">
+                    <div className="min-w-0 space-y-1">
                       <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#a0abba]">
                         Teléfono directo
                       </p>
@@ -241,11 +245,8 @@ export function PeopleDirectoryView({
                     </div>
                   </a>
                 ) : (
-                  <div className="flex items-center gap-4 rounded-[var(--panel-radius)] border border-[#eef1f5] p-3 text-left">
-                    <div className="flex size-10 items-center justify-center rounded-full bg-[#f4f7fb] text-[#94a3b8]">
-                      <MessageCircle className="size-4" />
-                    </div>
-                    <div className="min-w-0">
+                  <div className="flex min-h-[4.75rem] items-center justify-center rounded-[var(--panel-radius)] border border-[#eef1f5] px-4 py-2.5 text-center">
+                    <div className="min-w-0 space-y-1">
                       <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#a0abba]">
                         Teléfono directo
                       </p>
@@ -257,21 +258,47 @@ export function PeopleDirectoryView({
                 )}
               </div>
 
-              <div className="mt-7 flex gap-3">
+              <div className="mt-5 flex items-center justify-center gap-3">
                 <a
                   href={actionHref}
                   target={whatsappHref ? "_blank" : undefined}
                   rel={whatsappHref ? "noreferrer" : undefined}
-                  className="inline-flex h-12 flex-1 items-center justify-center rounded-[var(--panel-radius)] bg-[var(--accent)] px-6 text-sm font-bold text-white shadow-[0_12px_28px_rgba(231,19,58,0.2)] transition hover:brightness-110"
+                  aria-label={actionLabel}
+                  title={actionLabel}
+                  className="inline-flex size-12 shrink-0 items-center justify-center rounded-[var(--panel-radius)] bg-[var(--accent)] text-white shadow-[0_12px_28px_rgba(231,19,58,0.2)] transition hover:brightness-110"
                 >
-                  {actionLabel}
+                  <Send className="size-4" />
                 </a>
                 <Link
                   href={profileHref}
-                  className="inline-flex size-12 items-center justify-center rounded-[var(--panel-radius)] border border-[#e6e9ef] text-[#6b778b] transition hover:bg-[#fafbfc] hover:text-[var(--foreground)]"
+                  aria-label={`Editar a ${person.full_name}`}
+                  title="Editar personal"
+                  className="inline-flex size-12 shrink-0 items-center justify-center rounded-[var(--panel-radius)] border border-[#e6e9ef] text-[#6b778b] transition hover:bg-[#fafbfc] hover:text-[var(--foreground)]"
                 >
-                  <UserRound className="size-4" />
+                  <Pencil className="size-4" />
                 </Link>
+                <form action={togglePersonActiveAction} className="shrink-0">
+                  <input type="hidden" name="personId" value={person.id} />
+                  <input
+                    type="hidden"
+                    name="active"
+                    value={person.active ? "off" : "on"}
+                  />
+                  <input type="hidden" name="redirectTo" value={currentDirectoryHref} />
+                  <button
+                    type="submit"
+                    disabled={!canEdit}
+                    aria-label={`${person.active ? "Desactivar" : "Activar"} a ${person.full_name}`}
+                    title={person.active ? "Desactivar" : "Activar"}
+                    className={cn(
+                      "inline-flex size-12 items-center justify-center rounded-[var(--panel-radius)] border transition",
+                      state.toggleButtonClassName,
+                      !canEdit && "cursor-not-allowed opacity-60",
+                    )}
+                  >
+                    <Power className="size-4" />
+                  </button>
+                </form>
               </div>
             </div>
           </article>

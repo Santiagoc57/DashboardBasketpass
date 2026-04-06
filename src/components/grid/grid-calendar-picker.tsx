@@ -249,7 +249,7 @@ export function GridCalendarPicker({
       </button>
 
       {open ? (
-        <div className="panel-surface absolute right-0 top-[calc(100%+0.75rem)] z-30 w-[31rem] max-w-[calc(100vw-2rem)] border border-[var(--border)] bg-[var(--surface)] p-5">
+        <div className="panel-surface absolute right-0 top-[calc(100%+0.75rem)] z-30 w-[min(31rem,calc(100vw-2rem))] border border-[var(--border)] bg-[var(--surface)] p-4 sm:p-5">
           <div className="mb-4 flex items-center justify-between gap-3">
             <button
               type="button"

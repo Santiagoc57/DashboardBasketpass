@@ -1,21 +1,22 @@
 export const PRODUCT_COPY = {
-  appName: "Basket Prod.",
-  portalLabel: "Portal",
+  appName: "Basket Production",
+  portalLabel: "",
   releaseLabel: "Consola operativa v0.1.0",
   collaboratorWordmark: {
     line1: "Basket",
-    line2: "Prod.",
+    line2: "Production",
   },
   loginHero: {
     eyebrow: "Operación en vivo",
     titleLine1: "Basket",
-    titleLine2: "Prod.",
+    titleLine2: "Production",
     description:
       "Coordinación ejecutiva para transmisiones en vivo, gestión integral de talento y monitoreo del equipo técnico en tiempo real.",
   },
 } as const;
 
 export const BUSINESS_LABELS = {
+  production: "Producción",
   productionShort: "Produ",
   responsible: "Responsable",
   relatos: "Relatos",
@@ -23,11 +24,11 @@ export const BUSINESS_LABELS = {
 
 export const AI_COPY = {
   assistantIdentity: `Eres un asistente interno de ${PRODUCT_COPY.appName}.`,
-  portalCaptureContext: `para el ${PRODUCT_COPY.portalLabel} de ${PRODUCT_COPY.appName}.`,
+  portalCaptureContext: `para la plataforma de ${PRODUCT_COPY.appName}.`,
   globalGeminiHint:
-    "Configura Gemini en Configuración. Si el admin ya cargó la clave global del Portal, la IA también quedará disponible para colaboradores.",
+    "Configura Gemini en Configuración. Si el admin ya cargó la clave global de la plataforma, la IA también quedará disponible para colaboradores.",
   globalGeminiCaptureHint:
-    "Configura Gemini en Configuración. Si el admin ya cargó la clave global del Portal, la lectura de capturas también quedará disponible para colaboradores.",
+    "Configura Gemini en Configuración. Si el admin ya cargó la clave global de la plataforma, la lectura de capturas también quedará disponible para colaboradores.",
 } as const;
 
 export const SECTION_COPY = {
@@ -61,6 +62,6 @@ export const SECTION_COPY = {
   settings: {
     title: "Configuración",
     description:
-      "Ajusta tu perfil, la configuración de IA y algunas preferencias de interfaz para el portal.",
+      "Ajusta tu perfil, la configuración de IA y algunas preferencias de interfaz para la plataforma.",
   },
 } as const;

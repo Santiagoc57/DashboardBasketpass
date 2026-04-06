@@ -73,7 +73,7 @@ export function DashboardNav({
   }
 
   return (
-    <nav className="space-y-2">
+    <nav className="space-y-2 xl:space-y-3">
       {allowedItems.map((item) => {
         const active = pathname.startsWith(item.href);
         const Icon = item.icon;
@@ -82,15 +82,17 @@ export function DashboardNav({
           <Link
             key={item.href}
             href={item.href}
+            title={item.label}
+            aria-label={item.label}
             className={cn(
-              "flex items-center gap-3 rounded-[var(--panel-radius)] px-4 py-3.5 text-[15px] font-semibold transition",
+              "flex min-w-0 items-center gap-3 rounded-[var(--panel-radius)] px-4 py-3.5 text-[15px] font-semibold transition lg:justify-center lg:px-0 xl:justify-start xl:gap-2.5 xl:px-3 xl:py-3 xl:text-[14px] 2xl:gap-3 2xl:px-5 2xl:py-3.5 2xl:text-[15px]",
               active
                 ? "bg-[var(--accent)] text-white shadow-[0_14px_32px_rgba(230,18,56,0.24)]"
                 : "bg-[#0d1731] text-white hover:bg-[#132347]",
             )}
           >
             <Icon className="size-5" strokeWidth={2.2} />
-            <span>{item.label}</span>
+            <span className="hidden min-w-0 truncate xl:inline">{item.label}</span>
           </Link>
         );
       })}

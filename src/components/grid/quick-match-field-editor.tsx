@@ -73,7 +73,7 @@ export function QuickMatchFieldEditor({
       {open ? (
         <div
           className={cn(
-            "absolute left-0 top-[calc(100%+0.75rem)] z-30 min-w-[15rem] rounded-[18px] border border-[var(--border)] bg-white p-4 shadow-[0_20px_48px_rgba(28,13,16,0.16)]",
+            "absolute left-0 top-[calc(100%+0.75rem)] z-30 min-w-[15rem] max-w-[calc(100vw-2rem)] rounded-[18px] border border-[var(--border)] bg-white p-4 shadow-[0_20px_48px_rgba(28,13,16,0.16)]",
             panelClassName,
           )}
           onClick={(event) => event.stopPropagation()}

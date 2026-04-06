@@ -14,16 +14,21 @@ export function SetupPanel() {
         </h2>
       </div>
       <div className="space-y-2 text-sm text-[var(--muted)]">
-        <p>1. Copia <code>.env.example</code> a <code>.env.local</code>.</p>
         <p>
-          2. Ejecuta los SQL de <code>supabase/migrations/0001_initial.sql</code>,{" "}
-          <code>0002_fix_audit_trigger.sql</code> y{" "}
-          <code>0003_add_operator_roles.sql</code>,{" "}
-          <code>0004_allow_collaborator_edit.sql</code> y luego{" "}
-          <code>supabase/seed.sql</code>.
+          1. Copia <code>.env.example</code> a <code>.env.local</code> y completa{" "}
+          <code>NEXT_PUBLIC_SUPABASE_URL</code> y{" "}
+          <code>NEXT_PUBLIC_SUPABASE_ANON_KEY</code>.
         </p>
         <p>
-          3. Promueve tu usuario a <code>admin</code> desde la tabla{" "}
+          2. Ejecuta en orden los SQL dentro de <code>supabase/migrations/</code>{" "}
+          y luego <code>supabase/seed.sql</code>.
+        </p>
+        <p>
+          3. Si vas a usar el importador CSV, agrega también{" "}
+          <code>SUPABASE_SERVICE_ROLE_KEY</code>.
+        </p>
+        <p>
+          4. Promueve tu usuario a <code>admin</code> desde la tabla{" "}
           <code>profiles</code>.
         </p>
       </div>

@@ -112,7 +112,7 @@ export default async function LoginPage({ searchParams }: PageProps) {
               <h1 className="text-4xl font-black leading-[1.02] tracking-[-0.04em] text-[var(--foreground)] xl:text-5xl 2xl:text-6xl">
                 {PRODUCT_COPY.loginHero.titleLine1}
                 <br />
-                {PRODUCT_COPY.loginHero.titleLine2}.
+                {PRODUCT_COPY.loginHero.titleLine2}
               </h1>
               <p className="max-w-xl text-base font-medium leading-relaxed text-[var(--muted)] xl:text-lg">
                 {PRODUCT_COPY.loginHero.description}

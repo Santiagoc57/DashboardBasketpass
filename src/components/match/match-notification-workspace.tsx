@@ -50,11 +50,13 @@ export function MatchNotificationWorkspace({
   batchMessage,
   recipients,
   unassignedRoles,
+  compact = false,
 }: {
   bulkMailtoHref: string;
   batchMessage: string;
   recipients: MatchNotificationRecipient[];
   unassignedRoles: string[];
+  compact?: boolean;
 }) {
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const whatsappRecipients = useMemo(
@@ -93,7 +95,12 @@ export function MatchNotificationWorkspace({
   }
 
   return (
-    <div className="grid gap-6 xl:grid-cols-[minmax(0,1.05fr)_320px]">
+    <div
+      className={cn(
+        "grid gap-6",
+        compact ? "grid-cols-1" : "xl:grid-cols-[minmax(0,1.05fr)_320px]",
+      )}
+    >
       <div className="space-y-6">
         <Card className="space-y-5">
           <div className="flex flex-wrap items-start justify-between gap-4">
@@ -101,10 +108,20 @@ export function MatchNotificationWorkspace({
               <p className="text-[11px] font-black uppercase tracking-[0.24em] text-[var(--accent)]">
                 Notificar
               </p>
-              <h2 className="text-2xl font-black tracking-tight text-[var(--foreground)]">
+              <h2
+                className={cn(
+                  "font-black tracking-tight text-[var(--foreground)]",
+                  compact ? "text-xl" : "text-2xl",
+                )}
+              >
                 Convocatoria del partido
               </h2>
-              <p className="max-w-2xl text-sm leading-6 text-[#617187]">
+              <p
+                className={cn(
+                  "max-w-2xl text-sm leading-6 text-[#617187]",
+                  compact && "max-w-none text-[13px] leading-5",
+                )}
+              >
                 Abre tu correo o WhatsApp con el mensaje listo para pedir confirmación
                 de disponibilidad al equipo asignado.
               </p>
@@ -280,7 +297,12 @@ export function MatchNotificationWorkspace({
             </div>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
+          <div
+            className={cn(
+              "grid gap-3 sm:grid-cols-2",
+              compact ? "xl:grid-cols-3" : "xl:grid-cols-1",
+            )}
+          >
             <div className="rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--background-soft)] p-4">
               <p className="text-[11px] font-black uppercase tracking-[0.2em] text-[#95a3ba]">
                 Con correo

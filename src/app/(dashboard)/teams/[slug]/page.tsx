@@ -91,8 +91,8 @@ export default async function TeamDetailPage({ params }: PageProps) {
         <span className="text-[#627086]">{team.official_name}</span>
       </nav>
 
-      <section className="rounded-[24px] border border-[var(--border)] bg-[var(--surface)] p-8 shadow-[0_10px_28px_rgba(28,13,16,0.05)]">
-        <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+      <section className="rounded-[24px] border border-[var(--border)] bg-[var(--surface)] p-6 xl:p-8 shadow-[0_10px_28px_rgba(28,13,16,0.05)]">
+        <div className="flex flex-col gap-6 xl:flex-row xl:items-center xl:justify-between">
           <div className="flex items-center gap-6">
             <TeamLogoMark
               teamName={team.official_name}
@@ -112,7 +112,7 @@ export default async function TeamDetailPage({ params }: PageProps) {
                   </span>
                 ))}
               </div>
-              <h1 className="text-4xl font-black tracking-tight text-[var(--foreground)]">
+              <h1 className="text-3xl font-black tracking-tight text-[var(--foreground)] sm:text-4xl">
                 {team.official_name}
               </h1>
               <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm font-medium text-[#617187]">
@@ -159,7 +159,7 @@ export default async function TeamDetailPage({ params }: PageProps) {
         </div>
       </section>
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_20rem]">
+      <div className="grid gap-6 2xl:grid-cols-[minmax(0,1fr)_20rem]">
         <Card className="space-y-6">
           <div>
             <p className="text-xs font-black uppercase tracking-[0.22em] text-[#94a3b8]">

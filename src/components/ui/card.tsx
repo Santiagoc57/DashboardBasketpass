@@ -10,7 +10,7 @@ export function Card({
   return (
     <div
       className={cn(
-        "panel-surface border border-[var(--border)] bg-[var(--surface)] p-5",
+        "panel-surface border border-[var(--border)] bg-[var(--surface)] p-4 sm:p-5 2xl:p-6",
         className,
       )}
     >

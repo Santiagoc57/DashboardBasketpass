@@ -43,7 +43,7 @@ export default async function SettingsPage({ searchParams }: PageProps) {
   return (
     <div className="space-y-8">
       <section className="space-y-2">
-        <h2 className="text-4xl font-black tracking-tight text-[var(--foreground)]">
+        <h2 className="text-3xl font-black tracking-tight text-[var(--foreground)] sm:text-4xl">
           {SECTION_COPY.settings.title}
         </h2>
         <p className="max-w-2xl text-sm font-medium leading-6 text-[#617187]">
@@ -84,7 +84,7 @@ export default async function SettingsPage({ searchParams }: PageProps) {
               Gemini
             </h3>
             <p className="text-sm text-[#617187]">
-              Configura la clave para habilitar la IA del portal. Si eres admin,
+              Configura la clave para habilitar la IA de la plataforma. Si eres admin,
               también quedará disponible para colaboradores y módulos operativos.
             </p>
           </div>
@@ -102,7 +102,7 @@ export default async function SettingsPage({ searchParams }: PageProps) {
           ) : null}
           {settings.geminiSource === "portal" ? (
             <span className="ml-2 font-mono text-xs text-[#94a3b8]">
-              config global del portal activa
+              config global de la plataforma activa
             </span>
           ) : null}
           {settings.geminiSource === "env" ? (
@@ -128,7 +128,7 @@ export default async function SettingsPage({ searchParams }: PageProps) {
               />
             </div>
             <span className="block text-xs text-[#94a3b8]">
-              Prioridad efectiva: configuración personal, luego portal, luego variable del servidor.
+              Prioridad efectiva: configuración personal, luego plataforma, luego variable del servidor.
             </span>
           </label>
           <label className="space-y-2">

@@ -15,6 +15,11 @@
   --accent-strong: #c61031;
   --panel-radius: 10px;
   --panel-shadow: 0 10px 24px rgba(28, 13, 16, 0.05);
+  --dashboard-shell-padding: 1rem;
+  --dashboard-sidebar-width: 0rem;
+  --dashboard-content-leading-space: 0rem;
+  --font-manrope: "Avenir Next", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --font-plex-mono: "SFMono-Regular", Menlo, Monaco, "Courier New", monospace;
 }
 
 @theme inline {
@@ -38,6 +43,7 @@ body {
   font-family: var(--font-manrope), sans-serif;
   background-image: linear-gradient(180deg, #ffffff 0%, #fafafa 100%);
   min-height: 100vh;
+  overflow-x: clip;
 }
 
 a {
@@ -58,6 +64,36 @@ select option {
 ::selection {
   background: rgba(230, 18, 56, 0.18);
   color: white;
+}
+
+@media (min-width: 640px) {
+  :root {
+    --dashboard-shell-padding: 1.5rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  :root {
+    --dashboard-shell-padding: 1.5rem;
+    --dashboard-sidebar-width: 5rem;
+    --dashboard-content-leading-space: 0.375rem;
+  }
+}
+
+@media (min-width: 1280px) {
+  :root {
+    --dashboard-shell-padding: 1.75rem;
+    --dashboard-sidebar-width: 200px;
+    --dashboard-content-leading-space: 0rem;
+  }
+}
+
+@media (min-width: 1536px) {
+  :root {
+    --dashboard-shell-padding: 2rem;
+    --dashboard-sidebar-width: 200px;
+    --dashboard-content-leading-space: 0rem;
+  }
 }
 
 @layer utilities {

@@ -57,17 +57,34 @@ cp .env.example .env.local
 ```bash
 NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
-SUPABASE_SERVICE_ROLE_KEY=
 NEXT_PUBLIC_APP_TIMEZONE=America/Bogota
 NEXT_PUBLIC_APP_URL=http://localhost:3000
 ```
 
-4. En Supabase ejecuta:
+Variables opcionales:
+
+```bash
+SUPABASE_SERVICE_ROLE_KEY=
+ALLOW_GUEST_MI_JORNADA=false
+PORTAL_GEMINI_API_KEY=
+PORTAL_GEMINI_MODEL=gemini-2.5-flash
+MATCH_LOOKUP_API_URL=
+```
+
+`SUPABASE_SERVICE_ROLE_KEY` es necesaria para el importador CSV. Las demás se usan para funciones opcionales.
+
+4. En Supabase ejecuta, en orden, todos los archivos de `supabase/migrations/` y luego `supabase/seed.sql`.
+
+Migraciones actuales:
 
 - `supabase/migrations/0001_initial.sql`
 - `supabase/migrations/0002_fix_audit_trigger.sql`
 - `supabase/migrations/0003_add_operator_roles.sql`
 - `supabase/migrations/0004_allow_collaborator_edit.sql`
+- `supabase/migrations/0005_add_match_intake_fields.sql`
+- `supabase/migrations/0006_add_announcements.sql`
+- `supabase/migrations/0007_add_collaborator_reports.sql`
+- `supabase/migrations/0008_add_app_settings.sql`
 - `supabase/seed.sql`
 
 5. Crea o invita un usuario en Supabase Auth y luego promuévelo a admin:

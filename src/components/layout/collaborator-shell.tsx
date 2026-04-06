@@ -54,7 +54,7 @@ export function CollaboratorShell({
   return (
     <div className="min-h-screen bg-[var(--page-canvas)]">
       <header className="sticky top-0 z-40 border-b border-[var(--border)] bg-[rgba(255,255,255,0.92)] backdrop-blur-md">
-        <div className="flex h-20 items-center gap-4 px-4 sm:px-6 lg:px-8">
+        <div className="flex h-[4.5rem] items-center gap-3 px-[var(--dashboard-shell-padding)] 2xl:h-20">
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-3">
               <BasketMark />
@@ -112,15 +112,15 @@ export function CollaboratorShell({
         </div>
       </header>
 
-      <main className="min-w-0 px-4 py-5 pb-28 sm:px-6 lg:px-8 lg:pb-8">
+      <main className="min-w-0 px-[var(--dashboard-shell-padding)] py-4 pb-28 sm:py-5 lg:pb-8">
         {children}
       </main>
 
-      <footer className="hidden border-t border-[var(--border)] bg-[var(--page-footer-bg)] px-4 py-6 backdrop-blur-sm lg:block lg:px-8">
+      <footer className="hidden border-t border-[var(--border)] bg-[var(--page-footer-bg)] px-[var(--dashboard-shell-padding)] py-6 backdrop-blur-sm lg:block">
         <DashboardFooterMeta userName={displayName} />
       </footer>
 
-      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-[var(--border)] bg-[rgba(255,255,255,0.96)] px-4 py-3 backdrop-blur-md lg:hidden">
+      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-[var(--border)] bg-[rgba(255,255,255,0.96)] px-[var(--dashboard-shell-padding)] py-3 backdrop-blur-md lg:hidden">
         <CollaboratorNav mobile allowTeams={allowTeams} />
       </div>
     </div>

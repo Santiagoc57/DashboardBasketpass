@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ChevronDown, PencilLine } from "lucide-react";
+import { ChevronDown, PencilLine, Plus } from "lucide-react";
 
 import { CreateMatchModal } from "@/components/grid/create-match-modal";
 import { formatMatchDate } from "@/lib/date";
@@ -76,6 +76,19 @@ export function MatchCardActions({
         triggerVariant="icon"
         triggerLabel="Editar partido"
         triggerIcon={<PencilLine className="size-4" />}
+        triggerClassName={cn(controlClassName, "shadow-none")}
+      />
+
+      <CreateMatchModal
+        people={people}
+        redirectTo={redirectTo}
+        canEdit={canEdit}
+        initialDate={formatMatchDate(match.kickoff_at, match.timezone, "yyyy-MM-dd")}
+        match={match}
+        mode="staff"
+        triggerVariant="icon"
+        triggerLabel="Agregar personal"
+        triggerIcon={<Plus className="size-4" />}
         triggerClassName={cn(controlClassName, "shadow-none")}
       />
 

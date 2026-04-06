@@ -96,7 +96,7 @@ export default async function TeamsPage({ searchParams }: PageProps) {
             action="/teams"
             defaultValue={query}
             placeholder="Buscar equipo, liga o estadio..."
-            className="w-full md:min-w-[22rem] md:flex-1"
+            className="w-full xl:min-w-[20rem] xl:flex-1"
           >
             {activeLeague ? (
               <input type="hidden" name="league" value={activeLeague} />

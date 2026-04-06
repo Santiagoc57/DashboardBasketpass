@@ -74,7 +74,7 @@ export default async function RolesPage({ searchParams }: PageProps) {
             Crear registro
           </h3>
         </div>
-        <form action={upsertRoleAction} className="grid gap-3 lg:grid-cols-4">
+        <form action={upsertRoleAction} className="grid gap-3 md:grid-cols-2 2xl:grid-cols-4">
           <input type="hidden" name="redirectTo" value="/roles" />
           <Input name="name" placeholder="Cámara 6" disabled={!user.canEdit} />
           <Input name="category" placeholder="Cámaras" disabled={!user.canEdit} />
@@ -90,11 +90,11 @@ export default async function RolesPage({ searchParams }: PageProps) {
             Activo
           </label>
           {user.canEdit ? (
-            <SubmitButton pendingLabel="Guardando..." className="lg:col-span-4 lg:w-fit">
+            <SubmitButton pendingLabel="Guardando..." className="md:col-span-2 md:w-fit 2xl:col-span-4">
               Crear rol
             </SubmitButton>
           ) : (
-            <Button variant="secondary" disabled className="lg:col-span-4 lg:w-fit">
+            <Button variant="secondary" disabled className="md:col-span-2 md:w-fit 2xl:col-span-4">
               Solo lectura
             </Button>
           )}
@@ -122,7 +122,7 @@ export default async function RolesPage({ searchParams }: PageProps) {
                   >
                     <input type="hidden" name="redirectTo" value="/roles" />
                     <input type="hidden" name="roleId" value={role.id} />
-                    <div className="grid gap-3 lg:grid-cols-4">
+                    <div className="grid gap-3 md:grid-cols-2 2xl:grid-cols-4">
                       <Input
                         name="name"
                         defaultValue={getRoleDisplayName(role.name)}

@@ -80,7 +80,7 @@ export default async function MatchNotifyPage({ params, searchParams }: PageProp
           Esta pantalla es solo para coordinación
         </h2>
         <p className="text-sm leading-6 text-[#617187]">
-          Necesitas permisos de edición para enviar convocatorias desde el portal.
+          Necesitas permisos de edición para enviar convocatorias desde la plataforma.
         </p>
       </Card>
     );

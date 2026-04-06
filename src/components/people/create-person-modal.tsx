@@ -262,8 +262,8 @@ export function CreatePersonModal({
                   </div>
                 </section>
 
-                <div className="lg:grid lg:grid-cols-3">
-                  <section className="border-b border-[#f1f3f5] bg-white px-8 py-8 lg:col-span-2 lg:border-b-0 lg:border-r">
+                <div className="2xl:grid 2xl:grid-cols-3">
+                  <section className="border-b border-[#f1f3f5] bg-white px-8 py-8 2xl:col-span-2 2xl:border-b-0 2xl:border-r">
                     <SectionHeading
                       icon={<UserRound className="size-5" />}
                       title="Información principal"
@@ -360,20 +360,20 @@ export function CreatePersonModal({
                     </div>
                   </section>
 
-                  <div className="flex flex-col lg:col-span-1">
-                    <section className="bg-white px-8 py-8 lg:flex lg:h-full lg:flex-col">
+                  <div className="flex flex-col 2xl:col-span-1">
+                    <section className="bg-white px-8 py-8 2xl:flex 2xl:h-full 2xl:flex-col">
                       <SectionHeading
                         icon={<FileText className="size-5" />}
                         title="Notas"
                       />
 
-                      <label className="space-y-2 lg:flex lg:flex-1 lg:flex-col">
+                      <label className="space-y-2 2xl:flex 2xl:flex-1 2xl:flex-col">
                         <ModalFieldLabel>Notas</ModalFieldLabel>
                         <Textarea
                           name="notes"
                           placeholder="Añade cualquier detalle relevante sobre el perfil del colaborador..."
                           disabled={!canEdit}
-                          className="min-h-[140px] rounded-[var(--panel-radius)] border-[#e5e7eb] bg-[#f9f9f9] text-[15px] font-medium text-[#1f2937] placeholder:text-[#98a2b3] shadow-[inset_0_2px_4px_rgba(15,23,42,0.04)] focus:border-[var(--accent)] focus:bg-white focus:ring-[3px] focus:ring-[rgba(230,18,56,0.08)] lg:min-h-0 lg:flex-1"
+                          className="min-h-[140px] rounded-[var(--panel-radius)] border-[#e5e7eb] bg-[#f9f9f9] text-[15px] font-medium text-[#1f2937] placeholder:text-[#98a2b3] shadow-[inset_0_2px_4px_rgba(15,23,42,0.04)] focus:border-[var(--accent)] focus:bg-white focus:ring-[3px] focus:ring-[rgba(230,18,56,0.08)] 2xl:min-h-0 2xl:flex-1"
                         />
                       </label>
                     </section>
@@ -383,7 +383,7 @@ export function CreatePersonModal({
                 {canManageAccess ? (
                   <section className="border-t border-[#f1f3f5] bg-[#faf7f7] px-8 py-8">
                     <div className="rounded-[var(--panel-radius)] border-2 border-[rgba(211,49,49,0.10)] bg-white p-6 shadow-sm">
-                      <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+                      <div className="flex flex-col gap-5 2xl:flex-row 2xl:items-start 2xl:justify-between">
                         <div className="flex gap-4">
                           <div className="inline-flex size-12 items-center justify-center rounded-2xl bg-[rgba(211,49,49,0.1)] text-[var(--accent)]">
                             <ShieldCheck className="size-6" />
@@ -399,7 +399,7 @@ export function CreatePersonModal({
                           </div>
                         </div>
 
-                        <div className="flex flex-col items-start gap-2 lg:items-end">
+                        <div className="flex flex-col items-start gap-2 2xl:items-end">
                           <button
                             type="button"
                             role="switch"
@@ -433,7 +433,7 @@ export function CreatePersonModal({
                       </div>
 
                       {createPlatformAccess ? (
-                        <div className="mt-5 grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_280px]">
+                        <div className="mt-5 grid grid-cols-1 gap-6 2xl:grid-cols-[minmax(0,1fr)_280px]">
                           <div className="rounded-[var(--panel-radius)] border border-[#e5e7eb] bg-[#f9f9f9] px-4 py-3 shadow-[inset_0_2px_4px_rgba(15,23,42,0.04)]">
                             <p className="text-[11px] font-black uppercase tracking-[0.22em] text-[#95a3ba]">
                               Correo de ingreso

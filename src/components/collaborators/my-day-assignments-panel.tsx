@@ -301,12 +301,6 @@ function formatAssignmentDrawerDate(assignment: CollaboratorAssignmentItem) {
   );
 }
 
-function formatAssignmentPlanillaDate(assignment: CollaboratorAssignmentItem) {
-  return capitalizeSentence(
-    format(parseISO(assignment.kickoffAt), "dd 'de' MMMM 'de' yyyy", { locale: es }),
-  );
-}
-
 function buildAssignmentEventId(assignment: CollaboratorAssignmentItem) {
   const compact = (assignment.matchId || assignment.assignmentId)
     .replaceAll(/[^a-zA-Z0-9]/g, "")
@@ -349,11 +343,110 @@ function formatAssignmentProductionMeta(assignment: CollaboratorAssignmentItem) 
   return `${roleLabel} · ${cameraLabel}`;
 }
 
+function formatAssignmentTableDateCompact(assignment: CollaboratorAssignmentItem) {
+  return format(parseISO(assignment.kickoffAt), "d MMM", { locale: es })
+    .replaceAll(".", "")
+    .toUpperCase();
+}
+
+function getAssignmentTableSecondaryContact(assignment: CollaboratorAssignmentItem) {
+  const currentRole = normalizeText(
+    getRoleDisplayName(assignment.roleName) || assignment.roleName || "",
+  );
+  const candidates = [
+    { label: "Realizador", value: assignment.realizerName, tone: "neutral" as const },
+    { label: "Productor", value: assignment.producerName, tone: "neutral" as const },
+    { label: "Relator", value: assignment.relatorName, tone: "accent" as const },
+    {
+      label: "Operador de control",
+      value: assignment.operatorControlName,
+      tone: "neutral" as const,
+    },
+    { label: "Encoder", value: assignment.encoderName, tone: "neutral" as const },
+  ];
+
+  return (
+    candidates.find(
+      (candidate) =>
+        candidate.value?.trim() && normalizeText(candidate.label) !== currentRole,
+    ) ?? {
+      label: "Apoyo",
+      value: "TBD",
+      tone: "neutral" as const,
+    }
+  );
+}
+
+function getAssignmentTableCoverageMeta(assignment: CollaboratorAssignmentItem) {
+  if (assignment.encoderName?.trim()) {
+    return {
+      label: "Encoder",
+      value: abbreviatePersonName(assignment.encoderName),
+    };
+  }
+
+  if (assignment.relatorName?.trim()) {
+    return {
+      label: "Relator",
+      value: abbreviatePersonName(assignment.relatorName),
+    };
+  }
+
+  if (assignment.talentLabel?.trim()) {
+    return {
+      label: "Talento",
+      value: assignment.talentLabel.trim(),
+    };
+  }
+
+  return {
+    label: "Cobertura",
+    value: formatAssignmentProductionMeta(assignment),
+  };
+}
+
+function AssignmentTablePersonLine({
+  label,
+  value,
+  tone = "neutral",
+}: {
+  label: string;
+  value: string | null | undefined;
+  tone?: "accent" | "neutral";
+}) {
+  const person = getAssignmentTablePersonValue(value);
+
+  return (
+    <div className="flex items-center gap-3">
+      <HoverAvatarBadge
+        initials={getInitials(person.value)}
+        roleLabel={label}
+        showTooltip={false}
+        tone={tone}
+        size="sm"
+      />
+      <div className="min-w-0">
+        <p
+          className={cn(
+            "truncate text-sm font-bold text-[var(--foreground)]",
+            person.muted && "text-[var(--muted)] italic font-semibold",
+          )}
+          title={person.value}
+        >
+          {person.muted ? person.value : abbreviatePersonName(person.value)}
+        </p>
+        <p className="text-xs font-semibold text-[var(--muted)]">{label}</p>
+      </div>
+    </div>
+  );
+}
+
 function AssignmentDetailPill({
   icon: Icon,
   label,
   value,
   tone = "default",
+  showToneDot = tone === "success",
   highlight = false,
   variant = "icon",
   compact = false,
@@ -362,6 +455,7 @@ function AssignmentDetailPill({
   label: string;
   value: string;
   tone?: "default" | "success";
+  showToneDot?: boolean;
   highlight?: boolean;
   variant?: "icon" | "person";
   compact?: boolean;
@@ -405,10 +499,10 @@ function AssignmentDetailPill({
             "mt-1 font-extrabold leading-tight text-[var(--foreground)]",
             compact ? "text-[12px]" : "text-[13px]",
             highlight && "text-[var(--accent)]",
-            tone === "success" && "flex items-center gap-2",
+            tone === "success" && showToneDot && "flex items-center gap-2",
           )}
         >
-          {tone === "success" ? (
+          {tone === "success" && showToneDot ? (
             <span className={cn("rounded-full bg-[#23b25f]", compact ? "size-2" : "size-2.5")} />
           ) : null}
           <span>{value}</span>
@@ -440,6 +534,7 @@ function getAssignmentOperationalItems(assignment: CollaboratorAssignmentItem) {
       label: "Produ",
       value: productionLabel,
       tone: "success" as const,
+      showToneDot: false,
     },
     {
       key: "responsable",
@@ -504,6 +599,7 @@ function AssignmentOperationalSummary({
           label={item.label}
           value={item.value}
           tone={item.tone}
+          showToneDot={item.showToneDot}
           highlight={item.highlight}
           variant={item.variant}
         />
@@ -525,10 +621,10 @@ function AssignmentCard({
   const leagueAccent = getAssignmentLeagueAccentColor(leagueLabel);
 
   return (
-    <Card className="relative z-0 w-full max-w-full overflow-hidden rounded-[var(--panel-radius)] border border-[#eee7e1] bg-[#fffdfa] p-0 shadow-[0_10px_24px_rgba(28,13,16,0.05)] transition duration-200 will-change-transform hover:z-10 hover:-translate-y-0.5 hover:scale-[1.015] hover:shadow-[0_16px_32px_rgba(28,13,16,0.08)] sm:w-[330px] sm:max-w-[330px]">
-      <div className="relative px-4 pb-0">
+    <Card className="relative z-0 w-full max-w-full overflow-hidden rounded-[var(--panel-radius)] border border-[#eee7e1] bg-[#fffdfa] !p-0 sm:!p-0 2xl:!p-0 shadow-[0_10px_24px_rgba(28,13,16,0.05)] transition duration-200 will-change-transform hover:z-10 hover:-translate-y-0.5 hover:scale-[1.015] hover:shadow-[0_16px_32px_rgba(28,13,16,0.08)] md:w-[350px] md:max-w-[350px] xl:w-[360px] xl:max-w-[360px]">
+      <div className="relative pb-0">
         <div
-          className="-mx-4 -mt-px px-4 py-2.5"
+          className="px-4 py-2.5"
           style={{ backgroundColor: leagueAccent }}
         >
           <div className="relative flex items-center justify-between gap-4">
@@ -554,69 +650,59 @@ function AssignmentCard({
         </div>
 
         <div
-          className="-mx-4 border-t-2 bg-[#f6f7fb] px-4 py-4"
+          className="border-t-2 bg-[#f6f7fb] px-4 py-3.5"
           style={{ borderTopColor: leagueAccent }}
         >
-          <div className="relative z-10">
-            <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
-              <div className="flex justify-center">
+          <div className="relative z-10 w-full px-1">
+            <div className="grid grid-cols-[minmax(0,1fr)_2.5rem_minmax(0,1fr)] items-start gap-3 xl:grid-cols-[minmax(0,1fr)_2.75rem_minmax(0,1fr)] xl:gap-3.5">
+              <div className="flex min-w-0 flex-col items-center">
                 <ClientTeamLogoMark
                   teamName={assignment.homeTeam}
                   competition={assignment.competition}
-                  className="size-16 rounded-full border border-[#e8edf3] bg-white shadow-[0_10px_22px_rgba(15,23,42,0.08)]"
-                  imageClassName="p-2"
+                  className="size-[4.5rem] rounded-full border border-[#e8edf3] bg-white shadow-[0_10px_22px_rgba(15,23,42,0.08)]"
+                  imageClassName="p-2.5"
                   initialsClassName="text-sm"
                 />
-              </div>
-
-              <div className="flex shrink-0 flex-col items-center justify-center">
-                <div className="h-px w-8 bg-[#dfe5ed]" />
-                <span className="py-1.5 text-[18px] font-black italic text-[var(--accent)]">
-                  vs
-                </span>
-                <div className="h-px w-8 bg-[#dfe5ed]" />
-              </div>
-
-              <div className="flex justify-center">
-                <ClientTeamLogoMark
-                  teamName={assignment.awayTeam}
-                  competition={assignment.competition}
-                  className="size-16 rounded-full border border-[#e8edf3] bg-white shadow-[0_10px_22px_rgba(15,23,42,0.08)]"
-                  imageClassName="p-2"
-                  initialsClassName="text-sm"
-                />
-              </div>
-            </div>
-
-            <div className="mt-3 grid grid-cols-[1fr_auto_1fr] gap-3">
-              <div className="flex justify-center">
-                <p className="max-w-[7rem] text-center text-[14px] font-black leading-tight tracking-tight text-[var(--foreground)]">
+                <p className="mt-3 max-w-full px-1 text-center text-[14px] font-black leading-tight tracking-tight text-[var(--foreground)]">
                   {assignment.homeTeam}
                 </p>
               </div>
 
-              <div />
+              <div className="flex shrink-0 flex-col items-center justify-center pt-6">
+                <div className="h-px w-full max-w-8 bg-[#dfe5ed]" />
+                <span className="py-1.5 text-[18px] font-black italic text-[var(--accent)]">
+                  vs
+                </span>
+                <div className="h-px w-full max-w-8 bg-[#dfe5ed]" />
+              </div>
 
-              <div className="flex justify-center">
-                <p className="max-w-[7rem] text-center text-[14px] font-black leading-tight tracking-tight text-[var(--foreground)]">
+              <div className="flex min-w-0 flex-col items-center">
+                <ClientTeamLogoMark
+                  teamName={assignment.awayTeam}
+                  competition={assignment.competition}
+                  className="size-[4.5rem] rounded-full border border-[#e8edf3] bg-white shadow-[0_10px_22px_rgba(15,23,42,0.08)]"
+                  imageClassName="p-2.5"
+                  initialsClassName="text-sm"
+                />
+                <p className="mt-3 max-w-full px-1 text-center text-[14px] font-black leading-tight tracking-tight text-[var(--foreground)]">
                   {assignment.awayTeam}
                 </p>
               </div>
             </div>
           </div>
 
-          <div className="mt-3.5 flex items-center justify-center gap-2 text-center text-[12px] font-semibold text-[#94a3b8]">
+          <div className="mt-3 flex items-center justify-center gap-2 text-center text-[12px] font-semibold text-[#94a3b8]">
             <MapPin className="size-3.5" />
             <span className="truncate">{assignment.venue ?? "Sede por definir"}</span>
           </div>
         </div>
 
-        <div className="-mx-4 border-t border-[#efe7e1] bg-white px-4 py-4">
+        <div className="border-t border-[#efe7e1] bg-white px-4 py-3.5">
           <AssignmentOperationalSummary assignment={assignment} />
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 border-t border-[#efe7e1] bg-[#fbfaf7] p-4">
+      <div className="grid grid-cols-2 gap-2.5 border-t border-[#efe7e1] bg-[#fbfaf7] p-3.5 sm:p-4">
         <button
           type="button"
           onClick={() => onOpenGroup(assignment.assignmentId)}
@@ -698,12 +784,17 @@ function AssignmentTable({
         const isSelected = selectedAssignmentId === assignment.assignmentId;
         const leagueLabel = assignment.competition ?? "Sin liga";
         const statusAccentClass = assignment.confirmed ? "bg-[#26b36a]" : "bg-[#d7dde7]";
-        const responsible = getAssignmentTablePersonValue(
-          assignment.responsibleName ?? assignment.ownerName,
-        );
-        const realizer = getAssignmentTablePersonValue(assignment.realizerName);
-        const producer = getAssignmentTablePersonValue(assignment.producerName);
-        const relator = getAssignmentTablePersonValue(assignment.relatorName);
+        const roleLabel = getRoleDisplayName(assignment.roleName) || "Sin rol";
+        const reportStatusLabel = assignment.confirmed ? "Reportado" : "Pendiente";
+        const roleStatusClassName = assignment.confirmed
+          ? "border-[#d7eadf] bg-[#f3fcf6] text-[#178a56]"
+          : "border-[#f3d8de] bg-[#fff5f7] text-[var(--accent)]";
+        const cameraLabel =
+          assignment.cameraCount > 0
+            ? `${assignment.cameraCount} ${assignment.cameraCount === 1 ? "unidad" : "unidades"}`
+            : "Sin definir";
+        const secondaryContact = getAssignmentTableSecondaryContact(assignment);
+        const coverageMeta = getAssignmentTableCoverageMeta(assignment);
 
         return (
           <article
@@ -715,45 +806,45 @@ function AssignmentTable({
               isSelected && "border-[#f0d9de] shadow-[0_16px_36px_rgba(230,18,56,0.08)]",
             )}
           >
-            <span
-              aria-hidden="true"
-              className={cn(
-                "pointer-events-none absolute left-[-12px] top-1/2 z-0 h-[118px] w-[30px] -translate-y-1/2 rounded-l-[10px] rounded-r-[6px] shadow-[inset_-1px_0_0_rgba(255,255,255,0.16),0_8px_18px_rgba(15,23,42,0.06)]",
-                statusAccentClass,
-              )}
-            />
+              <span
+                aria-hidden="true"
+                className={cn(
+                  "pointer-events-none absolute left-[-6px] top-1/2 z-0 h-[118px] w-[20px] -translate-y-1/2 rounded-l-[7px] rounded-r-[6px] shadow-[inset_-1px_0_0_rgba(255,255,255,0.16),0_8px_18px_rgba(15,23,42,0.06)] 2xl:left-[-12px] 2xl:w-[30px] 2xl:rounded-l-[10px]",
+                  statusAccentClass,
+                )}
+              />
 
             <div className="relative z-10 overflow-visible rounded-t-[10px] rounded-b-[10px]">
               <div
                 className={cn(
-                  "overflow-hidden rounded-t-[10px] rounded-b-[10px] flex flex-col xl:grid xl:grid-cols-[6rem_minmax(15rem,1.45fr)_minmax(12rem,1fr)_minmax(12rem,1fr)_minmax(12.5rem,1.05fr)_minmax(10.5rem,0.92fr)] xl:items-stretch",
+                  "overflow-hidden rounded-t-[10px] rounded-b-[10px] flex flex-col xl:grid xl:grid-cols-[5.5rem_minmax(16rem,1.5fr)_minmax(11rem,0.95fr)_minmax(12rem,1.05fr)_minmax(10rem,0.9fr)_9rem_4.75rem] xl:items-stretch 2xl:grid-cols-[6rem_minmax(18rem,1.55fr)_minmax(11.5rem,0.95fr)_minmax(12.5rem,1.05fr)_minmax(10.5rem,0.92fr)_9.5rem_5rem]",
                 )}
               >
-                <div className="relative z-10 flex flex-col items-center justify-center gap-3 border-b border-[var(--border)] bg-[var(--surface)] px-4 py-5 text-center xl:border-b-0 xl:border-r">
-                  <LeagueLogoMarkClient league={leagueLabel} className="h-16 w-16" />
-                  <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#70819b]">
+                <div className="relative z-10 flex flex-col items-center justify-center gap-3 border-b border-[var(--border)] bg-[var(--surface)] px-4 py-4 text-center xl:border-b-0 xl:border-r xl:px-3 xl:py-5 2xl:px-4">
+                  <LeagueLogoMarkClient league={leagueLabel} className="h-14 w-14 2xl:h-16 2xl:w-16" />
+                  <p className="max-w-[4.75rem] text-[10px] font-bold uppercase tracking-[0.18em] text-[#70819b]">
                     {leagueLabel}
                   </p>
                 </div>
 
-                <div className="flex min-w-0 items-center border-b border-[var(--border)] px-5 py-5 xl:border-b-0 xl:border-r xl:px-5 2xl:px-6">
-                  <div className="mx-auto w-full max-w-[22rem]">
-                    <div className="grid items-center justify-center gap-2 sm:grid-cols-[minmax(0,1fr)_1.75rem_minmax(0,1fr)] sm:gap-3">
+                <div className="flex min-w-0 items-center border-b border-[var(--border)] px-4 py-4 xl:border-b-0 xl:border-r xl:px-5 xl:py-5 2xl:px-6">
+                  <div className="mx-auto w-full max-w-[22rem] xl:max-w-[18rem] 2xl:max-w-[21rem]">
+                    <div className="grid items-center justify-center gap-2 sm:grid-cols-[minmax(0,1fr)_1.5rem_minmax(0,1fr)] sm:gap-3 xl:gap-2.5 2xl:gap-3.5">
                       <div className="flex min-w-0 flex-col items-center text-center">
                         <ClientTeamLogoMark
                           teamName={assignment.homeTeam}
                           competition={assignment.competition}
-                          className="size-12 rounded-full 2xl:size-14"
+                          className="size-12 rounded-full xl:size-[3.35rem] 2xl:size-14"
                         />
                         <p
                           title={assignment.homeTeam}
-                          className="mt-2 min-h-[2.16em] text-center text-[0.9rem] font-black leading-[1.08] tracking-[-0.03em] text-[var(--foreground)] [display:-webkit-box] overflow-hidden text-ellipsis [-webkit-box-orient:vertical] [-webkit-line-clamp:2]"
+                          className="mt-2 min-h-[2.16em] text-center text-[0.9rem] font-black leading-[1.08] tracking-[-0.03em] text-[var(--foreground)] [display:-webkit-box] overflow-hidden text-ellipsis [-webkit-box-orient:vertical] [-webkit-line-clamp:2] xl:max-w-[7.75rem]"
                         >
                           {assignment.homeTeam}
                         </p>
                       </div>
 
-                      <span className="self-center justify-self-center text-sm font-semibold uppercase tracking-[0.18em] text-[#93a0b2]">
+                      <span className="mt-2 self-start justify-self-center text-sm font-semibold uppercase tracking-[0.18em] text-[#93a0b2] xl:mt-3">
                         vs
                       </span>
 
@@ -761,11 +852,11 @@ function AssignmentTable({
                         <ClientTeamLogoMark
                           teamName={assignment.awayTeam}
                           competition={assignment.competition}
-                          className="size-12 rounded-full 2xl:size-14"
+                          className="size-12 rounded-full xl:size-[3.35rem] 2xl:size-14"
                         />
                         <p
                           title={assignment.awayTeam}
-                          className="mt-2 min-h-[2.16em] text-center text-[0.9rem] font-black leading-[1.08] tracking-[-0.03em] text-[var(--foreground)] [display:-webkit-box] overflow-hidden text-ellipsis [-webkit-box-orient:vertical] [-webkit-line-clamp:2]"
+                          className="mt-2 min-h-[2.16em] text-center text-[0.9rem] font-black leading-[1.08] tracking-[-0.03em] text-[var(--foreground)] [display:-webkit-box] overflow-hidden text-ellipsis [-webkit-box-orient:vertical] [-webkit-line-clamp:2] xl:max-w-[7.75rem]"
                         >
                           {assignment.awayTeam}
                         </p>
@@ -779,127 +870,68 @@ function AssignmentTable({
                   </div>
                 </div>
 
-                <div className="grid gap-4 border-b border-[var(--border)] px-5 py-5 xl:border-b-0 xl:border-r xl:px-6">
+                <div className="grid gap-3 border-b border-[var(--border)] px-4 py-4 xl:border-b-0 xl:border-r xl:px-5 xl:py-5 2xl:px-6">
+                  <div className="flex items-center gap-2">
+                    <UserRound className="size-3.5 text-[#a7b4c8]" />
+                    <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-[#a7b4c8]">
+                      Mi rol
+                    </p>
+                  </div>
+                  <div className="space-y-3">
+                    <span
+                      className={cn(
+                        "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.16em]",
+                        roleStatusClassName,
+                      )}
+                    >
+                      {assignment.confirmed ? (
+                        <CheckCircle2 className="size-3.5" />
+                      ) : (
+                        <Clock3 className="size-3.5" />
+                      )}
+                      {reportStatusLabel}
+                    </span>
+
+                    <div>
+                      <p className="text-lg font-black leading-tight tracking-[-0.03em] text-[var(--accent)]">
+                        {roleLabel}
+                      </p>
+                      <p className="mt-2 inline-flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.16em] text-[#8da0b9]">
+                        <Hash className="size-3.5 text-[#a7b4c8]" />
+                        {buildAssignmentEventId(assignment)}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid gap-3 border-b border-[var(--border)] px-4 py-4 xl:border-b-0 xl:border-r xl:px-5 xl:py-5 2xl:px-6">
                   <div className="flex items-center gap-2">
                     <ShieldUser className="size-3.5 text-[#a7b4c8]" />
                     <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-[#a7b4c8]">
-                      Staff
+                      Contactos
                     </p>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <HoverAvatarBadge
-                      initials={getInitials(responsible.value)}
-                      roleLabel="Responsable"
-                      showTooltip={false}
-                      tone="neutral"
-                      size="sm"
-                    />
-                    <div className="min-w-0">
-                      <p
-                        className={cn(
-                          "truncate text-sm font-bold text-[var(--foreground)]",
-                          responsible.muted && "text-[var(--muted)] italic font-semibold",
-                        )}
-                      >
-                        {responsible.muted
-                          ? responsible.value
-                          : abbreviatePersonName(responsible.value)}
-                      </p>
-                      <p className="text-xs font-semibold text-[var(--muted)]">
-                        Responsable
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <HoverAvatarBadge
-                      initials={getInitials(realizer.value)}
-                      roleLabel="Realizador"
-                      showTooltip={false}
-                      tone="neutral"
-                      size="sm"
-                    />
-                    <div className="min-w-0">
-                      <p
-                        className={cn(
-                          "truncate text-sm font-bold text-[var(--foreground)]",
-                          realizer.muted && "text-[var(--muted)] italic font-semibold",
-                        )}
-                      >
-                        {realizer.muted ? realizer.value : abbreviatePersonName(realizer.value)}
-                      </p>
-                      <p className="text-xs font-semibold text-[var(--muted)]">Realizador</p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="grid gap-4 border-b border-[var(--border)] px-5 py-5 xl:border-b-0 xl:border-r xl:px-6">
-                  <div className="flex items-center gap-2">
-                    <Mic2 className="size-3.5 text-[#a7b4c8]" />
-                    <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-[#a7b4c8]">
-                      Cobertura
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <HoverAvatarBadge
-                      initials={getInitials(producer.value)}
-                      roleLabel="Productor"
-                      showTooltip={false}
-                      tone="neutral"
-                      size="sm"
-                    />
-                    <div className="min-w-0">
-                      <p
-                        className={cn(
-                          "truncate text-sm font-bold text-[var(--foreground)]",
-                          producer.muted && "text-[var(--muted)] italic font-semibold",
-                        )}
-                      >
-                        {producer.muted ? producer.value : abbreviatePersonName(producer.value)}
-                      </p>
-                      <p className="text-xs font-semibold text-[var(--muted)]">Productor</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <HoverAvatarBadge
-                      initials={getInitials(relator.value)}
-                      roleLabel="Relator"
-                      showTooltip={false}
+                  <div className="space-y-3">
+                    <AssignmentTablePersonLine
+                      label={RESPONSIBLE_DISPLAY_LABEL}
+                      value={assignment.responsibleName ?? assignment.ownerName}
                       tone="accent"
-                      size="sm"
                     />
-                    <div className="min-w-0">
-                      <p
-                        className={cn(
-                          "truncate text-sm font-bold text-[var(--foreground)]",
-                          relator.muted && "text-[var(--muted)] italic font-semibold",
-                        )}
-                      >
-                        {relator.muted ? relator.value : abbreviatePersonName(relator.value)}
-                      </p>
-                      <p className="text-xs font-semibold italic text-[var(--muted)]">
-                        Relator
-                      </p>
-                    </div>
+                    <AssignmentTablePersonLine
+                      label={secondaryContact.label}
+                      value={secondaryContact.value}
+                      tone={secondaryContact.tone}
+                    />
                   </div>
                 </div>
 
-                <div className="grid gap-4 border-b border-[var(--border)] px-5 py-5 xl:border-b-0 xl:border-r xl:px-6">
-                  <div>
-                    <p className="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] text-[#a7b4c8]">
-                      <Hash className="size-3.5 text-[#a7b4c8]" />
-                      ID evento
-                  </p>
-                  <div className="mt-2">
-                    <span
-                      className={cn(
-                        badgeBaseClassName,
-                        "border border-[#f3cfd8] bg-[#fff3f6] text-[var(--accent)]",
-                      )}
-                    >
-                      {buildAssignmentEventId(assignment)}
-                    </span>
+                <div className="grid gap-3 border-b border-[var(--border)] px-4 py-4 xl:border-b-0 xl:border-r xl:px-5 xl:py-5 2xl:px-6">
+                  <div className="flex items-center gap-2">
+                    <Video className="size-3.5 text-[#a7b4c8]" />
+                    <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-[#a7b4c8]">
+                      Operativo
+                    </p>
                   </div>
-                </div>
                   <div>
                     <p className="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] text-[#a7b4c8]">
                       <Video className="size-3.5 text-[#a7b4c8]" />
@@ -915,20 +947,29 @@ function AssignmentTable({
                         {formatAssignmentProductionModeLabel(assignment.productionMode)}
                       </span>
                     </div>
+                  </div>
+                  <div>
+                    <p className="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] text-[#a7b4c8]">
+                      <Camera className="size-3.5 text-[#a7b4c8]" />
+                      Cámaras
+                    </p>
+                    <p className="mt-1 text-sm font-bold text-[var(--foreground)]">
+                      {cameraLabel}
+                    </p>
                     <p className="mt-2 text-xs font-semibold text-[var(--muted)]">
-                      {formatAssignmentProductionMeta(assignment)}
+                      {coverageMeta.label}: {coverageMeta.value}
                     </p>
                   </div>
                 </div>
 
-                <div className="grid gap-4 border-b border-[var(--border)] px-5 py-5 xl:border-b-0 xl:px-6 xl:pr-24">
+                <div className="grid gap-3 border-b border-[var(--border)] px-4 py-4 xl:border-b-0 xl:border-r xl:px-5 xl:py-5 2xl:px-6">
                   <div>
                     <p className="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] text-[#a7b4c8]">
                       <CalendarDays className="size-3.5 text-[#a7b4c8]" />
-                      Fecha
+                      Jornada
                     </p>
-                    <p className="mt-2 text-sm font-bold text-[var(--foreground)]">
-                      {formatAssignmentPlanillaDate(assignment)}
+                    <p className="mt-2 text-[1.05rem] font-extrabold leading-tight tracking-[-0.03em] text-[var(--foreground)]">
+                      {formatAssignmentTableDateCompact(assignment)}
                     </p>
                   </div>
                   <div>
@@ -942,33 +983,32 @@ function AssignmentTable({
                   </div>
                 </div>
 
-              </div>
-
-              <div className="flex items-center justify-center gap-2 border-t border-[var(--border)] px-4 py-4 xl:absolute xl:inset-y-0 xl:right-0 xl:z-20 xl:w-[5.5rem] xl:flex-col xl:border-l xl:border-t-0 xl:border-[var(--border)] xl:bg-transparent xl:px-0 xl:py-0">
-                <button
-                  type="button"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onOpenGroup(assignment.assignmentId);
-                  }}
-                  className="inline-flex size-10 items-center justify-center rounded-full bg-[#1faa52] text-white shadow-[0_12px_24px_rgba(31,170,82,0.18)] transition hover:brightness-105"
-                  aria-label="Abrir grupo"
-                  title="Abrir grupo"
-                >
-                  <MessageCircleMore className="size-4" />
-                </button>
-                <button
-                  type="button"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onOpenReport(assignment.assignmentId);
-                  }}
-                  className="inline-flex size-10 items-center justify-center rounded-full bg-[#7a36da] text-white shadow-[0_12px_24px_rgba(122,54,218,0.22)] transition hover:brightness-105"
-                  aria-label="Abrir reporte"
-                  title="Abrir reporte"
-                >
-                  <Megaphone className="size-4" />
-                </button>
+                <div className="flex items-center justify-center gap-2 border-t border-[var(--border)] px-4 py-4 xl:flex-col xl:border-l xl:border-t-0 xl:px-0 xl:py-0">
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onOpenGroup(assignment.assignmentId);
+                    }}
+                    className="inline-flex size-10 items-center justify-center rounded-full bg-[#1faa52] text-white shadow-[0_12px_24px_rgba(31,170,82,0.18)] transition hover:brightness-105"
+                    aria-label="Abrir grupo"
+                    title="Abrir grupo"
+                  >
+                    <MessageCircleMore className="size-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onOpenReport(assignment.assignmentId);
+                    }}
+                    className="inline-flex size-10 items-center justify-center rounded-full bg-[#7a36da] text-white shadow-[0_12px_24px_rgba(122,54,218,0.22)] transition hover:brightness-105"
+                    aria-label="Abrir reporte"
+                    title="Abrir reporte"
+                  >
+                    <Megaphone className="size-4" />
+                  </button>
+                </div>
               </div>
             </div>
           </article>
@@ -1007,7 +1047,7 @@ function AssignmentAssistantShell({
         </div>
       </div>
 
-      <aside className="hidden min-w-0 self-start xl:block xl:sticky xl:top-20">
+      <aside className="hidden min-w-0 self-start 2xl:block 2xl:sticky 2xl:top-20">
         {children}
       </aside>
     </>
@@ -1589,7 +1629,7 @@ export function MyDayAssignmentsPanel({
     <div
       className={cn(
         "grid gap-6",
-        selectedPanelAssignmentId ? "xl:grid-cols-[minmax(0,1fr)_390px]" : "grid-cols-1",
+        selectedPanelAssignmentId ? "2xl:grid-cols-[minmax(0,1fr)_390px]" : "grid-cols-1",
       )}
     >
       <div className="space-y-8">

@@ -23,7 +23,7 @@ export function UnderlineTabs({
 }) {
   const contentClassName =
     variant === "section"
-      ? "flex items-center gap-8"
+      ? "flex min-w-max items-center gap-4 sm:gap-6"
       : "grid gap-2";
 
   const itemClassName =
@@ -35,7 +35,9 @@ export function UnderlineTabs({
     <div
       className={cn(
         "border-b border-[var(--border)]",
-        variant === "section" ? "" : "px-6",
+        variant === "section"
+          ? "overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          : "px-6",
         className,
       )}
     >

@@ -9,6 +9,7 @@ import {
   APP_NAME,
   APP_PORTAL_LABEL,
 } from "@/lib/constants";
+import { PRODUCT_COPY } from "@/lib/copy";
 import type { AnnouncementSummary } from "@/lib/data/announcements";
 import { getAppRoleDisplayName } from "@/lib/display";
 import type { UserContext } from "@/lib/types";
@@ -36,6 +37,16 @@ function BasketMark() {
   );
 }
 
+function getInitials(value: string) {
+  return value
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("")
+    .slice(0, 2) || "U";
+}
+
 export function DashboardShell(props: {
   children: React.ReactNode;
   user: UserContext | null;
@@ -51,29 +62,66 @@ export function DashboardShell(props: {
   return (
     <div className="min-h-screen bg-[var(--page-canvas)]">
       <div className="flex min-h-screen">
-        <aside className="sticky top-0 hidden h-screen w-72 shrink-0 flex-col overflow-y-auto border-r border-[#10203f] bg-[#07122b] lg:flex">
-          <div className="border-b border-[#10203f] px-6 py-7">
-            <div className="flex items-center gap-4">
+        <aside className="sticky top-0 hidden h-screen w-[var(--dashboard-sidebar-width)] shrink-0 flex-col overflow-y-auto border-r border-[#10203f] bg-[#07122b] lg:flex">
+          <div className="border-b border-[#10203f] px-4 py-6 xl:px-5 xl:py-7 2xl:px-6">
+            <div className="flex items-center justify-center gap-3 xl:justify-start 2xl:gap-4">
               <BasketMark />
-              <div className="min-w-0">
-                <p className="text-[1.5rem] font-extrabold leading-none tracking-[-0.04em] text-white">
-                  {APP_NAME}
+              <div className="hidden min-w-0 xl:block">
+                <p className="text-[1.2rem] font-extrabold leading-[0.92] tracking-[-0.04em] text-white 2xl:text-[1.5rem]">
+                  {PRODUCT_COPY.collaboratorWordmark.line1}
                 </p>
-                <p className="mt-1 text-[11px] font-black uppercase tracking-[0.28em] text-[#9eb0cc]">
-                  {APP_PORTAL_LABEL}
+                <p className="mt-1 text-[1.2rem] font-extrabold leading-[0.92] tracking-[-0.04em] text-white 2xl:text-[1.5rem]">
+                  {PRODUCT_COPY.collaboratorWordmark.line2}
                 </p>
+                {APP_PORTAL_LABEL ? (
+                  <p className="mt-1 text-[10px] font-black uppercase tracking-[0.22em] text-[#9eb0cc] 2xl:text-[11px] 2xl:tracking-[0.28em]">
+                    {APP_PORTAL_LABEL}
+                  </p>
+                ) : null}
               </div>
             </div>
           </div>
 
-          <div className="flex flex-1 flex-col justify-between px-5 py-6">
+          <div className="flex flex-1 flex-col justify-between px-3 py-5 xl:px-4 xl:py-6 2xl:px-5">
             <DashboardNav role={user?.role ?? null} />
+
+            {user?.userId ? (
+              <div className="mt-6 flex flex-col items-center gap-3 rounded-[var(--panel-radius)] border border-[#10203f] bg-[#0d1731] px-2.5 py-3 text-center xl:flex-row xl:items-center xl:text-left 2xl:px-4">
+                <div
+                  title={displayName}
+                  className="flex min-w-0 flex-col items-center gap-2 xl:flex-1 xl:flex-row xl:gap-3"
+                >
+                  <div className="flex size-11 shrink-0 items-center justify-center rounded-full border border-[#203053] bg-[#d8e3e2] text-[#324b53]">
+                    <span className="text-sm font-extrabold">
+                      {getInitials(displayName)}
+                    </span>
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[9px] font-black uppercase tracking-[0.2em] text-[#9eb0cc] xl:truncate xl:text-[10px] xl:tracking-[0.18em]">
+                      {roleLabel}
+                    </p>
+                  </div>
+                </div>
+
+                <form action={signOutAction} className="shrink-0">
+                  <SubmitButton
+                    variant="ghost"
+                    pendingLabel="..."
+                    title="Cerrar sesión"
+                    aria-label="Cerrar sesión"
+                    className="size-10 rounded-[var(--panel-radius)] border border-[#203053] bg-[#07122b] px-0 text-[#d8e2f2] hover:bg-[#132347] hover:text-white"
+                  >
+                    <LogOut className="size-4" />
+                  </SubmitButton>
+                </form>
+              </div>
+            ) : null}
           </div>
         </aside>
 
         <div className="flex min-w-0 flex-1 flex-col">
-          <header className="sticky top-0 z-40 border-b border-[var(--border)] bg-[rgba(255,255,255,0.88)] backdrop-blur-md">
-            <div className="flex h-20 items-center gap-4 px-4 sm:px-6 lg:px-8">
+          <header className="sticky top-0 z-40 border-b border-[var(--border)] bg-[rgba(255,255,255,0.88)] backdrop-blur-md lg:hidden">
+            <div className="flex h-[4.5rem] items-center gap-3 pr-[var(--dashboard-shell-padding)] pl-[calc(var(--dashboard-shell-padding)+var(--dashboard-content-leading-space))] xl:h-[4.75rem] 2xl:h-20">
               <div className="flex min-w-0 flex-1 items-center gap-4">
                 <div className="flex items-center gap-3 lg:hidden">
                   <BasketMark />
@@ -116,11 +164,11 @@ export function DashboardShell(props: {
             </div>
           </header>
 
-          <main className="min-w-0 flex-1 bg-[var(--page-canvas)] px-4 py-5 sm:px-6 lg:px-8">
+          <main className="min-w-0 flex-1 bg-[var(--page-canvas)] pr-[var(--dashboard-shell-padding)] pl-[calc(var(--dashboard-shell-padding)+var(--dashboard-content-leading-space))] py-4 sm:py-5">
             {children}
           </main>
 
-          <footer className="border-t border-[var(--border)] bg-[var(--page-footer-bg)] px-4 py-6 backdrop-blur-sm sm:px-6 lg:px-8">
+          <footer className="border-t border-[var(--border)] bg-[var(--page-footer-bg)] pr-[var(--dashboard-shell-padding)] pl-[calc(var(--dashboard-shell-padding)+var(--dashboard-content-leading-space))] py-5 backdrop-blur-sm sm:py-6">
             <DashboardFooterMeta userName={displayName} />
           </footer>
         </div>

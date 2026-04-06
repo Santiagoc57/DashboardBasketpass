@@ -9,6 +9,7 @@ export function SectionPageHeader({
   className,
   contentClassName,
   descriptionClassName,
+  actionsClassName,
 }: {
   title: ReactNode;
   description?: ReactNode;
@@ -16,16 +17,17 @@ export function SectionPageHeader({
   className?: string;
   contentClassName?: string;
   descriptionClassName?: string;
+  actionsClassName?: string;
 }) {
   return (
     <section
       className={cn(
-        "flex flex-col gap-8 md:flex-row md:items-end md:justify-between",
+        "flex min-w-0 flex-col gap-6 xl:flex-row xl:items-end xl:justify-between",
         className,
       )}
     >
-      <div className={cn("space-y-2", contentClassName)}>
-        <h2 className="text-4xl font-black tracking-tight text-[var(--foreground)]">
+      <div className={cn("min-w-0 max-w-3xl space-y-2", contentClassName)}>
+        <h2 className="text-[1.95rem] font-black leading-[0.96] tracking-tight text-[var(--foreground)] sm:text-[2.35rem] 2xl:text-4xl">
           {title}
         </h2>
         {description ? (
@@ -41,7 +43,14 @@ export function SectionPageHeader({
       </div>
 
       {actions ? (
-        <div className="flex flex-wrap items-center gap-3">{actions}</div>
+        <div
+          className={cn(
+            "flex w-full flex-wrap items-stretch gap-3 xl:w-auto xl:items-center xl:justify-end",
+            actionsClassName,
+          )}
+        >
+          {actions}
+        </div>
       ) : null}
     </section>
   );

@@ -124,6 +124,11 @@ const INCIDENT_CONTROL_COLUMN_WIDTH_WEIGHT: Record<IncidentControlColumn, number
   issue: 1,
   updated: 0.8,
 };
+const INCIDENT_CONTROL_LAPTOP_HIDDEN_COLUMNS = new Set<IncidentControlColumn>([
+  "date",
+  "streamer",
+  "updated",
+]);
 const INCIDENT_CONTROL_COMPACT_COLUMN_WIDTH_WEIGHT: Record<
   IncidentControlColumn,
   number
@@ -1319,6 +1324,8 @@ export function IncidentsWorkspace({
         key={column}
         className={cn(
           "px-6 py-4 transition-colors",
+          INCIDENT_CONTROL_LAPTOP_HIDDEN_COLUMNS.has(column) &&
+            "hidden 2xl:table-cell",
           column === "match" && "px-8",
           isRightAligned && "px-8 text-right",
           isDropTarget && "bg-[#f8fafc]",
@@ -1372,7 +1379,9 @@ export function IncidentsWorkspace({
     column: IncidentControlColumn,
   ) => {
     const cellClassName = cn(
-      "px-6 py-5",
+      "px-4 py-4 xl:px-5 2xl:px-6 2xl:py-5",
+      INCIDENT_CONTROL_LAPTOP_HIDDEN_COLUMNS.has(column) &&
+        "hidden 2xl:table-cell",
       column === "match" && (selectedIncident ? "px-5" : "px-8"),
       column === "updated" && "px-8 text-right",
     );
@@ -1478,7 +1487,7 @@ export function IncidentsWorkspace({
         value={query}
         onChange={(event) => setQuery(event.target.value)}
         placeholder="Buscar incidencia, partido u operador..."
-        className="min-w-[280px] flex-none"
+        className="w-full xl:min-w-[18rem] 2xl:min-w-[280px]"
         inputClassName="text-sm font-medium text-[var(--foreground)] placeholder:text-[#94a3b8]"
       />
 
@@ -1534,7 +1543,7 @@ export function IncidentsWorkspace({
       <section
         className={cn(
           "grid gap-4 sm:grid-cols-2",
-          selectedIncident ? "2xl:grid-cols-4" : "xl:grid-cols-4",
+          selectedIncident ? "xl:grid-cols-2 2xl:grid-cols-4" : "lg:grid-cols-4",
         )}
       >
         <article className="panel-surface border border-[var(--border)] bg-[var(--surface)] p-5">
@@ -1647,6 +1656,10 @@ export function IncidentsWorkspace({
                 {columnOrder.map((column) => (
                   <col
                     key={column}
+                    className={cn(
+                      INCIDENT_CONTROL_LAPTOP_HIDDEN_COLUMNS.has(column) &&
+                        "hidden 2xl:table-column",
+                    )}
                     style={{ width: incidentColumnWidths[column] }}
                   />
                 ))}
@@ -1692,8 +1705,8 @@ export function IncidentsWorkspace({
   );
 
   const selectedIncidentDrawer = selectedIncident ? (
-    <aside className="min-w-0 self-start xl:sticky xl:top-24">
-      <div className="panel-surface fixed inset-x-4 bottom-4 top-20 z-40 flex flex-col overflow-hidden border border-[var(--border)] bg-[var(--surface)] xl:static xl:h-[calc(100vh-8rem)] xl:w-full">
+    <aside className="min-w-0 self-start 2xl:sticky 2xl:top-24">
+      <div className="panel-surface fixed inset-x-4 bottom-4 top-20 z-40 flex flex-col overflow-hidden border border-[var(--border)] bg-[var(--surface)] 2xl:static 2xl:h-[calc(100vh-8rem)] 2xl:w-full">
         <div className="border-b border-[var(--border)] p-6">
         <div className="mb-4 flex items-center justify-between gap-4">
           <div className="flex flex-wrap items-center gap-2">
@@ -2335,7 +2348,7 @@ export function IncidentsWorkspace({
               "grid min-h-0 gap-6",
               embedded && "-mt-1",
               showInlineEmbeddedDrawer
-                ? "xl:grid-cols-[minmax(0,1fr)_390px]"
+                ? "2xl:grid-cols-[minmax(0,1fr)_390px]"
                 : "grid-cols-1",
             )}
           >
@@ -2345,7 +2358,7 @@ export function IncidentsWorkspace({
           {selectedIncidentDrawerPortal}
         </>
       ) : selectedIncidentDrawer ? (
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_390px]">
+        <div className="grid gap-6 2xl:grid-cols-[minmax(0,1fr)_390px]">
           <div className="flex min-w-0 flex-col gap-6">
             <SectionPageHeader
               title="Incidencias"

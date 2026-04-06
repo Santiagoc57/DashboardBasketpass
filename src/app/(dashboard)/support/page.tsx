@@ -9,7 +9,7 @@ export default function SupportPage() {
   return (
     <div className="space-y-8">
       <section className="space-y-2">
-        <h2 className="text-4xl font-black tracking-tight text-[var(--foreground)]">
+        <h2 className="text-3xl font-black tracking-tight text-[var(--foreground)] sm:text-4xl">
           Soporte
         </h2>
         <p className="max-w-2xl text-sm font-medium text-[#617187]">
@@ -18,7 +18,7 @@ export default function SupportPage() {
         </p>
       </section>
 
-      <div className="grid gap-5 lg:grid-cols-[1.3fr_0.7fr]">
+      <div className="grid gap-5 2xl:grid-cols-[1.3fr_0.7fr]">
         <Card className="space-y-5">
           <div className="flex items-center gap-3">
             <div className="inline-flex size-11 items-center justify-center rounded-2xl bg-[var(--accent-soft)] text-[var(--accent)]">

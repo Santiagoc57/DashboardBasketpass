@@ -35,13 +35,13 @@ export function SectionTableCard({
     >
       <div
         className={cn(
-          "flex items-center justify-between gap-4 border-b border-[#edf1f6] px-8 py-6",
+          "flex flex-wrap items-start justify-between gap-3 border-b border-[#edf1f6] px-5 py-5 sm:items-center xl:px-6 2xl:flex-nowrap 2xl:px-8",
           headerClassName,
         )}
       >
         <h3
           className={cn(
-            "flex items-center gap-2 text-xl font-bold text-[var(--foreground)]",
+            "flex min-w-0 items-center gap-2 text-lg font-bold text-[var(--foreground)] xl:text-xl",
             titleClassName,
           )}
         >
@@ -54,7 +54,7 @@ export function SectionTableCard({
       {footer ? (
         <div
           className={cn(
-            "flex items-center justify-between gap-4 bg-[#fafbfd] px-8 py-5",
+            "flex flex-wrap items-center justify-between gap-4 bg-[#fafbfd] px-5 py-4 xl:px-6 2xl:px-8",
             footerClassName,
           )}
         >

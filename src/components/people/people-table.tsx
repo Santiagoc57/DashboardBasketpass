@@ -36,6 +36,11 @@ const DEFAULT_PEOPLE_TABLE_COLUMNS: PeopleTableColumn[] = [
   "city",
   "status",
 ];
+const PEOPLE_TABLE_LAPTOP_HIDDEN_COLUMNS = new Set<PeopleTableColumn>([
+  "details",
+  "phone",
+  "email",
+]);
 
 function normalizePeopleTableColumns(
   value: unknown,
@@ -162,7 +167,9 @@ export function PeopleTable({
       <th
         key={column}
         className={cn(
-          "px-6 py-4 transition-colors",
+          "px-4 py-4 transition-colors xl:px-5 2xl:px-6",
+          PEOPLE_TABLE_LAPTOP_HIDDEN_COLUMNS.has(column) &&
+            "hidden 2xl:table-cell",
           column === "profile" && "px-8",
           isDropTarget && "bg-[#f8fafc]",
         )}
@@ -206,8 +213,14 @@ export function PeopleTable({
     const city = meta.city || "";
     const cityIndicator = getCityIndicator(city);
     const detailSummary = meta.coverage || "";
+    const compactPhone = person.phone?.trim() ?? "";
+    const compactEmail = person.email?.trim() ?? "";
+    const compactPhoneHref = compactPhone ? getWhatsAppHref(compactPhone) : null;
+    const hasCompactContacts = Boolean(compactPhone || compactEmail);
     const cellClassName = cn(
-      "px-6 py-5",
+      "px-4 py-4 xl:px-5 2xl:px-6 2xl:py-5",
+      PEOPLE_TABLE_LAPTOP_HIDDEN_COLUMNS.has(column) &&
+        "hidden 2xl:table-cell",
       column === "profile" && "px-8",
     );
 
@@ -230,6 +243,53 @@ export function PeopleTable({
                 ) : (
                   <p className="truncate text-sm font-extrabold text-[var(--foreground)]">
                     {person.full_name}
+                  </p>
+                )}
+                {hasCompactContacts ? (
+                  <div className="mt-1 flex min-w-0 items-center gap-2 overflow-hidden text-xs font-medium text-[#70819b] 2xl:hidden">
+                    {compactPhone ? (
+                      <div className="flex min-w-0 items-center gap-1.5 overflow-hidden">
+                        {compactPhoneHref ? (
+                          <a
+                            href={compactPhoneHref}
+                            target="_blank"
+                            rel="noreferrer"
+                            aria-label={`Escribir por WhatsApp a ${person.full_name}`}
+                            className="inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-[#ecfdf3] text-[#16a34a] transition hover:bg-[#dcfce7]"
+                          >
+                            <MessageCircle className="size-3" />
+                          </a>
+                        ) : (
+                          <span className="inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-[#f3f6fa] text-[#94a3b8]">
+                            <MessageCircle className="size-3" />
+                          </span>
+                        )}
+                        <span title={compactPhone} className="min-w-0 truncate">
+                          {compactPhone}
+                        </span>
+                      </div>
+                    ) : null}
+                    {compactPhone && compactEmail ? (
+                      <span className="shrink-0 text-[#c2cbd7]">·</span>
+                    ) : null}
+                    {compactEmail ? (
+                      <div className="flex min-w-0 items-center gap-1.5 overflow-hidden">
+                        <a
+                          href={`mailto:${compactEmail}`}
+                          aria-label={`Escribir por correo a ${person.full_name}`}
+                          className="inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-[#eef2ff] text-[#4f46e5] transition hover:bg-[#e0e7ff]"
+                        >
+                          <Mail className="size-3" />
+                        </a>
+                        <span title={compactEmail} className="min-w-0 truncate">
+                          {compactEmail}
+                        </span>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : (
+                  <p className="mt-1 text-xs font-medium text-[#94a3b8] 2xl:hidden">
+                    Sin celular ni correo
                   </p>
                 )}
               </div>

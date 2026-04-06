@@ -1,32 +1,38 @@
 "use client";
 
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import {
+  type ReactNode,
+  useActionState,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { createPortal } from "react-dom";
+import { useRouter } from "next/navigation";
 import {
   CalendarDays,
   Camera,
-  CheckCircle2,
-  ChevronDown,
-  ChevronUp,
-  Copy,
-  Mail,
+  CircleHelp,
   MapPin,
-  MessageCircleMore,
   Mic2,
   Plus,
+  ShieldUser,
   Sparkles,
+  UserRound,
+  Video,
   X,
 } from "lucide-react";
 
 import {
-  createMatchAction,
+  createMatchModalAction,
   deleteMatchAction,
-  updateMatchAction,
+  updateMatchModalAction,
 } from "@/app/actions/matches";
 import { LeagueLogoMarkClient } from "@/components/league-logo-mark-client";
 import { ClientTeamLogoMark } from "@/components/team-logo-mark-client";
+import { MatchNotificationWorkspace } from "@/components/match/match-notification-workspace";
 import { Button } from "@/components/ui/button";
-import { HoverAvatarBadge } from "@/components/ui/hover-avatar-badge";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { SubmitButton } from "@/components/ui/submit-button";
@@ -37,15 +43,22 @@ import {
   DEFAULT_MATCH_DURATION_MINUTES,
   DEFAULT_TIMEZONE,
   normalizeCommentaryPlan,
+  PRODUCTION_LABEL,
+  PRODUCTION_SHORT_LABEL,
   PRODUCTION_MODE_OPTIONS,
   RESPONSIBLE_DISPLAY_LABEL,
 } from "@/lib/constants";
-import { formatMatchDate, formatMatchTime } from "@/lib/date";
-import { getRoleDisplayName } from "@/lib/display";
+import { formatMatchDate, formatMatchTime, buildKickoffAt } from "@/lib/date";
 import { getTeamCompetitionByName, getTeamVenueByName } from "@/lib/team-directory";
 import type { PersonRow } from "@/lib/database.types";
+import {
+  buildBulkMatchNotificationMailtoHref,
+  buildMatchNotificationMailtoHref,
+  buildMatchNotificationMessage,
+  buildMatchNotificationWhatsAppHref,
+} from "@/lib/integrations";
 import type { MatchListItem } from "@/lib/types";
-import { buildWhatsAppUrl, cn } from "@/lib/utils";
+import { cn, normalizeText } from "@/lib/utils";
 
 const CORE_REQUIRED_FIELDS = [
   "productionCode",
@@ -58,23 +71,13 @@ const CORE_REQUIRED_FIELDS = [
   "venue",
 ] as const;
 
-const CORE_FIELD_LABELS: Record<(typeof CORE_REQUIRED_FIELDS)[number], string> = {
-  productionCode: "Producción",
-  competition: "Liga",
-  homeTeam: "Local",
-  awayTeam: "Visitante",
-  date: "Día",
-  time: "Hora",
-  productionMode: "Producción",
-  venue: "Sede",
-};
-
 type CreateMatchModalProps = {
   people: Pick<PersonRow, "id" | "full_name" | "phone" | "email">[];
   redirectTo: string;
   canEdit: boolean;
   initialDate: string;
   match?: MatchListItem;
+  mode?: "match" | "staff";
   triggerVariant?: "primary" | "icon";
   triggerClassName?: string;
   triggerLabel?: string;
@@ -118,6 +121,36 @@ const CAMERA_FIELD_CONFIGS = [
   { label: "Cámara 4", name: "camara4Id" },
   { label: "Cámara 5", name: "camara5Id" },
 ] as const;
+const COMMENTARY_FIELD_CONFIGS = [
+  { label: "Relator 1", name: "relatorId" },
+  { label: "Relator 2", name: "comentario1Id" },
+  { label: "Relator 3", name: "comentario2Id" },
+] as const;
+const NOT_APPLICABLE_PERSON_VALUE = "__NOT_APPLICABLE__";
+
+type NotificationRecipient = {
+  id: string;
+  fullName: string;
+  email: string | null;
+  phone: string | null;
+  roles: string[];
+  emailHref: string;
+  whatsappHref: string;
+  personalMessage: string;
+};
+
+type MatchModalActionState = {
+  status: "idle" | "success" | "error";
+  notice: string;
+  matchId?: string;
+  redirectTo?: string;
+  token?: string;
+};
+
+const INITIAL_MATCH_MODAL_ACTION_STATE: MatchModalActionState = {
+  status: "idle",
+  notice: "",
+};
 
 const IDENTIFICATION_FIELDS = [
   "productionCode",
@@ -129,11 +162,10 @@ const IDENTIFICATION_FIELDS = [
   "venue",
 ] as const;
 
-const CONTEXT_FIELDS = [
+const IDENTIFICATION_META_FIELDS = [
   "productionMode",
   "commentaryPlan",
   "transport",
-  "notes",
 ] as const;
 
 const STAFF_FIELDS = [
@@ -145,42 +177,20 @@ const STAFF_FIELDS = [
   "relatorId",
 ] as const;
 
-const ADVANCED_FIELDS = [
-  "camara1Id",
-  "camara2Id",
-  "camara3Id",
-  "camara4Id",
-  "camara5Id",
-  "comentario1Id",
-  "comentario2Id",
+const STAFF_MODAL_HIDDEN_FIELDS = [
+  "externalMatchId",
+  "productionCode",
+  "competition",
+  "homeTeam",
+  "awayTeam",
+  "date",
+  "time",
+  "productionMode",
+  "venue",
+  "commentaryPlan",
+  "transport",
+  "notes",
 ] as const;
-
-const NOTIFICATION_ROLE_FIELDS = [
-  { field: "responsableId", label: RESPONSIBLE_DISPLAY_LABEL },
-  { field: "realizadorId", label: "Realizador" },
-  { field: "graficaId", label: "Operador de gráfica" },
-  { field: "controlId", label: "Operador de control" },
-  { field: "soporteId", label: "Soporte técnico" },
-  { field: "relatorId", label: "Relator" },
-  { field: "comentario1Id", label: "Comentario 1" },
-  { field: "comentario2Id", label: "Comentario 2" },
-  { field: "camara1Id", label: "Cámara 1" },
-  { field: "camara2Id", label: "Cámara 2" },
-  { field: "camara3Id", label: "Cámara 3" },
-  { field: "camara4Id", label: "Cámara 4" },
-  { field: "camara5Id", label: "Cámara 5" },
-] as const;
-
-type NotificationRecipient = {
-  id: string;
-  fullName: string;
-  phone: string | null;
-  email: string | null;
-  roles: string[];
-  emailHref: string;
-  whatsappHref: string;
-  message: string;
-};
 
 const MATCH_PREVIEW_EXAMPLE = {
   competition: "Liga Nacional",
@@ -195,7 +205,6 @@ const MATCH_PREVIEW_EXAMPLE = {
     Relatos: "Leonardo Chianese",
     Produ: "TV",
   },
-  assignedPeopleCount: 3,
 } as const;
 
 function getVisibleCameraCount(fields: MatchIntakeFields) {
@@ -203,7 +212,18 @@ function getVisibleCameraCount(fields: MatchIntakeFields) {
     return fields[field.name].trim() ? index + 1 : highest;
   }, 0);
 
-  return Math.max(2, highestFilledIndex);
+  return Math.max(1, highestFilledIndex);
+}
+
+function getVisibleCommentaryCount(fields: MatchIntakeFields) {
+  const highestFilledIndex = COMMENTARY_FIELD_CONFIGS.reduce(
+    (highest, field, index) => {
+      return fields[field.name].trim() ? index + 1 : highest;
+    },
+    0,
+  );
+
+  return Math.max(1, highestFilledIndex);
 }
 
 function countCompletedFields<
@@ -213,6 +233,10 @@ function countCompletedFields<
     (count, fieldName) => count + Number(Boolean(fields[fieldName].trim())),
     0,
   );
+}
+
+function isNotApplicablePersonValue(value: string | null | undefined) {
+  return value?.trim() === NOT_APPLICABLE_PERSON_VALUE;
 }
 
 function formatDraftDateLabel(date: string) {
@@ -239,44 +263,210 @@ function formatDraftTimeLabel(time: string) {
   return time.trim() || "--:--";
 }
 
-function shouldShowAdvancedByDefault(fields: MatchIntakeFields) {
-  return ADVANCED_FIELDS.some((fieldName) => fields[fieldName].trim());
-}
+function getPreviewLeagueAccentColor(league: string | null | undefined) {
+  const normalizedLeague = normalizeText(league ?? "");
 
-function getAssignedPeopleCount(fields: MatchIntakeFields) {
-  return new Set(
-    [
-      fields.responsableId,
-      fields.realizadorId,
-      fields.graficaId,
-      fields.controlId,
-      fields.soporteId,
-      fields.relatorId,
-      fields.comentario1Id,
-      fields.comentario2Id,
-      fields.camara1Id,
-      fields.camara2Id,
-      fields.camara3Id,
-      fields.camara4Id,
-      fields.camara5Id,
-    ].filter(Boolean),
-  ).size;
-}
-
-function getInitials(value: string) {
-  const parts = value
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2);
-
-  if (!parts.length) {
-    return "?";
+  if (normalizedLeague.includes("liga nacional")) {
+    return "#e61238";
   }
 
-  return parts
+  if (normalizedLeague.includes("liga federal")) {
+    return "#e67b18";
+  }
+
+  if (
+    normalizedLeague.includes("liga proximo") ||
+    normalizedLeague.includes("liga próximo")
+  ) {
+    return "#22a35a";
+  }
+
+  if (normalizedLeague.includes("acb") || normalizedLeague.includes("liga endesa")) {
+    return "#f08a24";
+  }
+
+  if (normalizedLeague.includes("euroleague")) {
+    return "#8b5cf6";
+  }
+
+  if (normalizedLeague.includes("liga argentina")) {
+    return "#2b6be7";
+  }
+
+  if (normalizedLeague.includes("nba")) {
+    return "#334155";
+  }
+
+  return "#e61238";
+}
+
+function getPreviewInitials(value: string) {
+  return value
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
     .map((part) => part[0]?.toUpperCase() ?? "")
-    .join("")
-    .slice(0, 2);
+    .join("");
+}
+
+function PreviewDetailPill({
+  icon: Icon,
+  label,
+  value,
+  variant = "icon",
+  highlight = false,
+}: {
+  icon: typeof UserRound;
+  label: string;
+  value: string;
+  variant?: "icon" | "person";
+  highlight?: boolean;
+}) {
+  return (
+    <div className="flex min-w-0 items-start gap-3">
+      {variant === "person" ? (
+        <span className="mt-0.5 inline-flex size-9 shrink-0 items-center justify-center rounded-full border border-[#ecd9de] bg-[#fff3f6] text-[10px] font-black text-[var(--accent)]">
+          {getPreviewInitials(value || "Sin asignar")}
+        </span>
+      ) : (
+        <span className="mt-0.5 inline-flex size-9 shrink-0 items-center justify-center rounded-full bg-[#f3f6fa] text-[#9aa8bd]">
+          <Icon className="size-4" />
+        </span>
+      )}
+
+      <div className="min-w-0">
+        <div className="text-[10px] font-black uppercase tracking-[0.16em] text-[#9aa8bd]">
+          {label}
+        </div>
+        <p
+          className={cn(
+            "mt-1 text-[13px] font-extrabold leading-tight text-[var(--foreground)]",
+            highlight && "text-[var(--accent)]",
+          )}
+        >
+          {value}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function CreateMatchPreviewCard({
+  competition,
+  time,
+  homeTeam,
+  awayTeam,
+  venue,
+  operationalItems,
+}: {
+  competition: string;
+  time: string;
+  homeTeam: string;
+  awayTeam: string;
+  venue: string;
+  operationalItems: Array<{
+    key: string;
+    icon: typeof UserRound;
+    label: string;
+    value: string;
+    variant?: "icon" | "person";
+    highlight?: boolean;
+  }>;
+}) {
+  const leagueAccent = getPreviewLeagueAccentColor(competition);
+
+  return (
+    <div className="overflow-hidden rounded-[var(--panel-radius)] border border-[#eee7e1] bg-[#fffdfa] shadow-[0_10px_24px_rgba(28,13,16,0.05)]">
+      <div
+        className="px-4 py-2.5"
+        style={{ backgroundColor: leagueAccent }}
+      >
+        <div className="relative flex items-center justify-between gap-4">
+          <div className="flex justify-start">
+            <LeagueLogoMarkClient
+              league={competition}
+              className="size-9 rounded-full ring-2 ring-white/20"
+            />
+          </div>
+
+          <div className="pointer-events-none absolute inset-x-0 top-1/2 flex -translate-y-1/2 justify-center px-14">
+            <span className="max-w-[10rem] text-center text-[10px] font-black uppercase tracking-[0.16em] text-white">
+              {competition}
+            </span>
+          </div>
+
+          <div className="ml-auto min-w-[64px] text-right">
+            <p className="text-[20px] font-black leading-none text-white">
+              {time}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div
+        className="border-t-2 bg-[#f6f7fb] px-4 py-3.5"
+        style={{ borderTopColor: leagueAccent }}
+      >
+        <div className="relative z-10 w-full px-1">
+          <div className="grid grid-cols-[minmax(0,1fr)_2.5rem_minmax(0,1fr)] items-start gap-3 xl:grid-cols-[minmax(0,1fr)_2.75rem_minmax(0,1fr)] xl:gap-3.5">
+            <div className="flex min-w-0 flex-col items-center">
+              <ClientTeamLogoMark
+                teamName={homeTeam}
+                competition={competition}
+                className="size-[4.5rem] rounded-full border border-[#e8edf3] bg-white shadow-[0_10px_22px_rgba(15,23,42,0.08)]"
+                imageClassName="p-2.5"
+                initialsClassName="text-sm"
+              />
+              <p className="mt-3 max-w-full px-1 text-center text-[14px] font-black leading-tight tracking-tight text-[var(--foreground)]">
+                {homeTeam}
+              </p>
+            </div>
+
+            <div className="flex shrink-0 flex-col items-center justify-center pt-6">
+              <div className="h-px w-full max-w-8 bg-[#dfe5ed]" />
+              <span className="py-1.5 text-[18px] font-black italic text-[var(--accent)]">
+                vs
+              </span>
+              <div className="h-px w-full max-w-8 bg-[#dfe5ed]" />
+            </div>
+
+            <div className="flex min-w-0 flex-col items-center">
+              <ClientTeamLogoMark
+                teamName={awayTeam}
+                competition={competition}
+                className="size-[4.5rem] rounded-full border border-[#e8edf3] bg-white shadow-[0_10px_22px_rgba(15,23,42,0.08)]"
+                imageClassName="p-2.5"
+                initialsClassName="text-sm"
+              />
+              <p className="mt-3 max-w-full px-1 text-center text-[14px] font-black leading-tight tracking-tight text-[var(--foreground)]">
+                {awayTeam}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-3 flex items-center justify-center gap-2 text-center text-[12px] font-semibold text-[#94a3b8]">
+          <MapPin className="size-3.5" />
+          <span className="truncate">{venue}</span>
+        </div>
+      </div>
+
+      <div className="border-t border-[#efe7e1] bg-white px-4 py-3.5">
+        <div className="grid grid-cols-2 gap-x-5 gap-y-4">
+          {operationalItems.map((item) => (
+            <PreviewDetailPill
+              key={item.key}
+              icon={item.icon}
+              label={item.label}
+              value={item.value}
+              variant={item.variant}
+              highlight={item.highlight}
+            />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function buildInitialFields(initialDate: string): MatchIntakeFields {
@@ -386,8 +576,8 @@ function SectionBlock({
   children: ReactNode;
 }) {
   return (
-    <section className="space-y-5 rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--surface)] px-6 py-6 shadow-[0_18px_40px_rgba(15,23,42,0.06)]">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+    <section className="space-y-4 rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--surface)] px-5 py-5 shadow-[0_18px_40px_rgba(15,23,42,0.06)]">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <p className="text-[0.98rem] font-extrabold uppercase tracking-[0.2em] text-[#8ea0bb]">
             {step}. {title}
@@ -408,16 +598,23 @@ function LabeledField({
   label,
   required,
   alert,
+  highlightLabel,
   children,
 }: {
   label: string;
   required?: boolean;
   alert?: boolean;
+  highlightLabel?: boolean;
   children: ReactNode;
 }) {
   return (
     <label className="space-y-2">
-      <span className="flex items-center gap-2 text-[0.82rem] font-semibold text-[#5f6d84]">
+      <span
+        className={cn(
+          "flex items-center gap-2 text-[0.82rem] font-semibold",
+          highlightLabel ? "text-[var(--accent)]" : "text-[#5f6d84]",
+        )}
+      >
         {label}
         {required ? <span className="text-[var(--accent)]">*</span> : null}
         {alert ? (
@@ -437,12 +634,14 @@ function PersonSelectField({
   value,
   people,
   onChange,
+  className,
 }: {
   label: string;
   name: string;
   value: string;
   people: Pick<PersonRow, "id" | "full_name">[];
   onChange: (name: keyof MatchIntakeFields, value: string) => void;
+  className?: string;
 }) {
   return (
     <LabeledField label={label}>
@@ -452,8 +651,10 @@ function PersonSelectField({
         onChange={(event) =>
           onChange(name as keyof MatchIntakeFields, event.target.value)
         }
+        className={className}
       >
         <option value="">Sin asignar</option>
+        <option value={NOT_APPLICABLE_PERSON_VALUE}>No aplica</option>
         {people.map((person) => (
           <option key={person.id} value={person.id}>
             {person.full_name}
@@ -464,164 +665,99 @@ function PersonSelectField({
   );
 }
 
-function buildNotificationSubject(fields: MatchIntakeFields) {
-  const homeTeam = fields.homeTeam.trim() || "Equipo local";
-  const awayTeam = fields.awayTeam.trim() || "Equipo visitante";
-  return `Convocatoria · ${homeTeam} vs ${awayTeam}`;
-}
-
-function buildNotificationMessage(params: {
-  fields: MatchIntakeFields;
-  personName?: string | null;
-  roles?: string[];
-}) {
-  const homeTeam = params.fields.homeTeam.trim() || "Equipo local";
-  const awayTeam = params.fields.awayTeam.trim() || "Equipo visitante";
-  const league = params.fields.competition.trim() || "Sin liga";
-  const venue = params.fields.venue.trim() || "Sede por definir";
-  const productionMode = params.fields.productionMode.trim() || "Sin definir";
-  const recipientName = params.personName?.trim() || "equipo";
-  const rolesLabel = params.roles?.length ? params.roles.join(", ") : "equipo asignado";
-  const appUrl =
-    typeof window !== "undefined" ? `${window.location.origin}/mi-jornada` : "/mi-jornada";
-
-  return [
-    `Hola ${recipientName},`,
-    "",
-    `Has sido convocado para ${homeTeam} vs ${awayTeam}.`,
-    `Rol asignado: ${rolesLabel}.`,
-    "",
-    `Liga: ${league}`,
-    `Fecha: ${formatDraftDateLabel(params.fields.date)}`,
-    `Hora: ${formatDraftTimeLabel(params.fields.time)}`,
-    `Lugar: ${venue}`,
-    `Produ: ${productionMode}`,
-    "",
-    `Por favor confirma tu disponibilidad respondiendo este mensaje o revisando tu asignación en el portal: ${appUrl}`,
-  ].join("\n");
-}
-
-function buildNotificationMailtoHref(params: {
-  email: string | null;
-  fields: MatchIntakeFields;
-  personName?: string | null;
-  roles?: string[];
-}) {
-  if (!params.email) {
-    return "";
-  }
-
-  const query = new URLSearchParams({
-    subject: buildNotificationSubject(params.fields),
-    body: buildNotificationMessage({
-      fields: params.fields,
-      personName: params.personName,
-      roles: params.roles,
-    }),
-  });
-
-  return `mailto:${params.email}?${query.toString()}`;
-}
-
-function buildBulkNotificationMailtoHref(params: {
-  emails: string[];
-  fields: MatchIntakeFields;
-}) {
-  const recipients = [...new Set(params.emails.map((email) => email.trim()).filter(Boolean))];
-
-  if (!recipients.length) {
-    return "";
-  }
-
-  const query = new URLSearchParams({
-    bcc: recipients.join(","),
-    subject: buildNotificationSubject(params.fields),
-    body: buildNotificationMessage({ fields: params.fields }),
-  });
-
-  return `mailto:?${query.toString()}`;
-}
-
-function buildNotificationWhatsAppHref(params: {
-  phone: string | null;
-  fields: MatchIntakeFields;
-  personName?: string | null;
-  roles?: string[];
-}) {
-  const baseUrl = buildWhatsAppUrl(params.phone);
-
-  if (!baseUrl) {
-    return "";
-  }
-
-  return `${baseUrl}?text=${encodeURIComponent(
-    buildNotificationMessage({
-      fields: params.fields,
-      personName: params.personName,
-      roles: params.roles,
-    }),
-  )}`;
-}
-
-async function copyToClipboard(value: string) {
-  if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
-    await navigator.clipboard.writeText(value);
-    return;
-  }
-
-  const textarea = document.createElement("textarea");
-  textarea.value = value;
-  textarea.setAttribute("readonly", "true");
-  textarea.style.position = "absolute";
-  textarea.style.left = "-9999px";
-  document.body.appendChild(textarea);
-  textarea.select();
-  document.execCommand("copy");
-  document.body.removeChild(textarea);
-}
-
 export function CreateMatchModal({
   people,
   redirectTo,
   canEdit,
   initialDate,
   match,
+  mode = "match",
   triggerVariant = "primary",
   triggerClassName,
   triggerLabel,
   triggerIcon,
 }: CreateMatchModalProps) {
+  const router = useRouter();
   const isEditing = Boolean(match);
+  const isStaffMode = mode === "staff" && isEditing;
+  const saveAction = isEditing ? updateMatchModalAction : createMatchModalAction;
   const defaultFields = useMemo(
     () => (match ? buildFieldsFromMatch(match) : buildInitialFields(initialDate)),
     [initialDate, match],
+  );
+  const [saveState, saveFormAction] = useActionState<MatchModalActionState, FormData>(
+    saveAction,
+    INITIAL_MATCH_MODAL_ACTION_STATE,
   );
   const [isOpen, setIsOpen] = useState(false);
   const [fields, setFields] = useState<MatchIntakeFields>(defaultFields);
   const [competitionTouched, setCompetitionTouched] = useState(false);
   const [venueTouched, setVenueTouched] = useState(false);
-  const [isMounted, setIsMounted] = useState(false);
-  const [showAdvanced, setShowAdvanced] = useState(() =>
-    shouldShowAdvancedByDefault(defaultFields),
-  );
-  const [copiedNotificationKey, setCopiedNotificationKey] = useState<string | null>(null);
   const [visibleCameraCount, setVisibleCameraCount] = useState(() =>
     getVisibleCameraCount(defaultFields),
   );
+  const [visibleCommentaryCount, setVisibleCommentaryCount] = useState(() =>
+    getVisibleCommentaryCount(defaultFields),
+  );
+  const [showInitialNotes, setShowInitialNotes] = useState(() =>
+    Boolean(defaultFields.notes.trim()),
+  );
+  const [showNotificationWorkspace, setShowNotificationWorkspace] = useState(false);
+  const [dismissedSaveToken, setDismissedSaveToken] = useState<string | null>(null);
+  const portalTarget = typeof document !== "undefined" ? document.body : null;
+  const activeSaveToken =
+    saveState.status === "success" ? (saveState.token ?? null) : null;
+  const hasCompletedSave =
+    activeSaveToken !== null && activeSaveToken !== dismissedSaveToken;
+  const showNotifyPrompt =
+    hasCompletedSave && !isStaffMode && !isEditing && !showNotificationWorkspace;
 
-  useEffect(() => {
+  const syncDraftWithDefaults = useCallback(() => {
     setFields(defaultFields);
     setVisibleCameraCount(getVisibleCameraCount(defaultFields));
-    setShowAdvanced(shouldShowAdvancedByDefault(defaultFields));
-  }, [defaultFields]);
+    setVisibleCommentaryCount(getVisibleCommentaryCount(defaultFields));
+    setShowInitialNotes(Boolean(defaultFields.notes.trim()));
+    setCompetitionTouched(false);
+    setVenueTouched(false);
+    setShowNotificationWorkspace(false);
+    setDismissedSaveToken(activeSaveToken);
+  }, [activeSaveToken, defaultFields]);
 
-  useEffect(() => {
-    setIsMounted(true);
+  const resetAndClose = useCallback(() => {
+    setIsOpen(false);
+    syncDraftWithDefaults();
+  }, [syncDraftWithDefaults]);
 
-    return () => {
-      setIsMounted(false);
-    };
-  }, []);
+  const finishSavedFlow = useCallback((targetUrl?: string) => {
+    setIsOpen(false);
+    syncDraftWithDefaults();
+
+    if (typeof window !== "undefined") {
+      const currentUrl = `${window.location.pathname}${window.location.search}`;
+      if (targetUrl && targetUrl !== currentUrl) {
+        router.push(targetUrl);
+        return;
+      }
+    }
+
+    router.refresh();
+  }, [router, syncDraftWithDefaults]);
+
+  const handleEscape = useCallback(() => {
+    if (showNotificationWorkspace || hasCompletedSave) {
+      finishSavedFlow(saveState.redirectTo);
+      return;
+    }
+
+    setIsOpen(false);
+    syncDraftWithDefaults();
+  }, [
+    finishSavedFlow,
+    hasCompletedSave,
+    saveState.redirectTo,
+    showNotificationWorkspace,
+    syncDraftWithDefaults,
+  ]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -633,7 +769,7 @@ export function CreateMatchModal({
 
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
-        setIsOpen(false);
+        handleEscape();
       }
     };
 
@@ -643,15 +779,13 @@ export function CreateMatchModal({
       document.body.style.overflow = previousOverflow;
       window.removeEventListener("keydown", onKeyDown);
     };
-  }, [isOpen]);
+  }, [handleEscape, isOpen]);
 
   const missingFields = CORE_REQUIRED_FIELDS.filter((field) => !fields[field].trim());
   const highlightedMissingFields = missingFields;
-  const missingFieldLabels = missingFields.map(
-    (field) => CORE_FIELD_LABELS[field],
-  );
 
-  const fieldSurfaceClass = "h-[54px] bg-[var(--background-soft)] text-[15px]";
+  const fieldSurfaceClass =
+    "h-[40px] !py-1.5 bg-[var(--background-soft)] text-[14px]";
   const missingFieldClass =
     "border-[#efbcc7] bg-[#fff5f7] focus:border-[#df5575] focus:ring-[rgba(223,85,117,0.12)]";
 
@@ -675,13 +809,11 @@ export function CreateMatchModal({
     () => new Map(peopleOptions.map((person) => [person.id, person])),
     [peopleOptions],
   );
-  const identificationCompleted = countCompletedFields(fields, IDENTIFICATION_FIELDS);
-  const contextCompleted = countCompletedFields(fields, CONTEXT_FIELDS);
+  const identificationCompleted = countCompletedFields(fields, [
+    ...IDENTIFICATION_FIELDS,
+    ...IDENTIFICATION_META_FIELDS,
+  ]);
   const staffCompleted = countCompletedFields(fields, STAFF_FIELDS);
-  const assignedPeopleCount = getAssignedPeopleCount(fields);
-  const requiredCompletionRatio = missingFields.length
-    ? ((CORE_REQUIRED_FIELDS.length - missingFields.length) / CORE_REQUIRED_FIELDS.length) * 100
-    : 100;
   const previewHomeTeamLabel =
     fields.homeTeam.trim() || MATCH_PREVIEW_EXAMPLE.homeTeam;
   const previewAwayTeamLabel =
@@ -696,55 +828,78 @@ export function CreateMatchModal({
   const previewTimeLabel = formatDraftTimeLabel(
     fields.time || MATCH_PREVIEW_EXAMPLE.time,
   );
+  const previewProductionLabel =
+    fields.productionMode.trim() || MATCH_PREVIEW_EXAMPLE.roles.Produ;
   const getPersonRecord = (personId: string) =>
-    personId ? peopleById.get(personId) ?? null : null;
-  const summaryRoles = [
-    {
-      label: RESPONSIBLE_DISPLAY_LABEL,
-      value:
-        getPersonRecord(fields.responsableId)?.full_name ??
-        MATCH_PREVIEW_EXAMPLE.roles[RESPONSIBLE_DISPLAY_LABEL],
-      initials: getInitials(
-        getPersonRecord(fields.responsableId)?.full_name ??
-          MATCH_PREVIEW_EXAMPLE.roles[RESPONSIBLE_DISPLAY_LABEL],
-      ),
-    },
-    {
-      label: "Realizador",
-      value:
-        getPersonRecord(fields.realizadorId)?.full_name ??
-        MATCH_PREVIEW_EXAMPLE.roles.Realizador,
-      initials: getInitials(
-        getPersonRecord(fields.realizadorId)?.full_name ??
-          MATCH_PREVIEW_EXAMPLE.roles.Realizador,
-      ),
-    },
-    {
-      label: "Relatos",
-      value:
-        getPersonRecord(fields.relatorId)?.full_name ??
-        MATCH_PREVIEW_EXAMPLE.roles.Relatos,
-      initials: getInitials(
-        getPersonRecord(fields.relatorId)?.full_name ??
-          MATCH_PREVIEW_EXAMPLE.roles.Relatos,
-      ),
-    },
-    {
-      label: "Produ",
-      value: fields.productionMode.trim() || MATCH_PREVIEW_EXAMPLE.roles.Produ,
-      initials: getInitials(
-        fields.productionMode.trim() || MATCH_PREVIEW_EXAMPLE.roles.Produ,
-      ),
-    },
-  ];
-  const previewAssignedPeopleCount =
-    assignedPeopleCount || MATCH_PREVIEW_EXAMPLE.assignedPeopleCount;
+    personId && !isNotApplicablePersonValue(personId)
+      ? peopleById.get(personId) ?? null
+      : null;
+  const getSummaryPersonValue = (personId: string, fallback: string) => {
+    if (isNotApplicablePersonValue(personId)) {
+      return "No aplica";
+    }
+
+    return getPersonRecord(personId)?.full_name ?? fallback;
+  };
+  const previewCameraUnitLabel = `${Math.max(visibleCameraCount, 1)} ${
+    Math.max(visibleCameraCount, 1) === 1 ? "unidad" : "unidades"
+  }`;
+  const previewCommentaryUnitLabel = `${Math.max(visibleCommentaryCount, 1)} ${
+    Math.max(visibleCommentaryCount, 1) === 1 ? "relator" : "relatores"
+  }`;
+  const notificationMatch = useMemo(
+    () => ({
+      away_team: previewAwayTeamLabel,
+      competition: fields.competition.trim() || null,
+      home_team: previewHomeTeamLabel,
+      kickoff_at: buildKickoffAt({
+        date: fields.date || MATCH_PREVIEW_EXAMPLE.date,
+        time: fields.time || MATCH_PREVIEW_EXAMPLE.time,
+        timezone: DEFAULT_TIMEZONE,
+      }),
+      production_mode: fields.productionMode.trim() || null,
+      timezone: DEFAULT_TIMEZONE,
+      venue: fields.venue.trim() || null,
+    }),
+    [
+      fields.competition,
+      fields.date,
+      fields.productionMode,
+      fields.time,
+      fields.venue,
+      previewAwayTeamLabel,
+      previewHomeTeamLabel,
+    ],
+  );
+  const notificationRoleEntries = useMemo(
+    () => [
+      { fieldName: "responsableId" as const, label: RESPONSIBLE_DISPLAY_LABEL },
+      { fieldName: "realizadorId" as const, label: "Realizador" },
+      { fieldName: "graficaId" as const, label: "Operador de gráfica" },
+      { fieldName: "controlId" as const, label: "Operador de control" },
+      { fieldName: "soporteId" as const, label: "Soporte técnico" },
+      ...CAMERA_FIELD_CONFIGS.slice(0, visibleCameraCount).map((field) => ({
+        fieldName: field.name,
+        label: field.label,
+      })),
+      ...COMMENTARY_FIELD_CONFIGS.slice(0, visibleCommentaryCount).map((field) => ({
+        fieldName: field.name,
+        label: field.label,
+      })),
+    ],
+    [visibleCameraCount, visibleCommentaryCount],
+  );
   const notificationRecipients = useMemo(() => {
     const recipientsMap = new Map<string, NotificationRecipient>();
 
-    NOTIFICATION_ROLE_FIELDS.forEach(({ field, label }) => {
-      const personId = fields[field];
-      const person = personId ? peopleById.get(personId) ?? null : null;
+    notificationRoleEntries.forEach(({ fieldName, label }) => {
+      const personId = fields[fieldName];
+
+      if (!personId || isNotApplicablePersonValue(personId)) {
+        return;
+      }
+
+      const person = peopleById.get(personId);
 
       if (!person) {
         return;
@@ -762,56 +917,148 @@ export function CreateMatchModal({
       recipientsMap.set(person.id, {
         id: person.id,
         fullName: person.full_name,
-        phone: person.phone ?? null,
         email: person.email ?? null,
+        phone: person.phone ?? null,
         roles: [label],
         emailHref: "",
         whatsappHref: "",
-        message: "",
+        personalMessage: "",
       });
     });
 
     return [...recipientsMap.values()]
       .map((recipient) => {
-        const roles = recipient.roles.map((role) => getRoleDisplayName(role));
-        const message = buildNotificationMessage({
-          fields,
+        const personalMessage = buildMatchNotificationMessage({
+          match: notificationMatch,
           personName: recipient.fullName,
-          roles,
+          roleNames: recipient.roles,
         });
 
         return {
           ...recipient,
-          roles,
-          emailHref: buildNotificationMailtoHref({
+          emailHref: buildMatchNotificationMailtoHref({
             email: recipient.email,
-            fields,
+            match: notificationMatch,
             personName: recipient.fullName,
-            roles,
+            roleNames: recipient.roles,
           }),
-          whatsappHref: buildNotificationWhatsAppHref({
+          whatsappHref: buildMatchNotificationWhatsAppHref({
             phone: recipient.phone,
-            fields,
+            match: notificationMatch,
             personName: recipient.fullName,
-            roles,
+            roleNames: recipient.roles,
           }),
-          message,
+          personalMessage,
         };
       })
       .sort((left, right) => left.fullName.localeCompare(right.fullName, "es"));
-  }, [fields, peopleById]);
-  const batchNotificationMessage = useMemo(
-    () => buildNotificationMessage({ fields }),
-    [fields],
-  );
-  const bulkNotificationMailtoHref = useMemo(
+  }, [fields, notificationMatch, notificationRoleEntries, peopleById]);
+  const notificationUnassignedRoles = useMemo(
     () =>
-      buildBulkNotificationMailtoHref({
-        emails: notificationRecipients.map((recipient) => recipient.email).filter(Boolean) as string[],
-        fields,
+      notificationRoleEntries.flatMap(({ fieldName, label }) => {
+        const personId = fields[fieldName];
+
+        if (!personId || !personId.trim()) {
+          return [label];
+        }
+
+        if (isNotApplicablePersonValue(personId)) {
+          return [];
+        }
+
+        return [];
       }),
-    [fields, notificationRecipients],
+    [fields, notificationRoleEntries],
   );
+  const notificationBatchMessage = useMemo(
+    () => buildMatchNotificationMessage({ match: notificationMatch }),
+    [notificationMatch],
+  );
+  const notificationBulkMailtoHref = useMemo(
+    () =>
+      buildBulkMatchNotificationMailtoHref({
+        emails: notificationRecipients
+          .map((recipient) => recipient.email)
+          .filter(Boolean) as string[],
+        match: notificationMatch,
+      }),
+    [notificationMatch, notificationRecipients],
+  );
+  const previewOperationalItems = [
+    {
+      key: "fecha",
+      icon: CalendarDays,
+      label: "Fecha",
+      value: previewDateLabel,
+    },
+    {
+      key: "produ",
+      icon: Video,
+      label: PRODUCTION_SHORT_LABEL,
+      value: previewProductionLabel || "Sin definir",
+    },
+    {
+      key: "responsable",
+      icon: ShieldUser,
+      label: RESPONSIBLE_DISPLAY_LABEL,
+      value: getSummaryPersonValue(fields.responsableId, "Sin asignar"),
+      variant: "person" as const,
+    },
+    {
+      key: "realizador",
+      icon: UserRound,
+      label: "Realizador",
+      value: getSummaryPersonValue(fields.realizadorId, "Sin asignar"),
+      variant: "person" as const,
+    },
+    {
+      key: "grafica",
+      icon: UserRound,
+      label: "Gráfica",
+      value: getSummaryPersonValue(fields.graficaId, "Sin asignar"),
+      variant: "person" as const,
+    },
+    {
+      key: "control",
+      icon: UserRound,
+      label: "Control",
+      value: getSummaryPersonValue(fields.controlId, "Sin asignar"),
+      variant: "person" as const,
+    },
+    {
+      key: "soporte",
+      icon: UserRound,
+      label: "Soporte",
+      value: getSummaryPersonValue(fields.soporteId, "Sin asignar"),
+      variant: "person" as const,
+    },
+    {
+      key: "relator1",
+      icon: Mic2,
+      label: "Relator 1",
+      value: getSummaryPersonValue(fields.relatorId, "Sin asignar"),
+      variant: "person" as const,
+    },
+    {
+      key: "relatores",
+      icon: Mic2,
+      label: "Relatores",
+      value: previewCommentaryUnitLabel,
+      highlight: true,
+    },
+    {
+      key: "camaras",
+      icon: Camera,
+      label: "Cámaras",
+      value: previewCameraUnitLabel,
+      highlight: true,
+    },
+  ];
+  const modalTitle = isStaffMode
+    ? "Agregar personal"
+    : isEditing
+      ? "Editar partido"
+      : "Crear partido";
 
   function updateField(name: keyof MatchIntakeFields, value: string) {
     setFields((current) => ({
@@ -834,36 +1081,17 @@ export function CreateMatchModal({
     }));
   }
 
-  function resetAndClose() {
-    setIsOpen(false);
-    setFields(defaultFields);
-    setVisibleCameraCount(getVisibleCameraCount(defaultFields));
-    setShowAdvanced(shouldShowAdvancedByDefault(defaultFields));
-    setCompetitionTouched(false);
-    setVenueTouched(false);
-    setCopiedNotificationKey(null);
-  }
-
-  async function handleCopyNotification(value: string, key: string) {
-    try {
-      await copyToClipboard(value);
-      setCopiedNotificationKey(key);
-      window.setTimeout(() => {
-        setCopiedNotificationKey((current) => (current === key ? null : current));
-      }, 1800);
-    } catch {
-      setCopiedNotificationKey(null);
-    }
-  }
-
-  function handleBulkWhatsApp() {
-    notificationRecipients
-      .filter((recipient) => recipient.whatsappHref)
-      .forEach((recipient, index) => {
-        window.setTimeout(() => {
-          window.open(recipient.whatsappHref, "_blank", "noopener,noreferrer");
-        }, index * 180);
-      });
+  function renderHiddenFieldInputs(
+    fieldNames: readonly (keyof MatchIntakeFields)[],
+  ) {
+    return fieldNames.map((fieldName) => (
+      <input
+        key={fieldName}
+        type="hidden"
+        name={fieldName}
+        value={fields[fieldName]}
+      />
+    ));
   }
 
   return (
@@ -884,10 +1112,18 @@ export function CreateMatchModal({
           onClick={(event) => {
             event.preventDefault();
             event.stopPropagation();
+            syncDraftWithDefaults();
             setIsOpen(true);
           }}
           disabled={!canEdit}
-          aria-label={triggerLabel ?? (isEditing ? "Editar partido" : "Crear partido")}
+          aria-label={
+            triggerLabel ??
+            (isStaffMode
+              ? "Agregar personal"
+              : isEditing
+                ? "Editar partido"
+                : "Crear partido")
+          }
         >
           {triggerIcon ?? <Plus className="size-4" />}
         </button>
@@ -902,61 +1138,162 @@ export function CreateMatchModal({
           onClick={(event) => {
             event.preventDefault();
             event.stopPropagation();
+            syncDraftWithDefaults();
             setIsOpen(true);
           }}
           disabled={!canEdit}
         >
           {triggerIcon ?? <Plus className="size-4" />}
-          {triggerLabel ?? "Crear partido"}
+          {triggerLabel ?? (isStaffMode ? "Agregar personal" : "Crear partido")}
         </Button>
       )}
 
-      {isOpen && isMounted
+      {isOpen && portalTarget
         ? createPortal(
-        <div className="fixed inset-0 z-[300] flex items-start justify-center bg-[rgba(15,23,42,0.48)] px-4 py-8 backdrop-blur-sm">
+        <div className="fixed inset-0 z-[300] bg-[rgba(15,23,42,0.48)] backdrop-blur-sm">
           <div
             className="absolute inset-0"
             aria-hidden="true"
             onClick={resetAndClose}
           />
-          <div className="relative z-[1] flex max-h-[calc(100vh-4rem)] w-full max-w-[1120px] flex-col overflow-hidden rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--surface)] shadow-[0_32px_80px_rgba(15,23,42,0.22)]">
-              <div className="flex items-start justify-between gap-6 border-b border-[var(--border)] px-7 py-6">
-                <div className="space-y-2">
-                  <div>
-                    <h2 className="text-3xl font-extrabold tracking-tight text-[var(--foreground)]">
-                      {isEditing ? "Editar partido" : "Crear partido"}
-                    </h2>
-                  </div>
-                </div>
-              <button
-                type="button"
-                className="inline-flex size-11 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--background-soft)] text-[var(--muted)] transition hover:text-[var(--foreground)]"
-                onClick={resetAndClose}
-                aria-label="Cerrar"
-              >
-                <X className="size-4.5" />
-              </button>
-            </div>
-
+          <div className="relative z-[1] flex h-full w-full flex-col overflow-hidden bg-[var(--surface)] shadow-[0_32px_80px_rgba(15,23,42,0.22)]">
             <form
-              action={isEditing ? updateMatchAction : createMatchAction}
+              action={saveFormAction}
               className="flex min-h-0 flex-1 flex-col"
             >
               <input type="hidden" name="redirectTo" value={redirectTo} />
               <input type="hidden" name="timezone" value={DEFAULT_TIMEZONE} />
               {isEditing ? <input type="hidden" name="matchId" value={match?.id} /> : null}
+              <div className="border-b border-[var(--border)] px-5 py-2.5 sm:px-6 sm:py-3 xl:px-8 xl:py-0 2xl:px-10">
+                <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-2 xl:min-h-[55px] xl:flex-row xl:items-center xl:justify-between">
+                  <div className="min-w-0">
+                    <h2 className="text-[1.6rem] font-extrabold leading-none tracking-tight text-[var(--foreground)] xl:text-[1.75rem]">
+                      {showNotificationWorkspace ? "Notificar personal" : modalTitle}
+                    </h2>
+                    {saveState.status === "error" && saveState.notice ? (
+                      <p className="mt-1 text-sm font-semibold text-[var(--accent)]">
+                        {saveState.notice}
+                      </p>
+                    ) : null}
+                    {isStaffMode && saveState.status === "success" && saveState.notice ? (
+                      <p className="mt-1 text-sm font-semibold text-[#1b8b56]">
+                        {saveState.notice}
+                      </p>
+                    ) : null}
+                  </div>
 
-              <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5 sm:px-7 sm:py-6">
-                <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(22rem,24rem)]">
-                  <div className="space-y-6">
+                  <div className="flex flex-wrap items-center gap-3 xl:justify-end">
+                    {isEditing && !isStaffMode && !showNotificationWorkspace ? (
+                      <Button
+                        type="submit"
+                        variant="secondary"
+                        formAction={deleteMatchAction}
+                        className="h-10 border-[#efbcc7] bg-[#fff5f7] text-[#b73656] hover:bg-[#ffecee]"
+                        onClick={(event) => {
+                          if (
+                            !window.confirm(
+                              "Vas a eliminar este partido. Este cambio puede ser permanente y sacar la tarjeta de la grilla. ¿Quieres continuar?",
+                            )
+                          ) {
+                            event.preventDefault();
+                          }
+                        }}
+                      >
+                        Borrar partido
+                      </Button>
+                    ) : null}
+                    {showNotificationWorkspace ? (
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        className="h-9"
+                        onClick={() => finishSavedFlow(saveState.redirectTo)}
+                      >
+                        Cerrar
+                      </Button>
+                    ) : (
+                      <>
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          className="h-9"
+                          onClick={() =>
+                            hasCompletedSave
+                              ? finishSavedFlow(saveState.redirectTo)
+                              : resetAndClose()
+                          }
+                        >
+                          Cancelar
+                        </Button>
+                        <SubmitButton
+                          pendingLabel={
+                            isStaffMode
+                              ? "Guardando personal..."
+                              : isEditing
+                              ? "Guardando..."
+                              : "Creando..."
+                          }
+                          className="h-9 gap-2"
+                        >
+                          {isStaffMode ? (
+                            <Plus className="size-4" />
+                          ) : isEditing ? (
+                            <Sparkles className="size-4" />
+                          ) : (
+                            <Plus className="size-4" />
+                          )}
+                          {isStaffMode
+                            ? "Guardar personal"
+                            : isEditing
+                              ? "Guardar cambios"
+                              : "Crear partido"}
+                        </SubmitButton>
+                      </>
+                    )}
+                    <button
+                      type="button"
+                      className="inline-flex size-9 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--background-soft)] text-[var(--muted)] transition hover:text-[var(--foreground)]"
+                      onClick={() =>
+                        showNotificationWorkspace || hasCompletedSave
+                          ? finishSavedFlow(saveState.redirectTo)
+                          : resetAndClose()
+                      }
+                      aria-label="Cerrar"
+                    >
+                      <X className="size-4.5" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4 sm:px-6 sm:py-5 xl:px-8 xl:py-6 2xl:px-10">
+                <div className="mx-auto w-full max-w-[1600px]">
+                {showNotificationWorkspace ? (
+                  <MatchNotificationWorkspace
+                    batchMessage={notificationBatchMessage}
+                    bulkMailtoHref={notificationBulkMailtoHref}
+                    recipients={notificationRecipients}
+                    unassignedRoles={notificationUnassignedRoles}
+                  />
+                ) : (
+                <div
+                  className={cn(
+                    "grid gap-6",
+                    isStaffMode
+                      ? "xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]"
+                      : "xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(24rem,27rem)] 2xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(27rem,30rem)]",
+                  )}
+                >
+                  {isStaffMode ? renderHiddenFieldInputs(STAFF_MODAL_HIDDEN_FIELDS) : null}
+                  {!isStaffMode ? (
                     <SectionBlock
                       step="1"
                       title="Identificación"
-                      status={`${identificationCompleted}/${IDENTIFICATION_FIELDS.length} listos`}
+                      status={`${identificationCompleted}/${IDENTIFICATION_FIELDS.length + IDENTIFICATION_META_FIELDS.length} listos`}
                     >
                       <div className="grid gap-4 lg:grid-cols-2">
                         <LabeledField
-                          label="ID de Produ"
+                          label="ID de Producción"
                           required
                           alert={highlightedMissingFields.includes("productionCode")}
                         >
@@ -1077,6 +1414,7 @@ export function CreateMatchModal({
                         <LabeledField
                           label="Fecha"
                           required
+                          highlightLabel
                           alert={highlightedMissingFields.includes("date")}
                         >
                           <Input
@@ -1088,6 +1426,7 @@ export function CreateMatchModal({
                             }
                             className={cn(
                               fieldSurfaceClass,
+                              "font-semibold text-[var(--accent)]",
                               highlightedMissingFields.includes("date") &&
                                 missingFieldClass,
                             )}
@@ -1136,16 +1475,10 @@ export function CreateMatchModal({
                           />
                         </LabeledField>
                       </div>
-                    </SectionBlock>
 
-                    <SectionBlock
-                      step="2"
-                      title="Contexto operativo"
-                      status={`${contextCompleted}/${CONTEXT_FIELDS.length} listos`}
-                    >
                       <div className="grid gap-4 lg:grid-cols-3">
                         <LabeledField
-                          label="Produ"
+                          label={PRODUCTION_LABEL}
                           required
                           alert={highlightedMissingFields.includes("productionMode")}
                         >
@@ -1161,7 +1494,7 @@ export function CreateMatchModal({
                                 missingFieldClass,
                             )}
                           >
-                            <option value="">Selecciona una Produ</option>
+                            <option value="">Selecciona una producción</option>
                             {PRODUCTION_MODE_OPTIONS.map((mode) => (
                               <option key={mode} value={mode}>
                                 {mode}
@@ -1201,246 +1534,135 @@ export function CreateMatchModal({
                       </div>
 
                       <div className="grid gap-4">
-                        <LabeledField label="Observación inicial">
-                          <Textarea
-                            name="notes"
-                            value={fields.notes}
-                            onChange={(event) =>
-                              updateField("notes", event.target.value)
-                            }
-                            placeholder="Cualquier contexto editorial, técnico o logístico que convenga dejar visible desde el inicio."
-                            className="min-h-28 bg-[var(--background-soft)] text-[15px]"
-                          />
-                        </LabeledField>
-                      </div>
-                    </SectionBlock>
-
-                    <SectionBlock
-                      step="3"
-                      title="Personal"
-                      status={`${staffCompleted}/${STAFF_FIELDS.length} roles`}
-                    >
-                      <div className="grid gap-4 lg:grid-cols-2">
-                        <PersonSelectField
-                          label={RESPONSIBLE_DISPLAY_LABEL}
-                          name="responsableId"
-                          value={fields.responsableId}
-                          people={peopleOptions}
-                          onChange={updateField}
-                        />
-                        <PersonSelectField
-                          label="Realizador"
-                          name="realizadorId"
-                          value={fields.realizadorId}
-                          people={peopleOptions}
-                          onChange={updateField}
-                        />
-                        <PersonSelectField
-                          label="Operador de gráfica"
-                          name="graficaId"
-                          value={fields.graficaId}
-                          people={peopleOptions}
-                          onChange={updateField}
-                        />
-                        <PersonSelectField
-                          label="Operador de control"
-                          name="controlId"
-                          value={fields.controlId}
-                          people={peopleOptions}
-                          onChange={updateField}
-                        />
-                        <PersonSelectField
-                          label="Soporte técnico"
-                          name="soporteId"
-                          value={fields.soporteId}
-                          people={peopleOptions}
-                          onChange={updateField}
-                        />
-                        <PersonSelectField
-                          label="Relator"
-                          name="relatorId"
-                          value={fields.relatorId}
-                          people={peopleOptions}
-                          onChange={updateField}
-                        />
-                      </div>
-                    </SectionBlock>
-
-                    <SectionBlock
-                      step="4"
-                      title="Notificar"
-                      status={`${notificationRecipients.length} contactos`}
-                    >
-                      <div className="space-y-4">
-                        <div className="flex flex-wrap gap-2">
-                          <Button
-                            type="button"
-                            variant="secondary"
-                            className="gap-2"
-                            disabled={!bulkNotificationMailtoHref}
-                            onClick={() => {
-                              if (bulkNotificationMailtoHref) {
-                                window.location.assign(bulkNotificationMailtoHref);
-                              }
-                            }}
-                          >
-                            <Mail className="size-4" />
-                            Correo a todos
-                          </Button>
-                          <Button
-                            type="button"
-                            className="gap-2 bg-[#12b76a] shadow-[0_10px_24px_rgba(18,183,106,0.18)] hover:bg-[#0f9f5c]"
-                            disabled={!notificationRecipients.some((recipient) => recipient.whatsappHref)}
-                            onClick={handleBulkWhatsApp}
-                          >
-                            <MessageCircleMore className="size-4" />
-                            WhatsApp a todos
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="secondary"
-                            className="gap-2"
-                            onClick={() => handleCopyNotification(batchNotificationMessage, "batch")}
-                          >
-                            <Copy className="size-4" />
-                            {copiedNotificationKey === "batch" ? "Copiado" : "Copiar texto"}
-                          </Button>
-                        </div>
-
-                        <div className="rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--background-soft)] px-4 py-4">
-                          <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#8ea0bb]">
-                            Mensaje base
-                          </p>
-                          <pre className="mt-3 whitespace-pre-wrap font-sans text-sm leading-6 text-[var(--foreground)]">
-                            {batchNotificationMessage}
-                          </pre>
-                        </div>
-
-                        {notificationRecipients.length ? (
-                          <div className="space-y-4">
-                            {notificationRecipients.map((recipient, index) => (
-                              <div
-                                key={recipient.id}
-                                className={cn(
-                                  "flex flex-wrap items-center justify-between gap-4",
-                                  index === notificationRecipients.length - 1
-                                    ? ""
-                                    : "border-b border-[var(--border)] pb-4",
-                                )}
+                        {showInitialNotes ? (
+                          <div className="space-y-3">
+                            <div className="flex items-center justify-between gap-3">
+                              <span className="text-[0.82rem] font-semibold text-[#5f6d84]">
+                                Observación inicial
+                              </span>
+                              <Button
+                                type="button"
+                                variant="secondary"
+                                className="h-9 px-3 text-xs font-semibold"
+                                onClick={() => {
+                                  updateField("notes", "");
+                                  setShowInitialNotes(false);
+                                }}
                               >
-                                <div className="flex min-w-0 items-center gap-3">
-                                  <HoverAvatarBadge
-                                    initials={getInitials(recipient.fullName)}
-                                    roleLabel={recipient.roles.join(" · ")}
-                                    showTooltip={false}
-                                    tone="neutral"
-                                    size="md"
-                                  />
-                                  <div className="min-w-0">
-                                    <p className="truncate text-sm font-bold text-[var(--foreground)]">
-                                      {recipient.fullName}
-                                    </p>
-                                    <p className="mt-1 truncate text-[10px] font-bold uppercase tracking-[0.16em] text-[#7587a1]">
-                                      {recipient.roles.join(" · ")}
-                                    </p>
-                                  </div>
-                                </div>
-
-                                <div className="flex shrink-0 items-center gap-2">
-                                  <Button
-                                    type="button"
-                                    variant="secondary"
-                                    className="gap-2 px-3"
-                                    onClick={() => handleCopyNotification(recipient.message, recipient.id)}
-                                  >
-                                    <Copy className="size-4" />
-                                    {copiedNotificationKey === recipient.id ? "Copiado" : "Copiar"}
-                                  </Button>
-                                  <button
-                                    type="button"
-                                    aria-label={`Enviar correo a ${recipient.fullName}`}
-                                    disabled={!recipient.emailHref}
-                                    onClick={() => {
-                                      if (recipient.emailHref) {
-                                        window.location.assign(recipient.emailHref);
-                                      }
-                                    }}
-                                    className={cn(
-                                      "inline-flex size-11 items-center justify-center rounded-full border transition",
-                                      recipient.emailHref
-                                        ? "border-[#c9d8fb] bg-[#eef4ff] text-[#2b6be7] hover:brightness-105"
-                                        : "cursor-not-allowed border-[var(--border)] bg-[#f4f6fa] text-[#b1bccd]",
-                                    )}
-                                  >
-                                    <Mail className="size-4" />
-                                  </button>
-                                  <button
-                                    type="button"
-                                    aria-label={`Abrir WhatsApp de ${recipient.fullName}`}
-                                    disabled={!recipient.whatsappHref}
-                                    onClick={() => {
-                                      if (recipient.whatsappHref) {
-                                        window.open(recipient.whatsappHref, "_blank", "noopener,noreferrer");
-                                      }
-                                    }}
-                                    className={cn(
-                                      "inline-flex size-11 items-center justify-center rounded-full border transition",
-                                      recipient.whatsappHref
-                                        ? "border-[#c9ead8] bg-[#eefbf3] text-[#1b8b56] hover:brightness-105"
-                                        : "cursor-not-allowed border-[var(--border)] bg-[#f4f6fa] text-[#b1bccd]",
-                                    )}
-                                  >
-                                    <MessageCircleMore className="size-4" />
-                                  </button>
-                                </div>
-                              </div>
-                            ))}
+                                Quitar
+                              </Button>
+                            </div>
+                            <Textarea
+                              name="notes"
+                              value={fields.notes}
+                              onChange={(event) =>
+                                updateField("notes", event.target.value)
+                              }
+                              placeholder="Cualquier contexto editorial, técnico o logístico que convenga dejar visible desde el inicio."
+                              className="min-h-28 bg-[var(--background-soft)] text-[15px]"
+                            />
                           </div>
                         ) : (
-                          <div className="rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--background-soft)] px-4 py-5 text-sm font-semibold text-[#7d8ca4]">
-                            Primero asigna al menos una persona en el bloque de Personal para poder
-                            preparar la convocatoria.
-                          </div>
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            className="h-11 justify-center gap-2 border-dashed border-[#d7dde7] text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--accent)]"
+                            onClick={() => setShowInitialNotes(true)}
+                          >
+                            <Plus className="size-4" />
+                            Agregar observación inicial
+                          </Button>
                         )}
                       </div>
                     </SectionBlock>
+                  ) : null}
 
-                    <div className="overflow-hidden rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--surface)] shadow-[0_18px_40px_rgba(15,23,42,0.06)]">
-                      <button
-                        type="button"
-                        className="flex w-full items-center justify-between gap-4 px-6 py-5 text-left"
-                        onClick={() => setShowAdvanced((current) => !current)}
-                      >
-                        <div>
-                          <p className="text-[11px] font-extrabold uppercase tracking-[0.24em] text-[#8ea0bb]">
-                            Detalles adicionales
-                          </p>
+                  <SectionBlock
+                    step={isStaffMode ? "1" : "2"}
+                    title="Personal"
+                    status={`${staffCompleted}/${STAFF_FIELDS.length} roles`}
+                  >
+                    <div className="space-y-4">
+                      <div className="space-y-5">
+                        <div className="grid gap-4 lg:grid-cols-2">
+                          <PersonSelectField
+                            label={RESPONSIBLE_DISPLAY_LABEL}
+                            name="responsableId"
+                            value={fields.responsableId}
+                            people={peopleOptions}
+                            onChange={updateField}
+                            className={fieldSurfaceClass}
+                          />
+                          <PersonSelectField
+                            label="Realizador"
+                            name="realizadorId"
+                            value={fields.realizadorId}
+                            people={peopleOptions}
+                            onChange={updateField}
+                            className={fieldSurfaceClass}
+                          />
+                          <PersonSelectField
+                            label="Operador de gráfica"
+                            name="graficaId"
+                            value={fields.graficaId}
+                            people={peopleOptions}
+                            onChange={updateField}
+                            className={fieldSurfaceClass}
+                          />
+                          <PersonSelectField
+                            label="Operador de control"
+                            name="controlId"
+                            value={fields.controlId}
+                            people={peopleOptions}
+                            onChange={updateField}
+                            className={fieldSurfaceClass}
+                          />
+                          <PersonSelectField
+                            label="Soporte técnico"
+                            name="soporteId"
+                            value={fields.soporteId}
+                            people={peopleOptions}
+                            onChange={updateField}
+                            className={fieldSurfaceClass}
+                          />
                         </div>
-                        <span className="inline-flex size-11 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--background-soft)] text-[#617089]">
-                          {showAdvanced ? (
-                            <ChevronUp className="size-4.5" />
-                          ) : (
-                            <ChevronDown className="size-4.5" />
-                          )}
-                        </span>
-                      </button>
 
-                      {showAdvanced ? (
-                        <div className="space-y-5 border-t border-[var(--border)] px-6 py-6">
-                          <div className="grid gap-5 xl:grid-cols-2">
-                            <div className="space-y-4 rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--background-soft)] p-5">
-                              <div className="flex items-start gap-3">
-                                <div className="flex size-10 items-center justify-center rounded-full bg-white text-[var(--accent)] shadow-[0_6px_18px_rgba(15,23,42,0.08)]">
-                                  <Camera className="size-4.5" />
-                                </div>
-                                <div>
-                                  <h3 className="text-sm font-extrabold uppercase tracking-[0.18em] text-[var(--foreground)]">
-                                    Cámaras
-                                  </h3>
-                                </div>
-                              </div>
-                              <div className="grid gap-4">
-                                {CAMERA_FIELD_CONFIGS.slice(0, visibleCameraCount).map((field) => (
+                        <div className="grid gap-5 xl:grid-cols-2">
+                          <div className="space-y-4">
+                            <div className="grid gap-4">
+                              {CAMERA_FIELD_CONFIGS.slice(0, visibleCameraCount).map((field) => (
+                                <PersonSelectField
+                                  key={field.name}
+                                  label={field.label}
+                                  name={field.name}
+                                  value={fields[field.name]}
+                                  people={peopleOptions}
+                                  onChange={updateField}
+                                  className={fieldSurfaceClass}
+                                />
+                              ))}
+                              {visibleCameraCount < CAMERA_FIELD_CONFIGS.length ? (
+                                <Button
+                                  type="button"
+                                  variant="secondary"
+                                  className="h-11 justify-center gap-2 border-dashed border-[#d7dde7] text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--accent)]"
+                                  onClick={() =>
+                                    setVisibleCameraCount((current) =>
+                                      Math.min(current + 1, CAMERA_FIELD_CONFIGS.length),
+                                    )
+                                  }
+                                >
+                                  <Plus className="size-4" />
+                                  Agregar cámara
+                                </Button>
+                              ) : null}
+                            </div>
+                          </div>
+
+                          <div className="space-y-4">
+                            <div className="grid gap-4">
+                              {COMMENTARY_FIELD_CONFIGS.slice(0, visibleCommentaryCount).map(
+                                (field) => (
                                   <PersonSelectField
                                     key={field.name}
                                     label={field.label}
@@ -1448,220 +1670,72 @@ export function CreateMatchModal({
                                     value={fields[field.name]}
                                     people={peopleOptions}
                                     onChange={updateField}
+                                    className={fieldSurfaceClass}
                                   />
-                                ))}
-                                {visibleCameraCount < CAMERA_FIELD_CONFIGS.length ? (
-                                  <Button
-                                    type="button"
-                                    variant="secondary"
-                                    className="h-11 justify-center gap-2 border-dashed border-[#d7dde7] text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--accent)]"
-                                    onClick={() =>
-                                      setVisibleCameraCount((current) =>
-                                        Math.min(current + 1, CAMERA_FIELD_CONFIGS.length),
-                                      )
-                                    }
-                                  >
-                                    <Plus className="size-4" />
-                                    Agregar cámara
-                                  </Button>
-                                ) : null}
-                              </div>
-                            </div>
-
-                            <div className="space-y-4 rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--background-soft)] p-5">
-                              <div className="flex items-start gap-3">
-                                <div className="flex size-10 items-center justify-center rounded-full bg-white text-[var(--accent)] shadow-[0_6px_18px_rgba(15,23,42,0.08)]">
-                                  <Mic2 className="size-4.5" />
-                                </div>
-                                <div>
-                                  <h3 className="text-sm font-extrabold uppercase tracking-[0.18em] text-[var(--foreground)]">
-                                    Comentarios extra
-                                  </h3>
-                                </div>
-                              </div>
-                              <div className="grid gap-4">
-                                <PersonSelectField
-                                  label="Comentarista 1"
-                                  name="comentario1Id"
-                                  value={fields.comentario1Id}
-                                  people={peopleOptions}
-                                  onChange={updateField}
-                                />
-                                <PersonSelectField
-                                  label="Comentarista 2"
-                                  name="comentario2Id"
-                                  value={fields.comentario2Id}
-                                  people={peopleOptions}
-                                  onChange={updateField}
-                                />
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      ) : null}
-                    </div>
-                  </div>
-
-                  <aside className="order-first space-y-4 self-start xl:order-last xl:sticky xl:top-0">
-                    <div className="overflow-hidden rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--surface)] shadow-[0_22px_48px_rgba(15,23,42,0.08)]">
-                      <div className="space-y-4 px-5 py-5">
-                        <div className="rounded-[var(--panel-radius)] bg-[var(--background-soft)] p-4">
-                          <div className="flex items-center justify-between gap-3">
-                            <div className="flex min-w-0 items-center gap-3">
-                              <LeagueLogoMarkClient
-                                league={previewCompetitionLabel}
-                                className="size-10 shrink-0 rounded-[var(--panel-radius)]"
-                              />
-                              <div className="min-w-0">
-                                <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#8ea0bb]">
-                                  Liga
-                                </p>
-                                <p className="truncate text-sm font-bold text-[var(--foreground)]">
-                                  {previewCompetitionLabel}
-                                </p>
-                              </div>
-                            </div>
-                            <div className="text-right">
-                              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#8ea0bb]">
-                                Hora
-                              </p>
-                              <p className="text-2xl font-extrabold tracking-tight text-[var(--foreground)]">
-                                {previewTimeLabel}
-                              </p>
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="rounded-[var(--panel-radius)] border border-[var(--border)] bg-white p-4">
-                          <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 text-center">
-                            <div className="space-y-2">
-                              <div className="mx-auto flex size-16 items-center justify-center rounded-full bg-[var(--background-soft)] shadow-[0_8px_18px_rgba(15,23,42,0.06)]">
-                                <ClientTeamLogoMark
-                                  teamName={previewHomeTeamLabel}
-                                  competition={previewCompetitionLabel}
-                                  className="size-14 rounded-full"
-                                  imageClassName="p-2"
-                                  initialsClassName="text-[11px] tracking-[0.14em]"
-                                />
-                              </div>
-                              <p className="text-sm font-bold leading-tight text-[var(--foreground)]">
-                                {previewHomeTeamLabel}
-                              </p>
-                            </div>
-                            <p className="text-lg font-extrabold text-[var(--accent)]">VS</p>
-                            <div className="space-y-2">
-                              <div className="mx-auto flex size-16 items-center justify-center rounded-full bg-[var(--background-soft)] shadow-[0_8px_18px_rgba(15,23,42,0.06)]">
-                                <ClientTeamLogoMark
-                                  teamName={previewAwayTeamLabel}
-                                  competition={previewCompetitionLabel}
-                                  className="size-14 rounded-full"
-                                  imageClassName="p-2"
-                                  initialsClassName="text-[11px] tracking-[0.14em]"
-                                />
-                              </div>
-                              <p className="text-sm font-bold leading-tight text-[var(--foreground)]">
-                                {previewAwayTeamLabel}
-                              </p>
-                            </div>
-                          </div>
-                          <div className="mt-4 space-y-2 text-sm text-[var(--muted)]">
-                            <div className="flex items-center gap-2">
-                              <CalendarDays className="size-4" />
-                              <span>{previewDateLabel}</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <MapPin className="size-4" />
-                              <span>{previewVenueLabel}</span>
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="rounded-[var(--panel-radius)] border border-[var(--border)] bg-white p-4">
-                          <div className="flex items-center justify-between gap-3">
-                            <p className="text-[11px] font-extrabold uppercase tracking-[0.24em] text-[#8ea0bb]">
-                              Checklist rápido
-                            </p>
-                            <span className="text-sm font-bold text-[var(--foreground)]">
-                              {CORE_REQUIRED_FIELDS.length - missingFields.length}/
-                              {CORE_REQUIRED_FIELDS.length}
-                            </span>
-                          </div>
-                          <div className="mt-3 h-2 overflow-hidden rounded-full bg-[var(--background-soft)]">
-                            <div
-                              className="h-full rounded-full bg-[var(--accent)] transition-all"
-                              style={{ width: `${requiredCompletionRatio}%` }}
-                            />
-                          </div>
-                          <div className="mt-3 flex flex-wrap gap-2">
-                            {missingFieldLabels.length ? (
-                              missingFieldLabels.map((label) => (
-                                <span
-                                  key={label}
-                                  className="rounded-full bg-[var(--background-soft)] px-3 py-1 text-[11px] font-semibold text-[#617089]"
+                                ),
+                              )}
+                              {visibleCommentaryCount < COMMENTARY_FIELD_CONFIGS.length ? (
+                                <Button
+                                  type="button"
+                                  variant="secondary"
+                                  className="h-11 justify-center gap-2 border-dashed border-[#d7dde7] text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--accent)]"
+                                  onClick={() =>
+                                    setVisibleCommentaryCount((current) =>
+                                      Math.min(current + 1, COMMENTARY_FIELD_CONFIGS.length),
+                                    )
+                                  }
                                 >
-                                  {label}
-                                </span>
-                              ))
-                            ) : (
-                              <span className="inline-flex items-center gap-2 rounded-full bg-[#eff9f3] px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-[#1a8b4f]">
-                                <CheckCircle2 className="size-3.5" />
-                                Listo para guardar
-                              </span>
-                            )}
-                          </div>
-                        </div>
-
-                        <div className="rounded-[var(--panel-radius)] border border-[var(--border)] bg-white p-4">
-                          <p className="text-[11px] font-extrabold uppercase tracking-[0.24em] text-[#8ea0bb]">
-                            Roles clave
-                          </p>
-                          <div className="mt-3 grid gap-x-5 gap-y-4 sm:grid-cols-2">
-                            {summaryRoles.map((role) => (
-                              <div
-                                key={role.label}
-                                className="flex items-center gap-3"
-                              >
-                                <HoverAvatarBadge
-                                  initials={role.initials}
-                                  roleLabel={role.label}
-                                  showTooltip={false}
-                                  tone="neutral"
-                                  size="md"
-                                />
-                                <div className="min-w-0">
-                                  <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#8ea0bb]">
-                                    {role.label}
-                                  </p>
-                                  <p className="mt-1 truncate text-sm font-semibold text-[var(--foreground)]">
-                                    {role.value}
-                                  </p>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                          <div className="mt-5 grid gap-3 border-t border-[var(--border)] pt-4 sm:grid-cols-2 xl:grid-cols-1">
-                            <div className="space-y-1">
-                              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#8ea0bb]">
-                                Personal asignado
-                              </p>
-                              <p className="mt-1 text-xl font-extrabold text-[var(--foreground)]">
-                                {previewAssignedPeopleCount}
-                              </p>
-                            </div>
-                            <div className="space-y-1">
-                              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#8ea0bb]">
-                                Detalle técnico
-                              </p>
-                              <p className="mt-1 text-sm font-semibold text-[var(--foreground)]">
-                                {showAdvanced ? "Abierto" : "Compacto"}
-                              </p>
+                                  <Plus className="size-4" />
+                                  Agregar relator
+                                </Button>
+                              ) : null}
                             </div>
                           </div>
                         </div>
                       </div>
                     </div>
-                  </aside>
+                  </SectionBlock>
+
+                  {isStaffMode ? (
+                    <section className="space-y-4 rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--surface)] px-5 py-5 shadow-[0_18px_40px_rgba(15,23,42,0.06)]">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div>
+                          <p className="text-[0.98rem] font-extrabold uppercase tracking-[0.2em] text-[#8ea0bb]">
+                            2. Notificar personal
+                          </p>
+                        </div>
+                        <span className="inline-flex items-center rounded-full border border-[var(--border)] bg-[var(--background-soft)] px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-[#617089]">
+                          {notificationRecipients.length} contactos
+                        </span>
+                      </div>
+                      <MatchNotificationWorkspace
+                        batchMessage={notificationBatchMessage}
+                        bulkMailtoHref={notificationBulkMailtoHref}
+                        recipients={notificationRecipients}
+                        unassignedRoles={notificationUnassignedRoles}
+                        compact
+                      />
+                    </section>
+                  ) : (
+                    <aside className="order-first self-start xl:order-last xl:col-start-3 xl:sticky xl:top-0">
+                      <CreateMatchPreviewCard
+                        competition={previewCompetitionLabel}
+                        time={previewTimeLabel}
+                        homeTeam={previewHomeTeamLabel}
+                        awayTeam={previewAwayTeamLabel}
+                        venue={previewVenueLabel}
+                        operationalItems={previewOperationalItems}
+                      />
+                    </aside>
+                  )}
                 </div>
+                )}
+                </div>
+                <input
+                  type="hidden"
+                  name="durationMinutes"
+                  value={fields.durationMinutes}
+                />
                 <input type="hidden" name="status" value={fields.status} />
 
                 <datalist id="match-club-catalog">
@@ -1671,63 +1745,55 @@ export function CreateMatchModal({
                 </datalist>
               </div>
 
-              <div className="flex items-center justify-between gap-4 border-t border-[var(--border)] bg-[var(--background-soft)] px-7 py-5">
-                <div className="text-sm text-[var(--muted)]">
-                  {missingFieldLabels.length ? (
-                    <>
-                      Revisa antes de guardar:
-                      {" "}
-                      <span className="font-bold text-[var(--foreground)]">
-                        {missingFieldLabels.join(", ")}
-                      </span>
-                    </>
-                  ) : (
-                    isEditing
-                      ? "Los cambios impactan esta producción y sus asignaciones visibles en grilla."
-                      : "Si luego llega la API por ID, este modal ya está listo para autocompletar y remarcar faltantes."
-                  )}
-                </div>
-                <div className="flex items-center gap-3">
-                  {isEditing ? (
+            </form>
+
+            {showNotifyPrompt ? (
+              <div className="absolute inset-0 z-[5] flex items-center justify-center bg-[rgba(15,23,42,0.32)] px-5 backdrop-blur-[2px]">
+                <div className="w-full max-w-md rounded-[28px] border border-[var(--border)] bg-[var(--surface)] p-6 shadow-[0_28px_70px_rgba(15,23,42,0.24)]">
+                  <div className="flex items-start gap-4">
+                    <span className="inline-flex size-12 shrink-0 items-center justify-center rounded-2xl bg-[var(--accent-soft)] text-[var(--accent)]">
+                      <CircleHelp className="size-5" />
+                    </span>
+                    <div className="min-w-0 space-y-2">
+                      <p className="text-[11px] font-black uppercase tracking-[0.24em] text-[var(--accent)]">
+                        {saveState.notice || "Partido guardado"}
+                      </p>
+                      <h3 className="text-xl font-black tracking-tight text-[var(--foreground)]">
+                        ¿Deseas notificar al personal?
+                      </h3>
+                      <p className="text-sm leading-6 text-[#617187]">
+                        Puedes abrir ahora mismo la ventana de notificación con el mensaje
+                        listo para correo y WhatsApp.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="mt-6 flex flex-wrap justify-end gap-3">
                     <Button
-                      type="submit"
+                      type="button"
                       variant="secondary"
-                      formAction={deleteMatchAction}
-                      className="h-11 border-[#efbcc7] bg-[#fff5f7] text-[#b73656] hover:bg-[#ffecee]"
-                      onClick={(event) => {
-                        if (
-                          !window.confirm(
-                            "Vas a eliminar este partido. Este cambio puede ser permanente y sacar la tarjeta de la grilla. ¿Quieres continuar?",
-                          )
-                        ) {
-                          event.preventDefault();
-                        }
+                      className="h-10"
+                      onClick={() => finishSavedFlow(saveState.redirectTo)}
+                    >
+                      No
+                    </Button>
+                    <Button
+                      type="button"
+                      className="h-10 gap-2"
+                      onClick={() => {
+                        setShowNotificationWorkspace(true);
                       }}
                     >
-                      Borrar partido
+                      <Sparkles className="size-4" />
+                      Sí, notificar
                     </Button>
-                  ) : null}
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    className="h-11"
-                    onClick={resetAndClose}
-                  >
-                    Cancelar
-                  </Button>
-                  <SubmitButton
-                    pendingLabel={isEditing ? "Guardando..." : "Creando..."}
-                    className="h-11 gap-2"
-                  >
-                    {isEditing ? <Sparkles className="size-4" /> : <Plus className="size-4" />}
-                    {isEditing ? "Guardar cambios" : "Crear partido"}
-                  </SubmitButton>
+                  </div>
                 </div>
               </div>
-            </form>
+            ) : null}
           </div>
         </div>,
-        document.body,
+        portalTarget,
       )
         : null}
     </>

@@ -19,6 +19,7 @@ import { formatMatchTime } from "@/lib/date";
 import { getRoleDisplayName } from "@/lib/display";
 import type { MatchListItem } from "@/lib/types";
 import { getInitials } from "@/components/people/people-view-helpers";
+import { normalizeText } from "@/lib/utils";
 
 type ProductionInsightsPanelProps = {
   matches: MatchListItem[];
@@ -90,6 +91,46 @@ const SAMPLE_TOP_PEOPLE = [
     roleLabel: "Productora",
   },
 ] as const;
+
+const NAME_CONNECTORS = new Set([
+  "de",
+  "del",
+  "la",
+  "las",
+  "los",
+  "da",
+  "das",
+  "do",
+  "dos",
+  "van",
+  "von",
+  "y",
+]);
+
+function capitalizeSentence(value: string) {
+  return value
+    .toLocaleLowerCase("es")
+    .replace(/\b\p{L}/gu, (letter) => letter.toLocaleUpperCase("es"));
+}
+
+function abbreviatePersonName(value: string | null | undefined) {
+  if (!value?.trim()) {
+    return "Sin asignar";
+  }
+
+  const parts = value.trim().split(/\s+/).filter(Boolean);
+
+  if (parts.length === 1) {
+    return capitalizeSentence(parts[0]);
+  }
+
+  const surname =
+    parts
+      .slice(1)
+      .find((part) => !NAME_CONNECTORS.has(normalizeText(part))) ?? parts[1];
+
+  return `${parts[0][0]?.toUpperCase() ?? ""}. ${capitalizeSentence(surname)}`;
+}
 
 function buildTopPeople(matches: MatchListItem[]) {
   const peopleMap = new Map<
@@ -314,30 +355,32 @@ export function ProductionInsightsPanel({
   return (
     <Card className="p-6">
       <section className="space-y-5">
-        <div className="flex items-start justify-between gap-3">
+        <div className="flex items-start gap-3">
           <div className="min-w-0">
-            <h3 className="text-2xl font-extrabold tracking-tight text-[var(--foreground)]">
-              Resumen
-            </h3>
+            <div className="flex flex-wrap items-center gap-2.5">
+              <h3 className="text-2xl font-extrabold tracking-tight text-[var(--foreground)]">
+                Resumen
+              </h3>
+              <div className="flex items-center gap-1.5">
+                <Link
+                  href={previousDateHref}
+                  aria-label="Ir a la fecha anterior"
+                  className="inline-flex size-[26px] shrink-0 items-center justify-center rounded-full border border-[#d7dde7] bg-[#f4f6fa] text-[#6b7280] transition hover:border-[rgba(230,18,56,0.24)] hover:bg-[#fff3f6] hover:text-[var(--accent)]"
+                >
+                  <ChevronLeft className="size-[10px]" />
+                </Link>
+                <Link
+                  href={nextDateHref}
+                  aria-label="Ir a la fecha siguiente"
+                  className="inline-flex size-[26px] shrink-0 items-center justify-center rounded-full border border-[#d7dde7] bg-[#f4f6fa] text-[#6b7280] transition hover:border-[rgba(230,18,56,0.24)] hover:bg-[#fff3f6] hover:text-[var(--accent)]"
+                >
+                  <ChevronRight className="size-[10px]" />
+                </Link>
+              </div>
+            </div>
             <p className="mt-2 text-[11px] font-extrabold uppercase tracking-[0.26em] text-[var(--accent)]">
               {currentDateLabel}
             </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Link
-              href={previousDateHref}
-              aria-label="Ir a la fecha anterior"
-              className="inline-flex size-10 shrink-0 items-center justify-center rounded-full border border-[#d7dde7] bg-[#f4f6fa] text-[#6b7280] transition hover:border-[rgba(230,18,56,0.24)] hover:bg-[#fff3f6] hover:text-[var(--accent)]"
-            >
-              <ChevronLeft className="size-4" />
-            </Link>
-            <Link
-              href={nextDateHref}
-              aria-label="Ir a la fecha siguiente"
-              className="inline-flex size-10 shrink-0 items-center justify-center rounded-full border border-[#d7dde7] bg-[#f4f6fa] text-[#6b7280] transition hover:border-[rgba(230,18,56,0.24)] hover:bg-[#fff3f6] hover:text-[var(--accent)]"
-            >
-              <ChevronRight className="size-4" />
-            </Link>
           </div>
         </div>
 
@@ -407,11 +450,14 @@ export function ProductionInsightsPanel({
                       {getInitials(person.fullName)}
                     </div>
                     <div className="min-w-0">
-                      <p className="truncate text-[0.92rem] font-bold text-[var(--foreground)]">
-                        {person.fullName}
-                      </p>
-                      <p className="mt-0.5 truncate text-[9px] font-bold uppercase tracking-[0.14em] text-[#7587a1]">
+                      <p className="truncate text-[9px] font-bold uppercase tracking-[0.14em] text-[#7587a1]">
                         {person.roleLabel}
+                      </p>
+                      <p
+                        title={person.fullName}
+                        className="mt-1 truncate text-[0.92rem] font-bold text-[var(--foreground)]"
+                      >
+                        {abbreviatePersonName(person.fullName)}
                       </p>
                     </div>
                   </div>

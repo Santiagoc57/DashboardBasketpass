@@ -1,4 +1,4 @@
-import { APP_NAME, APP_PORTAL_LABEL, PRODUCTION_SHORT_LABEL } from "@/lib/constants";
+import { APP_NAME, PRODUCTION_LABEL } from "@/lib/constants";
 import { formatMatchDate, formatMatchTime, toCalendarDates } from "@/lib/date";
 import { appEnv } from "@/lib/env";
 import { getRoleDisplayName } from "@/lib/display";
@@ -24,7 +24,7 @@ export function buildGoogleCalendarLink(match: MatchDetail) {
   const title = `${match.home_team} vs ${match.away_team}`;
   const details = [
     `Competencia: ${match.competition ?? "Sin definir"}`,
-    `${PRODUCTION_SHORT_LABEL}: ${match.production_mode ?? "Sin definir"}`,
+    `${PRODUCTION_LABEL}: ${match.production_mode ?? "Sin definir"}`,
     `Responsable: ${match.owner?.full_name ?? "Sin definir"}`,
     "",
     "Asignaciones:",
@@ -93,31 +93,44 @@ export function buildMatchNotificationMessage(params: {
   personName?: string | null;
   roleNames?: string[];
 }) {
+  function buildRoleLines(roleNames?: string[]) {
+    if (!roleNames?.length) {
+      return [];
+    }
+
+    if (roleNames.length === 1) {
+      return [`👤 Rol asignado: ${roleNames[0]}`];
+    }
+
+    return ["👤 Roles asignados:", ...roleNames.map((roleName) => `• ${roleName}`)];
+  }
+
   const recipientName = params.personName?.trim() || "equipo";
-  const roleLabel = params.roleNames?.length
-    ? params.roleNames.join(", ")
-    : "equipo asignado";
   const portalLink = `${appEnv.appUrl.replace(/\/$/, "")}/mi-jornada`;
   const dateLabel = formatMatchDate(
     params.match.kickoff_at,
     params.match.timezone,
-    "EEEE dd 'de' MMMM 'de' yyyy",
-  );
+    "EEEE, d 'de' MMM",
+  ).replaceAll(".", "");
   const timeLabel = formatMatchTime(params.match.kickoff_at, params.match.timezone);
+  const roleLines = buildRoleLines(params.roleNames);
 
   return [
-    `Hola ${recipientName},`,
+    `Hola ${recipientName} 👋`,
     "",
-    `Has sido convocado para ${params.match.home_team} vs ${params.match.away_team}.`,
-    `Rol asignado: ${roleLabel}.`,
+    "Has sido convocado para:",
+    `🏀 ${params.match.home_team} vs ${params.match.away_team}`,
     "",
-    `Liga: ${params.match.competition ?? "Sin liga"}`,
-    `Fecha: ${dateLabel}`,
-    `Hora: ${timeLabel} (${params.match.timezone})`,
-    `Lugar: ${params.match.venue ?? "Sede por definir"}`,
-    `${PRODUCTION_SHORT_LABEL}: ${params.match.production_mode ?? "Sin definir"}`,
+    ...roleLines,
+    ...(roleLines.length ? [""] : []),
+    `🏆 Liga: ${params.match.competition ?? "Sin liga"}`,
+    `📅 Fecha: ${dateLabel}`,
+    `🕖 Hora: ${timeLabel}`,
+    `📍 Lugar: ${params.match.venue ?? "Sede por definir"}`,
+    `🎥 ${PRODUCTION_LABEL}: ${params.match.production_mode ?? "Sin definir"}`,
     "",
-    `Por favor confirma tu disponibilidad respondiendo este mensaje o revisando tu asignacion en el ${APP_PORTAL_LABEL}: ${portalLink}`,
+    "✅ Por favor confirma tu disponibilidad respondiendo este mensaje.",
+    `🔗 Revisa tu asignación aquí: ${portalLink}`,
     "",
     `Equipo ${APP_NAME}`,
   ].join("\n");

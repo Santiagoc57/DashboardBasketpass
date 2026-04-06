@@ -322,7 +322,7 @@ export default async function PeoplePage({ searchParams }: PageProps) {
 
       <PageMessage intent={intent} message={notice} />
 
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
         <StatCard
           label="Personal activo"
           value={activeCount}
@@ -468,8 +468,8 @@ export default async function PeoplePage({ searchParams }: PageProps) {
                 <input type="hidden" name="active" value="off" />
 
                 <section className="bg-white px-8 py-8">
-                  <div className="grid gap-8 lg:grid-cols-3">
-                    <div className="space-y-6 lg:col-span-2">
+                  <div className="grid gap-8 2xl:grid-cols-3">
+                    <div className="space-y-6 2xl:col-span-2">
                       <div className="grid gap-6 md:grid-cols-2">
                         <label className="space-y-2">
                           <span className="text-sm font-semibold text-[#334155]">
@@ -585,7 +585,7 @@ export default async function PeoplePage({ searchParams }: PageProps) {
               {user.role === "admin" ? (
                 <section className="border-t border-[#f1f3f5] bg-[#faf7f7] px-8 py-8">
                   <div className="rounded-[var(--panel-radius)] border-2 border-[rgba(211,49,49,0.10)] bg-white p-6 shadow-sm">
-                    <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+                    <div className="flex flex-col gap-5 2xl:flex-row 2xl:items-start 2xl:justify-between">
                       <div className="flex gap-4">
                         <div className="inline-flex size-12 items-center justify-center rounded-2xl bg-[rgba(211,49,49,0.1)] text-[var(--accent)]">
                           <ShieldCheck className="size-6" />

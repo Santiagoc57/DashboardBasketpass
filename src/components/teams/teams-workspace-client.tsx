@@ -112,7 +112,7 @@ export function TeamsWorkspaceClient({
 
   return (
     <>
-      <div className="grid gap-6 lg:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
         {mergedTeams.map((team) => (
           <TeamCard
             key={team.id}
@@ -128,7 +128,7 @@ export function TeamsWorkspaceClient({
         ))}
       </div>
 
-      <section className="panel-surface grid gap-4 border border-[var(--border)] bg-white p-6 sm:grid-cols-2 xl:grid-cols-4">
+      <section className="panel-surface grid gap-4 border border-[var(--border)] bg-white p-5 sm:grid-cols-2 xl:grid-cols-2 2xl:grid-cols-4 xl:p-6">
         <div className="text-center">
           <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#94a3b8]">
             Equipos visibles

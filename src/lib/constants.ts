@@ -4,6 +4,7 @@ import { BUSINESS_LABELS, PRODUCT_COPY, SECTION_COPY } from "@/lib/copy";
 export const APP_NAME = PRODUCT_COPY.appName;
 export const APP_PORTAL_LABEL = PRODUCT_COPY.portalLabel;
 export const APP_RELEASE_LABEL = PRODUCT_COPY.releaseLabel;
+export const PRODUCTION_LABEL = BUSINESS_LABELS.production;
 export const PRODUCTION_SHORT_LABEL = BUSINESS_LABELS.productionShort;
 export const RESPONSIBLE_DISPLAY_LABEL = BUSINESS_LABELS.responsible;
 export const RELATOS_DISPLAY_LABEL = BUSINESS_LABELS.relatos;

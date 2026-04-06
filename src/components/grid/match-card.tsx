@@ -38,19 +38,15 @@ type SectionRow = {
 
 function formatGridDate(kickoffAt: string, timezone: string) {
   const parts = new Intl.DateTimeFormat("es-AR", {
-    weekday: "short",
     day: "2-digit",
     month: "short",
-    year: "numeric",
     timeZone: timezone,
   }).formatToParts(new Date(kickoffAt));
 
-  const weekday = parts.find((part) => part.type === "weekday")?.value ?? "";
   const day = parts.find((part) => part.type === "day")?.value ?? "";
   const month = parts.find((part) => part.type === "month")?.value ?? "";
-  const year = parts.find((part) => part.type === "year")?.value ?? "";
 
-  return [weekday, day, month, year]
+  return [day, month]
     .filter(Boolean)
     .join(" ")
     .replaceAll(".", "")
@@ -306,17 +302,17 @@ export function MatchCard({
         <span
           aria-hidden="true"
           className={cn(
-            "pointer-events-none absolute left-[-12px] top-1/2 z-0 h-[118px] w-[30px] -translate-y-1/2 rounded-l-[10px] rounded-r-[6px] shadow-[inset_-1px_0_0_rgba(255,255,255,0.16),0_8px_18px_rgba(15,23,42,0.06)]",
+            "pointer-events-none absolute left-[-6px] top-1/2 z-0 h-[118px] w-[20px] -translate-y-1/2 rounded-l-[7px] rounded-r-[6px] shadow-[inset_-1px_0_0_rgba(255,255,255,0.16),0_8px_18px_rgba(15,23,42,0.06)] 2xl:left-[-12px] 2xl:w-[30px] 2xl:rounded-l-[10px]",
             statusAccentClass,
           )}
         />
         <div className="relative z-10 overflow-visible rounded-t-[10px] rounded-b-[10px]">
-          <div className="overflow-hidden rounded-t-[10px] rounded-b-[10px] flex flex-col xl:grid xl:grid-cols-[6.5rem_minmax(12.5rem,17rem)_repeat(4,minmax(10rem,1fr))_4.75rem] xl:items-stretch 2xl:grid-cols-[7rem_minmax(17.5rem,25rem)_repeat(4,minmax(10.25rem,1fr))_4.75rem]">
-          <div className="relative z-10 flex flex-col items-center justify-center gap-3 border-b border-[var(--border)] bg-[var(--surface)] px-4 py-5 text-center xl:border-b-0 xl:border-r">
+          <div className="overflow-hidden rounded-t-[10px] rounded-b-[10px] flex flex-col xl:grid xl:grid-cols-[5.25rem_minmax(13rem,1.35fr)_minmax(9.75rem,1fr)_minmax(9.75rem,1fr)_185px_185px_4.25rem] xl:items-stretch 2xl:grid-cols-[7rem_minmax(16.5rem,24rem)_minmax(10.25rem,1fr)_minmax(10.25rem,1fr)_185px_185px_4.75rem]">
+          <div className="relative z-10 flex flex-col items-center justify-center gap-3 border-b border-[var(--border)] bg-[var(--surface)] px-4 py-4 text-center xl:border-b-0 xl:border-r xl:px-3 xl:py-5 2xl:px-4">
             <LeagueLogoMarkClient
               league={leagueLabel}
               className={cn(
-                "h-16 w-16",
+                "h-14 w-14 xl:h-14 xl:w-14 2xl:h-16 2xl:w-16",
                 isUnassignedLeague && "rounded-2xl bg-[#e4eaf1]",
               )}
             />
@@ -330,79 +326,92 @@ export function MatchCard({
             </p>
           </div>
 
-          <div className="flex min-w-0 items-center border-b border-[var(--border)] px-5 py-5 xl:border-b-0 xl:border-r xl:px-4 2xl:px-6">
-            <div className="mx-auto w-full max-w-[16rem] 2xl:max-w-[20.5rem]">
-              <div className="grid items-center justify-center gap-2 sm:grid-cols-[minmax(0,1fr)_1.75rem_minmax(0,1fr)] sm:gap-3 2xl:gap-3 2xl:sm:grid-cols-[8.5rem_2.25rem_8.5rem] 2xl:sm:gap-4">
-                <div className="flex min-w-0 flex-col items-center text-center">
-                  {canEdit ? (
-                    <QuickMatchFieldEditor
-                      field="homeTeam"
-                      value={match.home_team}
-                      matchId={match.id}
-                      redirectTo={redirectTo}
-                      title="Cambiar local"
-                      listId="grid-club-catalog"
-                      panelClassName="w-[19rem]"
-                    >
+          <div className="flex min-w-0 items-center border-b border-[var(--border)] px-4 py-4 xl:items-stretch xl:border-b-0 xl:border-r xl:px-4 xl:py-5 2xl:px-6">
+            <div className="mx-auto w-full max-w-[16rem] xl:flex xl:h-full xl:max-w-[14rem] xl:flex-col 2xl:max-w-[20.5rem]">
+              <div className="hidden items-center justify-center gap-2 text-center text-[12px] font-semibold text-[#94a3b8] xl:flex">
+                <MapPin className="size-3.5 shrink-0" />
+                <span className="truncate" title={venueLabel}>
+                  {venueLabel}
+                </span>
+              </div>
+
+              <div className="xl:flex xl:flex-1 xl:items-center">
+                <div className="grid items-center justify-center gap-2 sm:grid-cols-[minmax(0,1fr)_1.75rem_minmax(0,1fr)] sm:gap-3 xl:w-full xl:gap-2 xl:sm:grid-cols-[6.2rem_1.4rem_6.2rem] 2xl:gap-4 2xl:sm:grid-cols-[8.5rem_2.25rem_8.5rem]">
+                  <div className="flex min-w-0 flex-col items-center text-center">
+                    {canEdit ? (
+                      <QuickMatchFieldEditor
+                        field="homeTeam"
+                        value={match.home_team}
+                        matchId={match.id}
+                        redirectTo={redirectTo}
+                        title="Cambiar local"
+                        listId="grid-club-catalog"
+                        panelClassName="w-[19rem]"
+                      >
+                        <TeamLogoMark
+                          teamName={match.home_team}
+                          competition={match.competition}
+                          className="size-14 rounded-none border-0 bg-transparent shadow-none xl:size-14 2xl:size-[4.5rem]"
+                          imageClassName="p-2 xl:p-2 2xl:p-2.5"
+                        />
+                      </QuickMatchFieldEditor>
+                    ) : (
                       <TeamLogoMark
                         teamName={match.home_team}
                         competition={match.competition}
-                        className="size-12 rounded-full 2xl:size-14"
+                        className="size-14 rounded-none border-0 bg-transparent shadow-none xl:size-14 2xl:size-[4.5rem]"
+                        imageClassName="p-2 xl:p-2 2xl:p-2.5"
                       />
-                    </QuickMatchFieldEditor>
-                  ) : (
-                    <TeamLogoMark
-                      teamName={match.home_team}
-                      competition={match.competition}
-                      className="size-12 rounded-full 2xl:size-14"
-                    />
-                  )}
-                  <p
-                    title={match.home_team}
-                    className="mt-2 min-h-[2.1em] text-center text-[0.84rem] font-black leading-[1.04] tracking-[-0.03em] text-[var(--foreground)] [display:-webkit-box] overflow-hidden text-ellipsis [-webkit-box-orient:vertical] [-webkit-line-clamp:2] 2xl:mt-3 2xl:min-h-[2.16em] 2xl:text-[0.98rem]"
-                  >
-                    {match.home_team}
-                  </p>
-                </div>
-
-                <span className="self-center justify-self-center text-sm font-semibold uppercase tracking-[0.18em] text-[#93a0b2] 2xl:text-base">
-                  vs
-                </span>
-
-                <div className="flex min-w-0 flex-col items-center text-center">
-                  {canEdit ? (
-                    <QuickMatchFieldEditor
-                      field="awayTeam"
-                      value={match.away_team}
-                      matchId={match.id}
-                      redirectTo={redirectTo}
-                      title="Cambiar visitante"
-                      listId="grid-club-catalog"
-                      panelClassName="w-[19rem]"
+                    )}
+                    <p
+                      title={match.home_team}
+                      className="mt-2 min-h-[2.1em] text-center text-[0.84rem] font-black leading-[1.04] tracking-[-0.03em] text-[var(--foreground)] [display:-webkit-box] overflow-hidden text-ellipsis [-webkit-box-orient:vertical] [-webkit-line-clamp:2] xl:mt-2.5 xl:min-h-[2.08em] xl:text-[0.88rem] 2xl:mt-3 2xl:min-h-[2.16em] 2xl:text-[0.98rem]"
                     >
+                      {match.home_team}
+                    </p>
+                  </div>
+
+                  <span className="mt-2 self-start justify-self-center text-sm font-semibold uppercase tracking-[0.18em] text-[#93a0b2] xl:mt-3 xl:text-[0.95rem] 2xl:mt-4 2xl:text-base">
+                    vs
+                  </span>
+
+                  <div className="flex min-w-0 flex-col items-center text-center">
+                    {canEdit ? (
+                      <QuickMatchFieldEditor
+                        field="awayTeam"
+                        value={match.away_team}
+                        matchId={match.id}
+                        redirectTo={redirectTo}
+                        title="Cambiar visitante"
+                        listId="grid-club-catalog"
+                        panelClassName="w-[19rem]"
+                      >
+                        <TeamLogoMark
+                          teamName={match.away_team}
+                          competition={match.competition}
+                          className="size-14 rounded-none border-0 bg-transparent shadow-none xl:size-14 2xl:size-[4.5rem]"
+                          imageClassName="p-2 xl:p-2 2xl:p-2.5"
+                        />
+                      </QuickMatchFieldEditor>
+                    ) : (
                       <TeamLogoMark
                         teamName={match.away_team}
                         competition={match.competition}
-                        className="size-12 rounded-full 2xl:size-14"
+                        className="size-14 rounded-none border-0 bg-transparent shadow-none xl:size-14 2xl:size-[4.5rem]"
+                        imageClassName="p-2 xl:p-2 2xl:p-2.5"
                       />
-                    </QuickMatchFieldEditor>
-                  ) : (
-                    <TeamLogoMark
-                      teamName={match.away_team}
-                      competition={match.competition}
-                      className="size-12 rounded-full 2xl:size-14"
-                    />
-                  )}
-                  <p
-                    title={match.away_team}
-                    className="mt-2 min-h-[2.1em] text-center text-[0.84rem] font-black leading-[1.04] tracking-[-0.03em] text-[var(--foreground)] [display:-webkit-box] overflow-hidden text-ellipsis [-webkit-box-orient:vertical] [-webkit-line-clamp:2] 2xl:mt-3 2xl:min-h-[2.16em] 2xl:text-[0.98rem]"
-                  >
-                    {match.away_team}
-                  </p>
+                    )}
+                    <p
+                      title={match.away_team}
+                      className="mt-2 min-h-[2.1em] text-center text-[0.84rem] font-black leading-[1.04] tracking-[-0.03em] text-[var(--foreground)] [display:-webkit-box] overflow-hidden text-ellipsis [-webkit-box-orient:vertical] [-webkit-line-clamp:2] xl:mt-2.5 xl:min-h-[2.08em] xl:text-[0.88rem] 2xl:mt-3 2xl:min-h-[2.16em] 2xl:text-[0.98rem]"
+                    >
+                      {match.away_team}
+                    </p>
+                  </div>
                 </div>
               </div>
 
-              <div className="mt-4 flex items-center justify-center gap-2 text-center text-[12px] font-semibold text-[#94a3b8]">
+              <div className="mt-4 flex items-center justify-center gap-2 text-center text-[12px] font-semibold text-[#94a3b8] xl:hidden">
                 <MapPin className="size-3.5 shrink-0" />
                 <span className="truncate" title={venueLabel}>
                   {venueLabel}
@@ -411,7 +420,7 @@ export function MatchCard({
             </div>
           </div>
 
-          <div className="grid gap-4 border-b border-[var(--border)] px-5 py-5 xl:border-b-0 xl:border-r xl:px-6">
+          <div className="grid gap-3 border-b border-[var(--border)] px-4 py-4 xl:border-b-0 xl:border-r xl:px-4 xl:py-5 2xl:px-6">
             <div className="flex items-center gap-2">
               <ShieldUser className="size-3.5 text-[#a7b4c8]" />
               <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-[#a7b4c8]">
@@ -464,7 +473,7 @@ export function MatchCard({
             </div>
           </div>
 
-          <div className="grid gap-4 border-b border-[var(--border)] px-5 py-5 xl:border-b-0 xl:border-r xl:px-6">
+          <div className="grid gap-3 border-b border-[var(--border)] px-4 py-4 xl:border-b-0 xl:border-r xl:px-4 xl:py-5 2xl:px-6">
             <div className="flex items-center gap-2">
               <Mic2 className="size-3.5 text-[#a7b4c8]" />
               <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-[#a7b4c8]">
@@ -512,7 +521,7 @@ export function MatchCard({
             </div>
           </div>
 
-          <div className="grid gap-4 border-b border-[var(--border)] px-5 py-5 xl:border-b-0 xl:border-r xl:px-6">
+          <div className="grid gap-3 border-b border-[var(--border)] px-4 py-4 xl:border-b-0 xl:border-r xl:px-4 xl:py-5 2xl:px-6">
             <div>
               <p className="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] text-[#a7b4c8]">
                 <Hash className="size-3.5 text-[#a7b4c8]" />
@@ -547,7 +556,7 @@ export function MatchCard({
             </div>
           </div>
 
-          <div className="grid gap-4 border-b border-[var(--border)] px-5 py-5 xl:border-b-0 xl:px-6">
+          <div className="grid gap-3 border-b border-[var(--border)] px-4 py-4 xl:border-b-0 xl:border-r xl:px-4 xl:py-5 2xl:px-6">
             <div>
               <p className="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] text-[#a7b4c8]">
                 <CalendarDays className="size-3.5 text-[#a7b4c8]" />

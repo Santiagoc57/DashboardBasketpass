@@ -98,12 +98,12 @@ export async function saveGeminiSettingsAction(formData: FormData) {
         if (upsertResult.error) {
           if (isMissingAppSettingsError(upsertResult.error)) {
             notice =
-              "Configuración personal guardada. Aplica la migración 0008 para compartir Gemini con todo el portal.";
+              "Configuración personal guardada. Aplica la migración 0008 para compartir Gemini con toda la plataforma.";
           } else {
             throw upsertResult.error;
           }
         } else {
-          notice = "Gemini actualizado para tu sesión y para todo el portal.";
+          notice = "Gemini actualizado para tu sesión y para toda la plataforma.";
         }
       } else {
         const deleteResult = await supabase
@@ -114,12 +114,12 @@ export async function saveGeminiSettingsAction(formData: FormData) {
         if (deleteResult.error) {
           if (isMissingAppSettingsError(deleteResult.error)) {
             notice =
-              "Clave personal eliminada. Aplica la migración 0008 para administrar la clave global del portal.";
+              "Clave personal eliminada. Aplica la migración 0008 para administrar la clave global de la plataforma.";
           } else {
             throw deleteResult.error;
           }
         } else {
-          notice = "Clave de Gemini eliminada de tu sesión y del portal.";
+          notice = "Clave de Gemini eliminada de tu sesión y de la plataforma.";
         }
       }
     }

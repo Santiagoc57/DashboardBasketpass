@@ -5,6 +5,7 @@ import { SectionAiAssistant } from "@/components/ai/section-ai-assistant";
 import { CreateMatchModal } from "@/components/grid/create-match-modal";
 import { GridCalendarPicker } from "@/components/grid/grid-calendar-picker";
 import { GridExportButton } from "@/components/grid/grid-export-button";
+import { GridInsightsDock } from "@/components/grid/grid-insights-dock";
 import { MatchCard } from "@/components/grid/match-card";
 import { ProductionInsightsPanel } from "@/components/grid/production-insights-panel";
 import { SectionPageHeader } from "@/components/layout/section-page-header";
@@ -253,10 +254,22 @@ export default async function GridPage({ searchParams }: PageProps) {
     })),
   );
   const visibleMatches = sortedDayGroups.flatMap((group) => group.items);
+  const insightsPanelProps = {
+    matches: dayGroups.flatMap((group) => group.items),
+    timezone: filters.timezone,
+    currentDateLabel: summaryDateLabel,
+    previousDateHref,
+    nextDateHref,
+  };
 
   return (
-    <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_20rem] 2xl:grid-cols-[minmax(0,1fr)_22rem]">
-      <div className="relative z-0 min-w-0 space-y-10">
+    <>
+      <GridInsightsDock>
+        <ProductionInsightsPanel {...insightsPanelProps} />
+      </GridInsightsDock>
+
+      <div className="grid gap-6 2xl:grid-cols-[minmax(0,1fr)_21rem]">
+        <div className="relative z-0 min-w-0 space-y-10">
         <SectionPageHeader
           title={SECTION_COPY.grid.title}
           description={SECTION_COPY.grid.description}
@@ -397,15 +410,10 @@ export default async function GridPage({ searchParams }: PageProps) {
         </section>
       </div>
 
-      <aside className="relative z-20 min-w-0 self-start xl:sticky xl:top-24">
-        <ProductionInsightsPanel
-          matches={dayGroups.flatMap((group) => group.items)}
-          timezone={filters.timezone}
-          currentDateLabel={summaryDateLabel}
-          previousDateHref={previousDateHref}
-          nextDateHref={nextDateHref}
-        />
-      </aside>
-    </div>
+        <aside className="relative z-20 min-w-0 self-start xl:hidden 2xl:sticky 2xl:top-24 2xl:block">
+          <ProductionInsightsPanel {...insightsPanelProps} />
+        </aside>
+      </div>
+    </>
   );
 }

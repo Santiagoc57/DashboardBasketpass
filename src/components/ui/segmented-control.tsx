@@ -28,13 +28,13 @@ export function SegmentedControl({
 
   const itemClassName =
     size === "sm"
-      ? "px-3 text-xs font-bold"
-      : "px-4 text-sm font-semibold";
+      ? "shrink-0 px-3 text-xs font-bold whitespace-nowrap"
+      : "shrink-0 px-4 text-sm font-semibold whitespace-nowrap";
 
   return (
     <div
       className={cn(
-        "flex items-center rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--background-soft)]",
+        "flex max-w-full items-center overflow-x-auto rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--background-soft)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
         wrapperClassName,
         className,
       )}
