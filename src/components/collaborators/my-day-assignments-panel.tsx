@@ -33,7 +33,7 @@ import { ClientTeamLogoMark } from "@/components/team-logo-mark-client";
 import { CollaboratorReportForm } from "@/components/collaborators/collaborator-report-form";
 import { badgeBaseClassName } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
-import { HoverAvatarBadge } from "@/components/ui/hover-avatar-badge";
+import { PersonRoleStack } from "@/components/ui/person-role-stack";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { UnderlineTabs } from "@/components/ui/underline-tabs";
 import {
@@ -45,7 +45,7 @@ import type {
   CollaboratorGroupContact,
 } from "@/lib/data/collaborators";
 import { getProductionModeLabel } from "@/lib/constants";
-import { getRoleDisplayName } from "@/lib/display";
+import { getCompactRoleDisplayName, getRoleDisplayName } from "@/lib/display";
 import { buildWhatsAppUrl, cn, normalizeText } from "@/lib/utils";
 
 type MyDayAssignmentsPanelProps = {
@@ -56,6 +56,9 @@ type MyDayAssignmentsPanelProps = {
   primaryHeading: string;
   primaryDescription: string;
   showDemoToday: boolean;
+  hasAssignmentsOutsideSelection?: boolean;
+  emptyStateActionHref?: string;
+  emptyStateActionLabel?: string;
   todayAssignments: CollaboratorAssignmentItem[];
   upcomingAssignments: CollaboratorAssignmentItem[];
   topContent?: ReactNode;
@@ -138,9 +141,9 @@ function MobileDayNavigator({
       <Link
         href={previousDayHref}
         aria-label="Ir al día anterior"
-        className="inline-flex size-12 shrink-0 items-center justify-center rounded-full border border-[#bcc6d7] bg-white text-[#7a8799] leading-none shadow-sm transition hover:border-[#94a3b8] hover:text-[var(--foreground)]"
+        className="inline-flex size-[34px] shrink-0 items-center justify-center rounded-full border border-[#bcc6d7] bg-white text-[#7a8799] leading-none shadow-sm transition hover:border-[#94a3b8] hover:text-[var(--foreground)]"
       >
-        <ChevronLeft className="size-[1.05rem] translate-x-px" strokeWidth={1.8} />
+        <ChevronLeft className="size-[0.85rem] translate-x-px" strokeWidth={1.8} />
       </Link>
 
       <div className="min-w-0 flex-1 text-center">
@@ -175,9 +178,9 @@ function MobileDayNavigator({
       <Link
         href={nextDayHref}
         aria-label="Ir al día siguiente"
-        className="inline-flex size-12 shrink-0 items-center justify-center rounded-full border border-[#bcc6d7] bg-white text-[#7a8799] leading-none shadow-sm transition hover:border-[#94a3b8] hover:text-[var(--foreground)]"
+        className="inline-flex size-[34px] shrink-0 items-center justify-center rounded-full border border-[#bcc6d7] bg-white text-[#7a8799] leading-none shadow-sm transition hover:border-[#94a3b8] hover:text-[var(--foreground)]"
       >
-        <ChevronRight className="size-[1.05rem] -translate-x-px" strokeWidth={1.8} />
+        <ChevronRight className="size-[0.85rem] -translate-x-px" strokeWidth={1.8} />
       </Link>
     </div>
   );
@@ -365,7 +368,7 @@ function getAssignmentTableSecondaryContact(assignment: CollaboratorAssignmentIt
     { label: "Encoder", value: assignment.encoderName, tone: "neutral" as const },
   ];
 
-  return (
+  const selectedContact =
     candidates.find(
       (candidate) =>
         candidate.value?.trim() && normalizeText(candidate.label) !== currentRole,
@@ -373,8 +376,12 @@ function getAssignmentTableSecondaryContact(assignment: CollaboratorAssignmentIt
       label: "Apoyo",
       value: "TBD",
       tone: "neutral" as const,
-    }
-  );
+    };
+
+  return {
+    ...selectedContact,
+    label: getCompactRoleDisplayName(selectedContact.label),
+  };
 }
 
 function getAssignmentTableCoverageMeta(assignment: CollaboratorAssignmentItem) {
@@ -417,27 +424,14 @@ function AssignmentTablePersonLine({
   const person = getAssignmentTablePersonValue(value);
 
   return (
-    <div className="flex items-center gap-3">
-      <HoverAvatarBadge
-        initials={getInitials(person.value)}
-        roleLabel={label}
-        showTooltip={false}
-        tone={tone}
-        size="sm"
-      />
-      <div className="min-w-0">
-        <p
-          className={cn(
-            "truncate text-sm font-bold text-[var(--foreground)]",
-            person.muted && "text-[var(--muted)] italic font-semibold",
-          )}
-          title={person.value}
-        >
-          {person.muted ? person.value : abbreviatePersonName(person.value)}
-        </p>
-        <p className="text-xs font-semibold text-[var(--muted)]">{label}</p>
-      </div>
-    </div>
+    <PersonRoleStack
+      label={label}
+      value={person.muted ? person.value : abbreviatePersonName(person.value)}
+      initials={getInitials(person.value)}
+      muted={person.muted}
+      size="sm"
+      tone={tone === "accent" ? "mint" : "neutral"}
+    />
   );
 }
 
@@ -463,14 +457,14 @@ function AssignmentDetailPill({
   return (
     <div className={cn("flex min-w-0 items-start", compact ? "gap-2.5" : "gap-3")}>
       {variant === "person" ? (
-        <span
-          className={cn(
-            "mt-0.5 inline-flex shrink-0 items-center justify-center rounded-full border border-[#ecd9de] bg-[#fff3f6] font-black text-[var(--accent)]",
-            compact ? "size-8 text-[9px]" : "size-9 text-[10px]",
-          )}
-        >
-          {getInitials(value)}
-        </span>
+        <PersonRoleStack
+          label={label}
+          value={value}
+          initials={getInitials(value)}
+          size={compact ? "sm" : "md"}
+          tone="neutral"
+          className="flex-1"
+        />
       ) : (
         <span
           className={cn(
@@ -478,36 +472,38 @@ function AssignmentDetailPill({
             tone === "success"
               ? "bg-[#eafaf0] text-[#1daa59]"
               : "bg-[#f3f6fa] text-[#9aa8bd]",
-            compact ? "size-8" : "size-9",
+            compact ? "size-8" : "size-10",
           )}
         >
           <Icon className={compact ? "size-3.5" : "size-4"} />
         </span>
       )}
 
-      <div className="min-w-0">
-        <div
-          className={cn(
-            "font-black uppercase text-[#9aa8bd]",
-            compact ? "text-[9px] tracking-[0.14em]" : "text-[10px] tracking-[0.16em]",
-          )}
-        >
-          {label}
+      {variant === "icon" ? (
+        <div className="min-w-0">
+          <div
+            className={cn(
+              "font-black uppercase text-[#9aa8bd]",
+              compact ? "text-[9px] tracking-[0.14em]" : "text-[10px] tracking-[0.16em]",
+            )}
+          >
+            {label}
+          </div>
+          <p
+            className={cn(
+              "mt-1 font-extrabold leading-tight text-[var(--foreground)]",
+              compact ? "text-[12px]" : "text-[13px]",
+              highlight && "text-[var(--accent)]",
+              tone === "success" && showToneDot && "flex items-center gap-2",
+            )}
+          >
+            {tone === "success" && showToneDot ? (
+              <span className={cn("rounded-full bg-[#23b25f]", compact ? "size-2" : "size-2.5")} />
+            ) : null}
+            <span>{value}</span>
+          </p>
         </div>
-        <p
-          className={cn(
-            "mt-1 font-extrabold leading-tight text-[var(--foreground)]",
-            compact ? "text-[12px]" : "text-[13px]",
-            highlight && "text-[var(--accent)]",
-            tone === "success" && showToneDot && "flex items-center gap-2",
-          )}
-        >
-          {tone === "success" && showToneDot ? (
-            <span className={cn("rounded-full bg-[#23b25f]", compact ? "size-2" : "size-2.5")} />
-          ) : null}
-          <span>{value}</span>
-        </p>
-      </div>
+      ) : null}
     </div>
   );
 }
@@ -619,113 +615,130 @@ function AssignmentCard({
 }) {
   const leagueLabel = assignment.competition ?? "Sin liga";
   const leagueAccent = getAssignmentLeagueAccentColor(leagueLabel);
+  const reportStatusLabel = assignment.confirmed ? "Reportado" : "Sin reportar";
 
   return (
-    <Card className="relative z-0 w-full max-w-full overflow-hidden rounded-[var(--panel-radius)] border border-[#eee7e1] bg-[#fffdfa] !p-0 sm:!p-0 2xl:!p-0 shadow-[0_10px_24px_rgba(28,13,16,0.05)] transition duration-200 will-change-transform hover:z-10 hover:-translate-y-0.5 hover:scale-[1.015] hover:shadow-[0_16px_32px_rgba(28,13,16,0.08)] md:w-[350px] md:max-w-[350px] xl:w-[360px] xl:max-w-[360px]">
-      <div className="relative pb-0">
-        <div
-          className="px-4 py-2.5"
-          style={{ backgroundColor: leagueAccent }}
-        >
-          <div className="relative flex items-center justify-between gap-4">
-            <div className="flex justify-start">
-              <LeagueLogoMarkClient
-                league={leagueLabel}
-                className="size-9 rounded-full ring-2 ring-white/20"
-              />
-            </div>
-
-            <div className="pointer-events-none absolute inset-x-0 top-1/2 flex -translate-y-1/2 justify-center px-14">
-              <span className="max-w-[10rem] text-center text-[10px] font-black uppercase tracking-[0.16em] text-white">
-                {leagueLabel}
-              </span>
-            </div>
-
-            <div className="ml-auto min-w-[64px] text-right">
-              <p className="text-[20px] font-black leading-none text-white">
-                {assignment.timeLabel}
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div
-          className="border-t-2 bg-[#f6f7fb] px-4 py-3.5"
-          style={{ borderTopColor: leagueAccent }}
-        >
-          <div className="relative z-10 w-full px-1">
-            <div className="grid grid-cols-[minmax(0,1fr)_2.5rem_minmax(0,1fr)] items-start gap-3 xl:grid-cols-[minmax(0,1fr)_2.75rem_minmax(0,1fr)] xl:gap-3.5">
-              <div className="flex min-w-0 flex-col items-center">
-                <ClientTeamLogoMark
-                  teamName={assignment.homeTeam}
-                  competition={assignment.competition}
-                  className="size-[4.5rem] rounded-full border border-[#e8edf3] bg-white shadow-[0_10px_22px_rgba(15,23,42,0.08)]"
-                  imageClassName="p-2.5"
-                  initialsClassName="text-sm"
+    <div className="w-full max-w-full md:w-[350px] md:max-w-[350px] xl:w-[360px] xl:max-w-[360px]">
+      <Card className="relative z-0 w-full max-w-full overflow-hidden rounded-[var(--panel-radius)] border border-[#eee7e1] bg-[#fffdfa] !p-0 sm:!p-0 2xl:!p-0 shadow-[0_10px_24px_rgba(28,13,16,0.05)] transition duration-200 will-change-transform hover:z-10 hover:-translate-y-0.5 hover:scale-[1.015] hover:shadow-[0_16px_32px_rgba(28,13,16,0.08)]">
+        <div className="relative pb-0">
+          <div
+            className="px-4 py-2.5"
+            style={{ backgroundColor: leagueAccent }}
+          >
+            <div className="relative flex items-center justify-between gap-4">
+              <div className="flex justify-start">
+                <LeagueLogoMarkClient
+                  league={leagueLabel}
+                  className="size-9 rounded-full ring-2 ring-white/20"
                 />
-                <p className="mt-3 max-w-full px-1 text-center text-[14px] font-black leading-tight tracking-tight text-[var(--foreground)]">
-                  {assignment.homeTeam}
-                </p>
               </div>
 
-              <div className="flex shrink-0 flex-col items-center justify-center pt-6">
-                <div className="h-px w-full max-w-8 bg-[#dfe5ed]" />
-                <span className="py-1.5 text-[18px] font-black italic text-[var(--accent)]">
-                  vs
+              <div className="pointer-events-none absolute inset-x-0 top-1/2 flex -translate-y-1/2 justify-center px-14">
+                <span className="max-w-[10rem] text-center text-[10px] font-black uppercase tracking-[0.16em] text-white">
+                  {leagueLabel}
                 </span>
-                <div className="h-px w-full max-w-8 bg-[#dfe5ed]" />
               </div>
 
-              <div className="flex min-w-0 flex-col items-center">
-                <ClientTeamLogoMark
-                  teamName={assignment.awayTeam}
-                  competition={assignment.competition}
-                  className="size-[4.5rem] rounded-full border border-[#e8edf3] bg-white shadow-[0_10px_22px_rgba(15,23,42,0.08)]"
-                  imageClassName="p-2.5"
-                  initialsClassName="text-sm"
-                />
-                <p className="mt-3 max-w-full px-1 text-center text-[14px] font-black leading-tight tracking-tight text-[var(--foreground)]">
-                  {assignment.awayTeam}
+              <div className="ml-auto min-w-[64px] text-right">
+                <p className="text-[20px] font-black leading-none text-white">
+                  {assignment.timeLabel}
                 </p>
               </div>
             </div>
           </div>
 
-          <div className="mt-3 flex items-center justify-center gap-2 text-center text-[12px] font-semibold text-[#94a3b8]">
-            <MapPin className="size-3.5" />
-            <span className="truncate">{assignment.venue ?? "Sede por definir"}</span>
+          <div
+            className="border-t-2 bg-[#f6f7fb] px-4 py-3.5"
+            style={{ borderTopColor: leagueAccent }}
+          >
+            <div className="relative z-10 w-full px-1">
+              <div className="grid grid-cols-[minmax(0,1fr)_2.5rem_minmax(0,1fr)] items-start gap-3 xl:grid-cols-[minmax(0,1fr)_2.75rem_minmax(0,1fr)] xl:gap-3.5">
+                <div className="flex min-w-0 flex-col items-center">
+                  <ClientTeamLogoMark
+                    teamName={assignment.homeTeam}
+                    competition={assignment.competition}
+                    className="size-[4.5rem] rounded-full border border-[#e8edf3] bg-white shadow-[0_10px_22px_rgba(15,23,42,0.08)]"
+                    imageClassName="p-2.5"
+                    initialsClassName="text-sm"
+                  />
+                  <p className="mt-3 max-w-full px-1 text-center text-[14px] font-black leading-tight tracking-tight text-[var(--foreground)]">
+                    {assignment.homeTeam}
+                  </p>
+                </div>
+
+                <div className="flex shrink-0 flex-col items-center justify-center pt-6">
+                  <div className="h-px w-full max-w-8 bg-[#dfe5ed]" />
+                  <span className="py-1.5 text-[18px] font-black italic text-[var(--accent)]">
+                    vs
+                  </span>
+                  <div className="h-px w-full max-w-8 bg-[#dfe5ed]" />
+                </div>
+
+                <div className="flex min-w-0 flex-col items-center">
+                  <ClientTeamLogoMark
+                    teamName={assignment.awayTeam}
+                    competition={assignment.competition}
+                    className="size-[4.5rem] rounded-full border border-[#e8edf3] bg-white shadow-[0_10px_22px_rgba(15,23,42,0.08)]"
+                    imageClassName="p-2.5"
+                    initialsClassName="text-sm"
+                  />
+                  <p className="mt-3 max-w-full px-1 text-center text-[14px] font-black leading-tight tracking-tight text-[var(--foreground)]">
+                    {assignment.awayTeam}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-3 flex items-center justify-center gap-2 text-center text-[12px] font-semibold text-[#94a3b8]">
+              <MapPin className="size-3.5" />
+              <span className="truncate">{assignment.venue ?? "Sede por definir"}</span>
+            </div>
+          </div>
+
+          <div className="border-t border-[#efe7e1] bg-white px-4 py-3.5">
+            <AssignmentOperationalSummary assignment={assignment} />
           </div>
         </div>
 
-        <div className="border-t border-[#efe7e1] bg-white px-4 py-3.5">
-          <AssignmentOperationalSummary assignment={assignment} />
+        <div className="grid grid-cols-2 gap-2.5 border-t border-[#efe7e1] bg-[#fbfaf7] p-3.5 sm:p-4">
+          <button
+            type="button"
+            onClick={() => onOpenGroup(assignment.assignmentId)}
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-[var(--panel-radius)] bg-[#1faa52] px-3 text-xs font-black text-white shadow-[0_14px_28px_rgba(31,170,82,0.18)] transition hover:brightness-105"
+          >
+            <span className="inline-flex size-6 items-center justify-center rounded-full bg-[#eef2f5] shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]">
+              <MessageCircleMore className="size-3.5 text-[#1faa52]" />
+            </span>
+            Chatear
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onOpenReport(assignment.assignmentId)}
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-[var(--panel-radius)] bg-[#7a36da] px-3 text-xs font-black text-white shadow-[0_14px_28px_rgba(122,54,218,0.22)] transition hover:brightness-105"
+          >
+            <span className="inline-flex size-6 items-center justify-center rounded-full bg-[#eef2f5] shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]">
+              <Megaphone className="size-3.5 text-[#7a36da]" />
+            </span>
+            Reportar
+          </button>
         </div>
-      </div>
+      </Card>
 
-      <div className="grid grid-cols-2 gap-2.5 border-t border-[#efe7e1] bg-[#fbfaf7] p-3.5 sm:p-4">
-        <button
-          type="button"
-          onClick={() => onOpenGroup(assignment.assignmentId)}
-          className="inline-flex h-10 items-center justify-center gap-2 rounded-[var(--panel-radius)] bg-[#1faa52] px-3 text-xs font-black text-white shadow-[0_14px_28px_rgba(31,170,82,0.18)] transition hover:brightness-105"
-        >
-          <span className="inline-flex size-6 items-center justify-center rounded-full bg-[#eef2f5] shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]">
-            <MessageCircleMore className="size-3.5 text-[#1faa52]" />
-          </span>
-          Grupo
-        </button>
-
-        <button
-          type="button"
-          onClick={() => onOpenReport(assignment.assignmentId)}
-          className="inline-flex h-10 items-center justify-center gap-2 rounded-[var(--panel-radius)] bg-[#7a36da] px-3 text-xs font-black text-white shadow-[0_14px_28px_rgba(122,54,218,0.22)] transition hover:brightness-105"
-        >
-          <span className="inline-flex size-6 items-center justify-center rounded-full bg-[#eef2f5] shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]">
-            <Megaphone className="size-3.5 text-[#7a36da]" />
-          </span>
-          Reportar
-        </button>
+      <div
+        className={cn(
+          "mt-3 flex items-center justify-center gap-2 text-center text-[11px] font-black uppercase tracking-[0.12em]",
+          assignment.confirmed ? "text-[#16a34a]" : "text-[#94a3b8]",
+        )}
+      >
+        <span>{reportStatusLabel}</span>
+        {assignment.confirmed ? (
+          <CheckCircle2 className="size-4" />
+        ) : (
+          <Clock3 className="size-4" />
+        )}
       </div>
-    </Card>
+    </div>
   );
 }
 
@@ -1091,22 +1104,14 @@ function DrawerPersonCard({
   tone?: "accent" | "neutral";
 }) {
   return (
-    <div className="panel-radius flex min-h-[84px] items-center gap-3 border border-[var(--border)] bg-white p-4">
-      <HoverAvatarBadge
+    <div className="panel-radius flex min-h-[59px] items-center gap-2.5 border border-[var(--border)] bg-white p-3 sm:min-h-[84px] sm:gap-3 sm:p-4">
+      <PersonRoleStack
+        label={label}
+        value={value}
         initials={getInitials(value)}
-        roleLabel={label}
-        showTooltip={false}
-        tone={tone}
-        size="md"
+        size="sm"
+        tone={tone === "accent" ? "mint" : "neutral"}
       />
-      <div className="min-w-0">
-        <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#94a3b8]">
-          {label}
-        </p>
-        <p className="mt-1 text-sm font-bold leading-tight text-[var(--foreground)]">
-          {value}
-        </p>
-      </div>
     </div>
   );
 }
@@ -1226,9 +1231,10 @@ function GroupAssistantDrawer({
               </span>
             ) : null}
             <span
-              className="inline-flex rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em]"
+              className="inline-flex rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em]"
               style={{
                 backgroundColor: `${leagueAccent}14`,
+                borderColor: leagueAccent,
                 color: leagueAccent,
               }}
             >
@@ -1277,7 +1283,7 @@ function GroupAssistantDrawer({
         items={[
           {
             key: "group",
-            label: "Grupo",
+            label: "Chatear",
             active: tab === "group",
             onClick: () => onChangeTab("group"),
           },
@@ -1323,7 +1329,7 @@ function GroupAssistantDrawer({
                               {contact.personName ?? "Sin asignar"}
                             </p>
                             <p className="mt-0.5 truncate text-[9px] font-bold uppercase tracking-[0.14em] text-[#7587a1]">
-                              {getRoleDisplayName(contact.roleName)}
+                              {getCompactRoleDisplayName(contact.roleName)}
                             </p>
                           </div>
                         </div>
@@ -1399,7 +1405,7 @@ function GroupAssistantDrawer({
 
             <section className="space-y-4">
               <DrawerSectionHeading>Responsables</DrawerSectionHeading>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 sm:gap-3">
                 <DrawerPersonCard
                   label={RESPONSIBLE_DISPLAY_LABEL}
                   value={assignment.responsibleName ?? assignment.ownerName ?? "Sin asignar"}
@@ -1414,7 +1420,7 @@ function GroupAssistantDrawer({
 
             <section className="space-y-4">
               <DrawerSectionHeading>Contexto del partido</DrawerSectionHeading>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 sm:gap-3">
                 <DrawerPersonCard
                   label="Productor"
                   value={assignment.producerName ?? "Sin asignar"}
@@ -1432,13 +1438,6 @@ function GroupAssistantDrawer({
                   label="Encoder"
                   value={assignment.encoderName ?? "Sin asignar"}
                 />
-                <div className="col-span-2">
-                  <DrawerInfoCard
-                    icon={MapPin}
-                    label="Sede"
-                    value={assignment.venue ?? "Sede por definir"}
-                  />
-                </div>
               </div>
               <DrawerStatusCard confirmed={assignment.confirmed} />
             </section>
@@ -1501,9 +1500,10 @@ function ReportAssistantDrawer({
               </span>
             ) : null}
             <span
-              className="inline-flex rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em]"
+              className="inline-flex rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em]"
               style={{
                 backgroundColor: `${leagueAccent}14`,
+                borderColor: leagueAccent,
                 color: leagueAccent,
               }}
             >
@@ -1566,6 +1566,8 @@ export function MyDayAssignmentsPanel({
   primaryHeading,
   primaryDescription,
   showDemoToday,
+  emptyStateActionHref,
+  emptyStateActionLabel,
   todayAssignments,
   upcomingAssignments,
   topContent,
@@ -1632,7 +1634,7 @@ export function MyDayAssignmentsPanel({
         selectedPanelAssignmentId ? "2xl:grid-cols-[minmax(0,1fr)_390px]" : "grid-cols-1",
       )}
     >
-      <div className="space-y-8">
+      <div className="space-y-3 md:space-y-8">
         {topContent}
 
         {showDemoToday ? (
@@ -1645,7 +1647,7 @@ export function MyDayAssignmentsPanel({
         ) : null}
 
         <section className="space-y-4">
-          <div className="space-y-3">
+          <div className="space-y-0 md:space-y-3">
             {periodView === "day" ? (
               <MobileDayNavigator
                 selectedDate={selectedDate}
@@ -1677,12 +1679,6 @@ export function MyDayAssignmentsPanel({
                 ) : null}
               </div>
             </div>
-
-            <div className="flex items-center justify-end gap-2 md:hidden">
-              {tableViewEnabled ? (
-                <AssignmentViewToggle viewMode={viewMode} onChange={setViewMode} />
-              ) : null}
-            </div>
           </div>
 
           {todayAssignments.length ? (
@@ -1706,20 +1702,21 @@ export function MyDayAssignmentsPanel({
               />
             )
           ) : (
-            <Card className="space-y-3 rounded-[var(--panel-radius)] p-6">
-              <p className="text-[11px] font-black uppercase tracking-[0.24em] text-[#95a3ba]">
-                {periodView === "month" ? "Sin actividad este mes" : "Sin actividad hoy"}
+            <Card className="flex min-h-[152px] flex-col items-center justify-center rounded-[var(--panel-radius)] p-6 text-center md:min-h-0 md:items-start md:text-left">
+              <p className="text-sm font-black uppercase tracking-[0.24em] text-[#95a3ba]">
+                Sin actividad
               </p>
-              <h3 className="text-2xl font-black tracking-tight text-[var(--foreground)]">
-                {periodView === "month"
-                  ? "No tienes partidos asignados para este mes"
-                  : "No tienes partidos asignados para esta fecha"}
-              </h3>
-              <p className="text-sm leading-7 text-[#617187]">
-                {periodView === "month"
-                  ? "Prueba con otro mes o vuelve a la vista de hoy."
-                  : "Prueba con otro día o revisa la sección de próximos partidos."}
-              </p>
+              {emptyStateActionHref && emptyStateActionLabel ? (
+                <div className="pt-2">
+                  <Link
+                    href={emptyStateActionHref}
+                    className="inline-flex items-center gap-2 rounded-xl bg-[var(--accent)] px-4 py-2 text-sm font-black text-white shadow-sm transition hover:opacity-90"
+                  >
+                    {emptyStateActionLabel}
+                    <ChevronDown className="size-4 -rotate-90" />
+                  </Link>
+                </div>
+              ) : null}
             </Card>
           )}
         </section>

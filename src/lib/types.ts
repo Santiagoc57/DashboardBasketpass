@@ -14,6 +14,7 @@ export type UserContext = {
   profile: ProfileRow | null;
   role: AppRole;
   canEdit: boolean;
+  canCollaboratorOperate: boolean;
 };
 
 export type PersonListItem = PersonRow & {
@@ -23,13 +24,16 @@ export type PersonListItem = PersonRow & {
 };
 
 export type MatchListItem = MatchRow & {
-  owner: Pick<PersonRow, "id" | "full_name" | "phone"> | null;
+  owner: Pick<PersonRow, "id" | "full_name" | "phone" | "email"> | null;
   assignments: Array<{
     id: string;
     match_id: string;
     role_id: string;
     person_id: string | null;
     confirmed: boolean;
+    confirmation_status: string;
+    confirmation_token: string | null;
+    confirmation_responded_at: string | null;
     notes: string | null;
     role: Pick<RoleRow, "id" | "name" | "category" | "sort_order" | "active">;
     person: Pick<PersonRow, "id" | "full_name" | "phone" | "email"> | null;

@@ -9,8 +9,19 @@ import {
 } from "@/app/actions/helpers";
 import { requireEditor } from "@/lib/auth";
 import { normalizeRoleCategoryInput, normalizeRoleNameInput } from "@/lib/display";
+import { emitOperationalAlert } from "@/lib/monitoring";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { ensureErrorMessage } from "@/lib/utils";
+
+async function reportRolesFailure(error: unknown, action: string) {
+  await emitOperationalAlert({
+    area: "roles",
+    severity: "critical",
+    message: "Falló una operación de roles.",
+    error: ensureErrorMessage(error),
+    details: { action },
+  });
+}
 
 export async function upsertRoleAction(formData: FormData) {
   const redirectTo = getRedirectTarget(formData, "/roles");
@@ -45,6 +56,7 @@ export async function upsertRoleAction(formData: FormData) {
     });
   } catch (error) {
     rethrowNavigationError(error);
+    await reportRolesFailure(error, "upsert");
     redirectWithNotice({
       redirectTo,
       intent: "error",
@@ -77,6 +89,7 @@ export async function deleteRoleAction(formData: FormData) {
     });
   } catch (error) {
     rethrowNavigationError(error);
+    await reportRolesFailure(error, "delete");
     redirectWithNotice({
       redirectTo,
       intent: "error",

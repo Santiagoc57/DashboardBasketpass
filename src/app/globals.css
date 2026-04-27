@@ -83,7 +83,7 @@ select option {
 @media (min-width: 1280px) {
   :root {
     --dashboard-shell-padding: 1.75rem;
-    --dashboard-sidebar-width: 200px;
+    --dashboard-sidebar-width: 249px;
     --dashboard-content-leading-space: 0rem;
   }
 }
@@ -91,8 +91,14 @@ select option {
 @media (min-width: 1536px) {
   :root {
     --dashboard-shell-padding: 2rem;
-    --dashboard-sidebar-width: 200px;
+    --dashboard-sidebar-width: 249px;
     --dashboard-content-leading-space: 0rem;
+  }
+}
+
+@media (min-width: 1920px) {
+  :root {
+    --dashboard-sidebar-width: 249px;
   }
 }
 
@@ -109,5 +115,10 @@ select option {
   .panel-surface {
     border-radius: var(--panel-radius) !important;
     box-shadow: var(--panel-shadow) !important;
+  }
+
+  .metric-card-height {
+    height: 174px !important;
+    min-height: 174px !important;
   }
 }

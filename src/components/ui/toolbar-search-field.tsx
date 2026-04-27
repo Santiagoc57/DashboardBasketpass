@@ -96,11 +96,11 @@ export function ToolbarSearchField({
     <Comp
       {...(as === "form" ? { action } : {})}
       className={cn(
-        "flex min-w-0 w-full max-w-full flex-1 items-center rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--surface)] p-1.5 shadow-sm transition-all duration-200",
+        "flex min-w-0 max-w-full items-center rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--surface)] shadow-sm transition-all duration-200",
         className,
         isSearchExpanded
-          ? "sm:min-w-[17rem]"
-          : "xl:w-[3.5rem] xl:max-w-[3.5rem] xl:min-w-[3.5rem] xl:flex-none",
+          ? "w-full flex-1 p-1.5 sm:min-w-[17rem]"
+          : "!size-[52px] !max-h-[52px] !max-w-[52px] !min-h-[52px] !min-w-[52px] !flex-none overflow-hidden p-0",
       )}
     >
       {children}
@@ -108,7 +108,7 @@ export function ToolbarSearchField({
         onClick={handleShellClick}
         className={cn(
           "flex min-w-0 flex-1 items-center gap-2 rounded-[var(--panel-radius)] bg-transparent px-3 transition-all duration-200",
-          !isSearchExpanded && "xl:justify-center xl:bg-transparent xl:px-0",
+          !isSearchExpanded && "justify-center bg-transparent px-0",
           shellClassName,
         )}
       >
@@ -121,7 +121,10 @@ export function ToolbarSearchField({
             openSearchInput();
           }}
           aria-label="Enfocar buscador"
-          className="inline-flex size-10 shrink-0 items-center justify-center rounded-[var(--panel-radius)] text-[var(--accent)] transition hover:bg-white/70"
+          className={cn(
+            "inline-flex shrink-0 items-center justify-center rounded-[var(--panel-radius)] text-[var(--accent)] transition hover:bg-white/70",
+            isSearchExpanded ? "size-10" : "size-full",
+          )}
         >
           <Search className={cn("size-4", iconClassName)} />
         </button>
@@ -141,7 +144,7 @@ export function ToolbarSearchField({
           className={cn(
             "h-10 border-0 bg-transparent px-0 shadow-none transition-all duration-200 focus-visible:ring-0",
             !isSearchExpanded &&
-              "xl:w-0 xl:min-w-0 xl:overflow-hidden xl:border-0 xl:opacity-0 xl:pointer-events-none xl:px-0",
+              "w-0 min-w-0 overflow-hidden border-0 opacity-0 pointer-events-none px-0",
             inputClassName,
           )}
         />

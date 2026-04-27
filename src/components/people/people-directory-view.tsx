@@ -10,7 +10,7 @@ import {
   MapPin,
 } from "@/components/people/people-view-helpers";
 import { getRoleDisplayName } from "@/lib/display";
-import { parsePersonNotesMeta } from "@/lib/people-notes";
+import { getPersonRoleValues, parsePersonNotesMeta } from "@/lib/people-notes";
 import type { PersonListItem } from "@/lib/types";
 import { cn, normalizeText } from "@/lib/utils";
 
@@ -109,11 +109,13 @@ export function PeopleDirectoryView({
   canEdit: boolean;
 }) {
   return (
-    <div className="grid gap-5 p-6 md:grid-cols-2 xl:grid-cols-4">
+    <div className="grid gap-5 p-6 md:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-[repeat(auto-fill,minmax(300px,1fr))]">
       {people.map((person) => {
         const meta = parsePersonNotesMeta(person.notes);
-        const displayRole = meta.role || person.primary_role || "";
-        const rolePresentation = getRolePresentation(displayRole);
+        const roles = getPersonRoleValues(meta, person.primary_role);
+        const primaryRole = roles[0] ?? "";
+        const displayRole = roles.map((role) => getRoleDisplayName(role)).join(", ");
+        const rolePresentation = getRolePresentation(primaryRole);
         const whatsappHref = getWhatsAppHref(person.phone);
         const city = meta.city || "";
         const cityIndicator = getCityIndicator(city);
@@ -123,7 +125,7 @@ export function PeopleDirectoryView({
           edit: person.id,
         });
         const state = getStatePresentation(person);
-        const roleLabel = displayRole ? getRoleDisplayName(displayRole) : "Sin rol";
+        const roleLabel = displayRole || "Sin rol";
         const cityLabel = city || "Sin ciudad";
         const actionHref = whatsappHref ?? profileHref;
         const actionLabel = whatsappHref ? "Enviar mensaje" : "Ver perfil";
@@ -141,10 +143,10 @@ export function PeopleDirectoryView({
               isSelected && "border-[#f0d9de] ring-1 ring-[#f4d2da]",
             )}
           >
-            <div className="absolute -right-10 -top-10 size-40 rounded-full bg-[rgba(231,19,58,0.03)] blur-3xl" />
-            <div className="absolute -bottom-10 -left-10 size-40 rounded-full bg-[rgba(231,19,58,0.04)] blur-3xl" />
+            <div className="pointer-events-none absolute -right-10 -top-10 size-40 rounded-full bg-[rgba(231,19,58,0.03)] blur-3xl" />
+            <div className="pointer-events-none absolute -bottom-10 -left-10 size-40 rounded-full bg-[rgba(231,19,58,0.04)] blur-3xl" />
 
-            <div className="relative h-24 bg-[linear-gradient(135deg,rgba(231,19,58,0.12),transparent_72%)]" />
+            <div className="pointer-events-none relative h-[5.4rem] bg-[var(--accent)]" />
 
             <div className="relative flex justify-center -mt-12">
               <div
@@ -175,7 +177,7 @@ export function PeopleDirectoryView({
               <div>
                 <h3
                   title={person.full_name}
-                  className="truncate whitespace-nowrap text-[1.2rem] font-black leading-[1.05] tracking-[-0.03em] text-[var(--foreground)] xl:text-[1.3rem]"
+                  className="truncate whitespace-nowrap text-[1.2rem] font-black leading-[1.15] tracking-[-0.03em] text-[var(--foreground)] xl:text-[1.3rem]"
                 >
                   {directoryDisplayName}
                 </h3>
@@ -265,17 +267,17 @@ export function PeopleDirectoryView({
                   rel={whatsappHref ? "noreferrer" : undefined}
                   aria-label={actionLabel}
                   title={actionLabel}
-                  className="inline-flex size-12 shrink-0 items-center justify-center rounded-[var(--panel-radius)] bg-[var(--accent)] text-white shadow-[0_12px_28px_rgba(231,19,58,0.2)] transition hover:brightness-110"
+                  className="inline-flex size-10 shrink-0 items-center justify-center rounded-full border border-[#bfe4ca] bg-[#eefaf2] text-[#1faa52] transition hover:border-[#9ad8b0] hover:bg-[#e3f8e8] hover:text-[#148a43]"
                 >
-                  <Send className="size-4" />
+                  <Send className="size-3.5" />
                 </a>
                 <Link
                   href={profileHref}
                   aria-label={`Editar a ${person.full_name}`}
                   title="Editar personal"
-                  className="inline-flex size-12 shrink-0 items-center justify-center rounded-[var(--panel-radius)] border border-[#e6e9ef] text-[#6b778b] transition hover:bg-[#fafbfc] hover:text-[var(--foreground)]"
+                  className="inline-flex size-10 shrink-0 items-center justify-center rounded-full border border-[#e6e9ef] text-[#6b778b] transition hover:bg-[#fafbfc] hover:text-[var(--foreground)]"
                 >
-                  <Pencil className="size-4" />
+                  <Pencil className="size-3.5" />
                 </Link>
                 <form action={togglePersonActiveAction} className="shrink-0">
                   <input type="hidden" name="personId" value={person.id} />
@@ -291,12 +293,12 @@ export function PeopleDirectoryView({
                     aria-label={`${person.active ? "Desactivar" : "Activar"} a ${person.full_name}`}
                     title={person.active ? "Desactivar" : "Activar"}
                     className={cn(
-                      "inline-flex size-12 items-center justify-center rounded-[var(--panel-radius)] border transition",
+                      "inline-flex size-10 items-center justify-center rounded-full border transition",
                       state.toggleButtonClassName,
                       !canEdit && "cursor-not-allowed opacity-60",
                     )}
                   >
-                    <Power className="size-4" />
+                    <Power className="size-3.5" />
                   </button>
                 </form>
               </div>

@@ -5,7 +5,11 @@ import { SectionAiAssistant } from "@/components/ai/section-ai-assistant";
 import { CreateMatchModal } from "@/components/grid/create-match-modal";
 import { GridCalendarPicker } from "@/components/grid/grid-calendar-picker";
 import { GridExportButton } from "@/components/grid/grid-export-button";
-import { GridInsightsDock } from "@/components/grid/grid-insights-dock";
+import {
+  GridInsightsDock,
+  GridInsightsDockProvider,
+  GridInsightsDockTrigger,
+} from "@/components/grid/grid-insights-dock";
 import { MatchCard } from "@/components/grid/match-card";
 import { ProductionInsightsPanel } from "@/components/grid/production-insights-panel";
 import { SectionPageHeader } from "@/components/layout/section-page-header";
@@ -26,6 +30,7 @@ import { requireUserContext } from "@/lib/auth";
 import { isSupabaseConfigured } from "@/lib/env";
 import { parseGridSearchParams, parseNotice } from "@/lib/search-params";
 import { getSettingsSnapshot } from "@/lib/settings";
+import { getTeamDisplayName } from "@/lib/team-directory";
 import { cn } from "@/lib/utils";
 
 type PageProps = {
@@ -148,6 +153,28 @@ function formatSummaryDateLabel(params: {
   return label.replaceAll(".", "").toUpperCase();
 }
 
+function getDefaultExportRange(params: {
+  date: string;
+  view: "day" | "month";
+}) {
+  if (params.view === "day") {
+    return {
+      startDate: params.date,
+      endDate: params.date,
+    };
+  }
+
+  const [yearPart, monthPart] = params.date.split("-");
+  const year = Number(yearPart);
+  const month = Number(monthPart);
+  const lastDay = new Date(year, month, 0).getDate();
+
+  return {
+    startDate: `${params.date}-01`,
+    endDate: `${params.date}-${String(lastDay).padStart(2, "0")}`,
+  };
+}
+
 function sortGridDayGroups(
   dayGroups: Awaited<ReturnType<typeof getGridData>>["dayGroups"],
   direction: "asc" | "desc",
@@ -234,13 +261,17 @@ export default async function GridPage({ searchParams }: PageProps) {
     view: filters.view,
     timezone: filters.timezone,
   });
+  const defaultExportRange = getDefaultExportRange({
+    date: filters.date,
+    view: filters.view,
+  });
   const dateOrderToggleHref = buildGridHref(resolvedSearchParams, {
     dateOrder: filters.dateOrder === "asc" ? "desc" : "asc",
   });
   const sortedDayGroups = sortGridDayGroups(dayGroups, filters.dateOrder);
   const aiContext = dayGroups.flatMap((group) =>
     group.items.map((match) => ({
-      partido: `${match.home_team} vs ${match.away_team}`,
+      partido: `${getTeamDisplayName(match.home_team, match.competition)} vs ${getTeamDisplayName(match.away_team, match.competition)}`,
       liga: match.competition,
       modo: match.production_mode,
       estado: match.status,
@@ -263,157 +294,162 @@ export default async function GridPage({ searchParams }: PageProps) {
   };
 
   return (
-    <>
+    <GridInsightsDockProvider>
       <GridInsightsDock>
         <ProductionInsightsPanel {...insightsPanelProps} />
       </GridInsightsDock>
 
       <div className="grid gap-6 2xl:grid-cols-[minmax(0,1fr)_21rem]">
         <div className="relative z-0 min-w-0 space-y-10">
-        <SectionPageHeader
-          title={SECTION_COPY.grid.title}
-          description={SECTION_COPY.grid.description}
-          actions={
-            <>
-              <ToolbarSearchField
-                action="/grid"
-                defaultValue={filters.q}
-                placeholder="Buscar partido, ID, liga o responsable..."
-              >
-                <input type="hidden" name="view" value={filters.view} />
-                <input type="hidden" name="date" value={filters.date} />
-                <input type="hidden" name="dateOrder" value={filters.dateOrder} />
-                {filters.league ? (
-                  <input type="hidden" name="league" value={filters.league} />
+          <SectionPageHeader
+            title={SECTION_COPY.grid.title}
+            description={SECTION_COPY.grid.description}
+            actions={
+              <>
+                <ToolbarSearchField
+                  action="/grid"
+                  defaultValue={filters.q}
+                  placeholder="Buscar partido, ID, liga o responsable..."
+                >
+                  <input type="hidden" name="view" value={filters.view} />
+                  <input type="hidden" name="date" value={filters.date} />
+                  <input type="hidden" name="dateOrder" value={filters.dateOrder} />
+                  {filters.league ? (
+                    <input type="hidden" name="league" value={filters.league} />
+                  ) : null}
+                  {filters.mode ? (
+                    <input type="hidden" name="mode" value={filters.mode} />
+                  ) : null}
+                  {filters.status ? (
+                    <input type="hidden" name="status" value={filters.status} />
+                  ) : null}
+                  {filters.owner ? (
+                    <input type="hidden" name="owner" value={filters.owner} />
+                  ) : null}
+                  {filters.timezone ? (
+                    <input type="hidden" name="timezone" value={filters.timezone} />
+                  ) : null}
+                </ToolbarSearchField>
+                {visibleMatches.length ? (
+                  <GridExportButton
+                    matches={visibleMatches}
+                    periodLabel={summaryDateLabel}
+                    queryParams={baseSearchParams}
+                    initialStartDate={defaultExportRange.startDate}
+                    initialEndDate={defaultExportRange.endDate}
+                    timezone={filters.timezone}
+                  />
                 ) : null}
-                {filters.mode ? (
-                  <input type="hidden" name="mode" value={filters.mode} />
-                ) : null}
-                {filters.status ? (
-                  <input type="hidden" name="status" value={filters.status} />
-                ) : null}
-                {filters.owner ? (
-                  <input type="hidden" name="owner" value={filters.owner} />
-                ) : null}
-                {filters.timezone ? (
-                  <input type="hidden" name="timezone" value={filters.timezone} />
-                ) : null}
-              </ToolbarSearchField>
-              {visibleMatches.length ? (
-                <GridExportButton
-                  matches={visibleMatches}
-                  periodLabel={summaryDateLabel}
+                <SectionAiAssistant
+                  section="Producción"
+                  title="Consulta la producción visible"
+                  description="Pregunta por partidos, responsables, modos de producción o cargas visibles en esta jornada."
+                  placeholder="Ej. ¿Qué partidos de Liga Nacional están hoy y quién es el responsable?"
+                  contextLabel="Partidos visibles en Producción"
+                  context={aiContext}
+                  guidance="Prioriza partido, liga, modo, estado, responsable, fecha, hora, sede y cantidad de asignaciones confirmadas."
+                  examples={[
+                    "¿Qué partidos hay hoy?",
+                    "¿Quién lleva Bochas Sport Club vs River Plate?",
+                    "¿Qué producciones están en modo Encoder?",
+                  ]}
+                  hasGeminiKey={settings.hasGeminiKey}
+                  buttonVariant="icon"
                 />
-              ) : null}
-              <SectionAiAssistant
-                section="Producción"
-                title="Consulta la producción visible"
-                description="Pregunta por partidos, responsables, modos de producción o cargas visibles en esta jornada."
-                placeholder="Ej. ¿Qué partidos de Liga Nacional están hoy y quién es el responsable?"
-                contextLabel="Partidos visibles en Producción"
-                context={aiContext}
-                guidance="Prioriza partido, liga, modo, estado, responsable, fecha, hora, sede y cantidad de asignaciones confirmadas."
-                examples={[
-                  "¿Qué partidos hay hoy?",
-                  "¿Quién lleva Bochas Sport Club vs River Plate?",
-                  "¿Qué producciones están en modo Encoder?",
-                ]}
-                hasGeminiKey={settings.hasGeminiKey}
-                buttonVariant="icon"
-              />
-              <CreateMatchModal
-                people={owners}
-                redirectTo={redirectTo}
-                canEdit={user.canEdit}
-                initialDate={
-                  filters.view === "day" ? filters.date : getDateInputValue()
-                }
-              />
-            </>
-          }
-        />
+                <CreateMatchModal
+                  people={owners}
+                  redirectTo={redirectTo}
+                  canEdit={user.canEdit}
+                  initialDate={
+                    filters.view === "day" ? filters.date : getDateInputValue()
+                  }
+                />
+              </>
+            }
+          />
 
-        <PageMessage intent={intent} message={notice} />
+          <PageMessage intent={intent} message={notice} />
 
-        <section className="min-w-0 space-y-6">
-          {sortedDayGroups.length ? (
-            sortedDayGroups.map((group, groupIndex) => (
-              <div key={group.key} className="space-y-4">
-                <div className="flex flex-wrap items-center justify-between gap-4">
-                  <div className="flex items-center gap-3">
-                    <h3 className="text-2xl font-extrabold text-[var(--accent)]">
-                      {formatDayHeading(
-                        group.items[0].kickoff_at,
-                        group.items[0].timezone,
-                      )}
-                    </h3>
-                    {groupIndex === 0 ? (
-                      <a
-                        href={dateOrderToggleHref}
-                        aria-label={
-                          filters.dateOrder === "asc"
-                            ? "Ordenar desde la fecha más reciente"
-                            : "Ordenar desde la fecha más antigua"
-                        }
-                        className={cn(
-                          "inline-flex size-10 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--surface)] text-[#7f8ca0] shadow-[0_8px_18px_rgba(15,23,42,0.06)] transition hover:border-[rgba(230,18,56,0.24)] hover:text-[var(--accent)]",
-                          filters.dateOrder === "desc" &&
-                            "border-[rgba(230,18,56,0.18)] bg-[#fff4f6] text-[var(--accent)]",
+          <section className="min-w-0 space-y-6">
+            {sortedDayGroups.length ? (
+              sortedDayGroups.map((group, groupIndex) => (
+                <div key={group.key} className="space-y-4">
+                  <div className="flex flex-wrap items-center justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                      <h3 className="text-2xl font-extrabold text-[var(--accent)]">
+                        {formatDayHeading(
+                          group.items[0].kickoff_at,
+                          group.items[0].timezone,
                         )}
-                      >
-                        <ArrowUpDown className="size-4" />
-                      </a>
-                    ) : null}
+                      </h3>
+                      {groupIndex === 0 ? (
+                        <a
+                          href={dateOrderToggleHref}
+                          aria-label={
+                            filters.dateOrder === "asc"
+                              ? "Ordenar desde la fecha más reciente"
+                              : "Ordenar desde la fecha más antigua"
+                          }
+                          className={cn(
+                            "inline-flex size-10 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--surface)] text-[#7f8ca0] shadow-[0_8px_18px_rgba(15,23,42,0.06)] transition hover:border-[rgba(230,18,56,0.24)] hover:text-[var(--accent)]",
+                            filters.dateOrder === "desc" &&
+                              "border-[rgba(230,18,56,0.18)] bg-[#fff4f6] text-[var(--accent)]",
+                          )}
+                        >
+                          <ArrowUpDown className="size-4" />
+                        </a>
+                      ) : null}
+                    </div>
+                    <div className="flex flex-wrap items-center justify-end gap-3">
+                      <span className="text-sm font-medium text-[var(--muted)]">
+                        {group.items.length} partidos
+                      </span>
+                      {groupIndex === 0 ? (
+                        <>
+                          <SegmentedControl
+                            items={[
+                              { key: "day", label: "Hoy", href: todayHref, active: filters.view === "day" },
+                              { key: "month", label: "Mes", href: monthHref, active: filters.view === "month" },
+                            ]}
+                          />
+                          <GridCalendarPicker
+                            key={calendarPickerKey}
+                            selectedDate={filters.view === "day" ? filters.date : null}
+                            initialMonth={initialCalendarMonth}
+                            initialSummary={initialCalendarSummary}
+                            baseSearchParams={baseSearchParams}
+                          />
+                          <GridInsightsDockTrigger />
+                        </>
+                      ) : null}
+                    </div>
                   </div>
-                  <div className="flex flex-wrap items-center justify-end gap-3">
-                    <span className="text-sm font-medium text-[var(--muted)]">
-                      {group.items.length} partidos
-                    </span>
-                    {groupIndex === 0 ? (
-                      <>
-                        <SegmentedControl
-                          items={[
-                            { key: "day", label: "Hoy", href: todayHref, active: filters.view === "day" },
-                            { key: "month", label: "Mes", href: monthHref, active: filters.view === "month" },
-                          ]}
-                        />
-                        <GridCalendarPicker
-                          key={calendarPickerKey}
-                          selectedDate={filters.view === "day" ? filters.date : null}
-                          initialMonth={initialCalendarMonth}
-                          initialSummary={initialCalendarSummary}
-                          baseSearchParams={baseSearchParams}
-                        />
-                      </>
-                    ) : null}
+                  <div className="grid gap-4">
+                    {group.items.map((match) => (
+                      <MatchCard
+                        key={match.id}
+                        match={match}
+                        redirectTo={redirectTo}
+                        canEdit={user.canEdit}
+                        people={owners}
+                      />
+                    ))}
                   </div>
                 </div>
-                <div className="grid gap-4">
-                  {group.items.map((match) => (
-                    <MatchCard
-                      key={match.id}
-                      match={match}
-                      redirectTo={redirectTo}
-                      canEdit={user.canEdit}
-                      people={owners}
-                    />
-                  ))}
-                </div>
-              </div>
-            ))
-          ) : (
-            <EmptyState
-              title="No hay partidos cargados para esta vista"
-              description="Crea un partido desde Nuevo partido o cambia entre Hoy y Mes para revisar otra jornada."
-            />
-          )}
-        </section>
-      </div>
+              ))
+            ) : (
+              <EmptyState
+                title="No hay partidos cargados para esta vista"
+                description="Crea un partido desde Nuevo partido o cambia entre Hoy y Mes para revisar otra jornada."
+              />
+            )}
+          </section>
+        </div>
 
-        <aside className="relative z-20 min-w-0 self-start xl:hidden 2xl:sticky 2xl:top-24 2xl:block">
+        <aside className="relative z-20 min-w-0 self-start xl:hidden 2xl:sticky 2xl:top-[var(--dashboard-shell-padding)] 2xl:mt-0 2xl:block">
           <ProductionInsightsPanel {...insightsPanelProps} />
         </aside>
       </div>
-    </>
+    </GridInsightsDockProvider>
   );
 }

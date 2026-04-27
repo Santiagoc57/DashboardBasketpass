@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { GripVertical, Mail, MapPin, MessageCircle } from "lucide-react";
+import { Mail, MapPin, MessageCircle, Pencil } from "lucide-react";
 import Link from "next/link";
 
 import { togglePersonActiveAction } from "@/app/actions/people";
@@ -12,7 +12,7 @@ import {
   getWhatsAppHref,
 } from "@/components/people/people-view-helpers";
 import { getRoleDisplayName } from "@/lib/display";
-import { parsePersonNotesMeta } from "@/lib/people-notes";
+import { getPersonRoleValues, parsePersonNotesMeta } from "@/lib/people-notes";
 import type { PersonListItem } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -166,8 +166,11 @@ export function PeopleTable({
     return (
       <th
         key={column}
+        draggable
+        onDragStart={() => handleColumnDragStart(column)}
+        onDragEnd={handleColumnDragEnd}
         className={cn(
-          "px-4 py-4 transition-colors xl:px-5 2xl:px-6",
+          "cursor-grab select-none px-4 py-4 transition-colors active:cursor-grabbing xl:px-5 2xl:px-6",
           PEOPLE_TABLE_LAPTOP_HIDDEN_COLUMNS.has(column) &&
             "hidden 2xl:table-cell",
           column === "profile" && "px-8",
@@ -182,25 +185,8 @@ export function PeopleTable({
           handleColumnDrop(column);
         }}
       >
-        <div
-          className={cn(
-            "flex items-center justify-between gap-2",
-          )}
-        >
+        <div className="flex items-center justify-start gap-2">
           <span>{label}</span>
-          <button
-            type="button"
-            draggable
-            aria-label={`Reordenar columna ${label}`}
-            onDragStart={() => handleColumnDragStart(column)}
-            onDragEnd={handleColumnDragEnd}
-            className={cn(
-              "inline-flex size-6 items-center justify-center rounded-md text-[#b0bccd] transition hover:bg-[#eef2f7] hover:text-[#617187]",
-              draggedColumn === column && "bg-white text-[#617187] shadow-sm",
-            )}
-          >
-            <GripVertical className="size-3.5" />
-          </button>
         </div>
       </th>
     );
@@ -208,8 +194,10 @@ export function PeopleTable({
 
   const renderCell = (person: PersonListItem, column: PeopleTableColumn) => {
     const meta = parsePersonNotesMeta(person.notes);
-    const displayRole = meta.role || person.primary_role || "";
-    const rolePresentation = getRolePresentation(displayRole);
+    const roles = getPersonRoleValues(meta, person.primary_role);
+    const primaryRole = roles[0] ?? "";
+    const displayRole = roles.map((role) => getRoleDisplayName(role)).join(", ");
+    const rolePresentation = getRolePresentation(primaryRole);
     const city = meta.city || "";
     const cityIndicator = getCityIndicator(city);
     const detailSummary = meta.coverage || "";
@@ -236,12 +224,15 @@ export function PeopleTable({
                 {canEdit ? (
                   <Link
                     href={`/people?edit=${person.id}`}
-                    className="truncate text-sm font-extrabold text-[var(--foreground)] transition hover:text-[var(--accent)]"
+                    aria-label={`Editar a ${person.full_name}`}
+                    title={`Editar a ${person.full_name}`}
+                    className="group inline-flex max-w-full items-center gap-1.5 text-[1.05rem] font-extrabold leading-[1.05] text-[var(--foreground)] transition hover:text-[var(--accent)]"
                   >
-                    {person.full_name}
+                    <span className="min-w-0 truncate">{person.full_name}</span>
+                    <Pencil className="size-3.5 shrink-0 text-[#94a3b8] transition group-hover:text-[var(--accent)]" />
                   </Link>
                 ) : (
-                  <p className="truncate text-sm font-extrabold text-[var(--foreground)]">
+                  <p className="truncate text-[1.05rem] font-extrabold leading-[1.05] text-[var(--foreground)]">
                     {person.full_name}
                   </p>
                 )}
@@ -332,7 +323,7 @@ export function PeopleTable({
                 <rolePresentation.Icon className="size-4" />
               </span>
               <p className="text-sm font-medium text-[var(--foreground)]">
-                {displayRole ? getRoleDisplayName(displayRole) : "Sin rol"}
+                {displayRole || "Sin rol"}
               </p>
             </div>
           </td>

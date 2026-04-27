@@ -15,6 +15,9 @@ export type IncidentActivityEvent = {
 
 export type IncidentRecord = {
   id: string;
+  sourceReportId: string;
+  assignmentId: string;
+  matchId: string;
   matchCode: string;
   matchLabel: string;
   competition: string;
@@ -58,6 +61,9 @@ export type IncidentRecord = {
     previewUrl?: string;
   }>;
   observations: string;
+  technicalObservation: string;
+  buildingObservation: string;
+  generalObservation: string;
   reporter: string;
   problems: IncidentProblem[];
   activity: IncidentActivityEvent[];
@@ -66,6 +72,9 @@ export type IncidentRecord = {
 export const INCIDENT_DIRECTORY: IncidentRecord[] = [
   {
     id: "#BK-8842",
+    sourceReportId: "report-8842",
+    assignmentId: "assignment-8842",
+    matchId: "match-8842",
     matchCode: "BOC - ATE",
     matchLabel: "Boca Juniors vs Atenas de Córdoba",
     competition: "Liga Nacional - J24",
@@ -106,6 +115,9 @@ export const INCIDENT_DIRECTORY: IncidentRecord[] = [
     ],
     observations:
       "Se detecta caída recurrente en la señal de subida del pabellón. El encoder local presenta pérdida de paquetes superior al 15%. Se recomienda conmutar a respaldo satelital si el bitrate baja de 8 Mbps.",
+    technicalObservation: "El encoder local presenta pérdida de paquetes superior al 15%. Se recomienda conmutar a respaldo satelital si el bitrate baja de 8 Mbps.",
+    buildingObservation: "",
+    generalObservation: "Se detecta caída recurrente en la señal de subida del pabellón.",
     reporter: "J. Martínez",
     problems: [
       { label: "Problema Internet", active: true },
@@ -140,6 +152,9 @@ export const INCIDENT_DIRECTORY: IncidentRecord[] = [
   },
   {
     id: "#BK-8841",
+    sourceReportId: "report-8841",
+    assignmentId: "assignment-8841",
+    matchId: "match-8841",
     matchCode: "QUI - INS",
     matchLabel: "Quimsa vs Instituto de Córdoba",
     competition: "Liga Nacional - J24",
@@ -179,6 +194,9 @@ export const INCIDENT_DIRECTORY: IncidentRecord[] = [
     ],
     observations:
       "La carga de overlays desde GES volvió con retraso después de reiniciar la sesión gráfica. El partido sigue al aire con marcador manual.",
+    technicalObservation: "La carga de overlays desde GES volvió con retraso después de reiniciar la sesión gráfica.",
+    buildingObservation: "",
+    generalObservation: "El partido sigue al aire con marcador manual.",
     reporter: "R. Sosa",
     problems: [
       { label: "Problema Internet", active: false },
@@ -213,6 +231,9 @@ export const INCIDENT_DIRECTORY: IncidentRecord[] = [
   },
   {
     id: "#BK-8840",
+    sourceReportId: "report-8840",
+    assignmentId: "assignment-8840",
+    matchId: "match-8840",
     matchCode: "BOC - RIV",
     matchLabel: "Bochas Sport Club vs River Plate",
     competition: "Liga Argentina - J18",
@@ -252,6 +273,9 @@ export const INCIDENT_DIRECTORY: IncidentRecord[] = [
     ],
     observations:
       "La prueba quedó incompleta por un retorno inestable del IFB. No hubo caída de señal, pero el equipo dejó seguimiento abierto para el inicio.",
+    technicalObservation: "La prueba quedó incompleta por un retorno inestable del IFB.",
+    buildingObservation: "",
+    generalObservation: "",
     reporter: "A. Juárez",
     problems: [
       { label: "Problema Internet", active: false },
@@ -286,6 +310,9 @@ export const INCIDENT_DIRECTORY: IncidentRecord[] = [
   },
   {
     id: "#BK-8839",
+    sourceReportId: "report-8839",
+    assignmentId: "assignment-8839",
+    matchId: "match-8839",
     matchCode: "FER - OBR",
     matchLabel: "Ferro Carril Oeste vs Obras Basket",
     competition: "Liga Nacional - J24",
@@ -325,6 +352,9 @@ export const INCIDENT_DIRECTORY: IncidentRecord[] = [
     ],
     observations:
       "El sistema de monitoreo reportó una deriva breve de telemetría. Se recompuso antes del inicio y no afectó la salida al aire.",
+    technicalObservation: "",
+    buildingObservation: "",
+    generalObservation: "El sistema de monitoreo reportó una deriva breve de telemetría. Se recompuso antes del inicio y no afectó la salida al aire.",
     reporter: "M. Díaz",
     problems: [
       { label: "Problema Internet", active: false },

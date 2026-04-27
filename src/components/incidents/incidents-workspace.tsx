@@ -1,12 +1,23 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useMemo, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+  type ChangeEvent,
+} from "react";
+import { useRouter } from "next/navigation";
 import { createPortal } from "react-dom";
 import {
   AlertTriangle,
   ArrowUpDown,
+  Building2,
+  Check,
   CheckCircle2,
+  CircleHelp,
   CircleX,
   Cpu,
   ChevronDown,
@@ -16,11 +27,11 @@ import {
   Eye,
   FileText,
   Gauge,
-  GripVertical,
   History,
   Image as ImageIcon,
   MapPin,
   Palette,
+  Pencil,
   ScanText,
   Sparkles,
   Upload,
@@ -33,12 +44,17 @@ import { LeagueLogoMarkClient } from "@/components/league-logo-mark-client";
 import { SectionPageHeader } from "@/components/layout/section-page-header";
 import { MatchSummaryCell } from "@/components/shared/match-summary-cell";
 import { badgeBaseClassName } from "@/components/ui/badge";
-import { HoverAvatarBadge } from "@/components/ui/hover-avatar-badge";
+import { EmptyState } from "@/components/ui/empty-state";
+import { PersonRoleStack } from "@/components/ui/person-role-stack";
 import { SeverityBadge } from "@/components/ui/severity-badge";
 import { SectionTableCard } from "@/components/ui/section-table-card";
 import { UnderlineTabs } from "@/components/ui/underline-tabs";
 import { ToolbarIconButton } from "@/components/ui/toolbar-icon-button";
 import { ToolbarSearchField } from "@/components/ui/toolbar-search-field";
+import type {
+  CollaboratorReportAttachment,
+  TechnicalCaptureKind,
+} from "@/lib/collaborator-report-attachments";
 import type {
   IncidentProblem,
   IncidentRecord,
@@ -53,8 +69,12 @@ type IncidentAttachment = {
 };
 
 type IncidentEvidenceState = {
+  speedtestAttachment?: IncidentAttachment | null;
   pingAttachment?: IncidentAttachment | null;
   gpuAttachment?: IncidentAttachment | null;
+  speedtest?: string;
+  ping?: string;
+  gpuLoad?: string;
   venueImages?: IncidentAttachment[];
 };
 
@@ -62,6 +82,11 @@ type IncidentEvidencePreview = {
   title: string;
   fileName: string;
   src: string;
+};
+
+type EvidenceUploadState = {
+  state: "idle" | "loading" | "error" | "done";
+  message: string;
 };
 
 type IncidentSortKey =
@@ -97,7 +122,6 @@ const DEFAULT_INCIDENT_CONTROL_COLUMNS: IncidentControlColumn[] = [
   "operator",
   "streamer",
   "issue",
-  "updated",
 ];
 const INCIDENT_CONTROL_COLUMN_SORT_KEY: Record<
   IncidentControlColumn,
@@ -114,28 +138,23 @@ const INCIDENT_CONTROL_COLUMN_SORT_KEY: Record<
   updated: "updated",
 };
 const INCIDENT_CONTROL_COLUMN_WIDTH_WEIGHT: Record<IncidentControlColumn, number> = {
-  league: 0.95,
-  id: 1.05,
-  date: 0.95,
-  match: 3,
-  severity: 1.15,
-  operator: 1.5,
-  streamer: 1.5,
-  issue: 1,
-  updated: 0.8,
+  league: 0.75,
+  id: 1,
+  date: 0.55,
+  match: 2.65,
+  severity: 1,
+  operator: 1.25,
+  streamer: 1.25,
+  issue: 0.85,
+  updated: 0.65,
 };
-const INCIDENT_CONTROL_LAPTOP_HIDDEN_COLUMNS = new Set<IncidentControlColumn>([
-  "date",
-  "streamer",
-  "updated",
-]);
 const INCIDENT_CONTROL_COMPACT_COLUMN_WIDTH_WEIGHT: Record<
   IncidentControlColumn,
   number
 > = {
   league: 0.8,
   id: 0.95,
-  date: 0.85,
+  date: 0.55,
   match: 2.9,
   severity: 1,
   operator: 1.05,
@@ -324,6 +343,16 @@ function formatBytes(bytes: number) {
   }
 
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function toIncidentAttachment(
+  attachment: CollaboratorReportAttachment & { signedUrl?: string },
+): IncidentAttachment {
+  return {
+    fileName: attachment.fileName,
+    fileSizeLabel: formatBytes(attachment.sizeBytes),
+    previewUrl: attachment.signedUrl,
+  };
 }
 
 function getInitials(name: string) {
@@ -573,7 +602,7 @@ function SortHeader({
   active: boolean;
   direction: SortDirection;
   onClick: () => void;
-  align?: "left" | "right";
+  align?: "left" | "center" | "right";
 }) {
   return (
     <button
@@ -581,6 +610,7 @@ function SortHeader({
       onClick={onClick}
       className={cn(
         "inline-flex items-center gap-1.5 uppercase transition hover:text-[#617187]",
+        align === "center" && "mx-auto",
         align === "right" && "ml-auto",
       )}
     >
@@ -689,10 +719,12 @@ function getIncidentActivityTone(tone?: "accent" | "warning" | "neutral" | "succ
 }
 
 function ProblemPill({ problem }: { problem: IncidentProblem }) {
+  const { Icon } = getProblemMeta(problem.label);
+
   return (
     <div
       className={cn(
-        "panel-radius flex min-h-[84px] items-center gap-3.5 border px-4 py-3",
+        "panel-radius flex min-h-[42px] items-center gap-3.5 border px-3 py-2",
         problem.active
           ? "border-[#ffd8df] bg-[#fff3f6]"
           : "border-[#e7eaef] bg-white",
@@ -704,19 +736,7 @@ function ProblemPill({ problem }: { problem: IncidentProblem }) {
           problem.active ? "bg-[#ffe7ed] text-[var(--accent)]" : "bg-[#f4f7fb] text-[#b0b8c5]",
         )}
       >
-        {problem.label.includes("Internet") ? (
-          <Wifi className="size-4" />
-        ) : problem.label.includes("OCR") ? (
-          <ScanText className="size-4" />
-        ) : problem.label.includes("Overlays") ? (
-          <Sparkles className="size-4" />
-        ) : problem.label.includes("IMG") ? (
-          <ImageIcon className="size-4" />
-        ) : problem.label.includes("Gráfica") ? (
-          <Palette className="size-4" />
-        ) : (
-          <AlertTriangle className="size-4" />
-        )}
+        <Icon className="size-4" />
       </span>
       <span
         className={cn(
@@ -731,23 +751,48 @@ function ProblemPill({ problem }: { problem: IncidentProblem }) {
 }
 
 function getProblemMeta(label: string) {
-  if (label.includes("Internet")) {
+  const normalizedLabel = label
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase();
+
+  if (normalizedLabel === "ST" || normalizedLabel.includes("SPEEDTEST")) {
+    return { label: "ST", Icon: Gauge };
+  }
+
+  if (normalizedLabel.includes("PING")) {
+    return { label: "PING", Icon: Wifi };
+  }
+
+  if (normalizedLabel.includes("GPU")) {
+    return { label: "GPU", Icon: Cpu };
+  }
+
+  if (normalizedLabel.includes("CLUB")) {
+    return { label: "CLUB", Icon: Building2 };
+  }
+
+  if (normalizedLabel.includes("OTRO")) {
+    return { label: "OTRO", Icon: CircleHelp };
+  }
+
+  if (normalizedLabel.includes("INTERNET")) {
     return { label: "INTERNET", Icon: Wifi };
   }
 
-  if (label.includes("OCR")) {
+  if (normalizedLabel.includes("OCR")) {
     return { label: "OCR", Icon: ScanText };
   }
 
-  if (label.includes("Overlays")) {
+  if (normalizedLabel.includes("OVERLAYS")) {
     return { label: "GES", Icon: Sparkles };
   }
 
-  if (label.includes("IMG")) {
+  if (normalizedLabel.includes("IMG")) {
     return { label: "IMG", Icon: ImageIcon };
   }
 
-  if (label.includes("Gráfica")) {
+  if (normalizedLabel.includes("GRAFICA")) {
     return { label: "GRÁFICA", Icon: Palette };
   }
 
@@ -821,14 +866,35 @@ function getBinaryIncidentCheckState(value: string) {
   if (!isNegative && isPositive) {
     return {
       label: "Sí",
-      Icon: CheckCircle2,
-      iconClassName: "text-[#12b76a]",
-      iconWrapClassName: "bg-[#dcfce7]",
+      Icon: Check,
+      iconClassName: "text-white",
+      iconWrapClassName: "bg-[#22c55e]",
       panelClassName: "border-[#d7eadf] bg-[#f3fcf6]",
       labelClassName: "text-[#178a56]",
     };
   }
 
+  return {
+    label: "No",
+    Icon: CircleX,
+    iconClassName: "text-[#f04461]",
+    iconWrapClassName: "bg-[#ffe7ed]",
+    panelClassName: "border-[#ffd8df] bg-[#fff3f6]",
+    labelClassName: "text-[#b42318]",
+  };
+}
+
+function getBooleanCheckState(isOk: boolean) {
+  if (isOk) {
+    return {
+      label: "Sí",
+      Icon: Check,
+      iconClassName: "text-white",
+      iconWrapClassName: "bg-[#22c55e]",
+      panelClassName: "border-[#d7eadf] bg-[#f3fcf6]",
+      labelClassName: "text-[#178a56]",
+    };
+  }
   return {
     label: "No",
     Icon: CircleX,
@@ -846,9 +912,9 @@ function ActiveProblemSummary({ problems }: { problems: IncidentProblem[] }) {
     return (
       <span
         title="SIN MARCAS"
-        className="inline-flex size-8 items-center justify-center rounded-full border border-[#d7eadf] bg-[#f3fcf6] text-[#178a56]"
+        className="inline-flex size-8 items-center justify-center rounded-full bg-[#22c55e] text-white"
       >
-        <CheckCircle2 className="size-4" />
+        <Check className="size-4" />
       </span>
     );
   }
@@ -875,23 +941,43 @@ function ActiveProblemSummary({ problems }: { problems: IncidentProblem[] }) {
 export function IncidentsWorkspace({
   incidents,
   hasGeminiKey,
+  canManageEvidence = false,
   embedded = false,
+  initialQuery = "",
   headerActionsPortalTarget = null,
   drawerPortalTarget = null,
   onSelectedIdChange,
 }: {
   incidents: IncidentRecord[];
   hasGeminiKey: boolean;
+  canManageEvidence?: boolean;
   embedded?: boolean;
+  initialQuery?: string;
   headerActionsPortalTarget?: HTMLElement | null;
   drawerPortalTarget?: HTMLElement | null;
   onSelectedIdChange?: (selectedId: string | null) => void;
 }) {
+  const router = useRouter();
+  const desktopEvidenceInputRef = useRef<HTMLInputElement | null>(null);
+  const [isRefreshingEvidence, startRefreshingEvidence] = useTransition();
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [editingIncidentId, setEditingIncidentId] = useState<string | null>(null);
+  const [editedChecksByIncident, setEditedChecksByIncident] = useState<
+    Record<string, {
+      testCheck?: boolean;
+      startCheck?: boolean;
+      graphicsCheck?: boolean;
+      aptoLineal?: boolean;
+      testTime?: string;
+      technicalObservation?: string;
+      buildingObservation?: string;
+      generalObservation?: string;
+    }>
+  >({});
   const [drawerTab, setDrawerTab] = useState<
     "details" | "activity" | "notes" | "images"
   >("details");
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(initialQuery);
   const [sortBy, setSortBy] = useState<IncidentSortKey>("severity");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [columnOrder, setColumnOrder] = useState<IncidentControlColumn[]>(() => {
@@ -923,6 +1009,13 @@ export function IncidentsWorkspace({
   >({});
   const [evidencePreview, setEvidencePreview] =
     useState<IncidentEvidencePreview | null>(null);
+  const [desktopUploadTarget, setDesktopUploadTarget] = useState<{
+    incidentId: string;
+    kind: TechnicalCaptureKind;
+  } | null>(null);
+  const [uploadStateByIncident, setUploadStateByIncident] = useState<
+    Record<string, Partial<Record<TechnicalCaptureKind, EvidenceUploadState>>>
+  >({});
 
   function handleSort(nextSortBy: IncidentSortKey) {
     if (sortBy === nextSortBy) {
@@ -1059,13 +1152,18 @@ export function IncidentsWorkspace({
   const selectedIncident =
     sortedIncidents.find((incident) => incident.id === selectedId) ?? null;
   const selectedEvidence = selectedIncident ? evidenceByIncident[selectedIncident.id] ?? {} : {};
-  const resolvedSpeedtest = selectedIncident?.speedtest ?? "";
-  const resolvedPing = selectedIncident?.ping ?? "";
+  const selectedUploadState =
+    selectedIncident ? uploadStateByIncident[selectedIncident.id] ?? {} : {};
+  const resolvedSpeedtest =
+    selectedEvidence.speedtest ?? selectedIncident?.speedtest ?? "";
+  const resolvedPingValue = selectedEvidence.ping ?? selectedIncident?.ping ?? "";
+  const resolvedGpuValue = selectedEvidence.gpuLoad ?? selectedIncident?.gpuLoad ?? "";
   const selectedPingAttachment =
     selectedEvidence.pingAttachment ?? selectedIncident?.pingAttachment ?? null;
   const selectedGpuAttachment =
     selectedEvidence.gpuAttachment ?? selectedIncident?.gpuAttachment ?? null;
-  const selectedSpeedtestAttachment = selectedIncident?.speedtestAttachment ?? null;
+  const selectedSpeedtestAttachment =
+    selectedEvidence.speedtestAttachment ?? selectedIncident?.speedtestAttachment ?? null;
   const selectedVenueImages =
     selectedEvidence.venueImages ?? selectedIncident?.venueImages ?? [];
   const selectedSeverityTone = selectedIncident
@@ -1074,14 +1172,34 @@ export function IncidentsWorkspace({
   const selectedIncidentTeams = selectedIncident
     ? splitIncidentMatchLabel(selectedIncident.matchLabel)
     : null;
-  const selectedTestCheck = selectedIncident
-    ? getBinaryIncidentCheckState(selectedIncident.testCheck)
+  const isSelectedIncidentEditing = editingIncidentId === selectedIncident?.id;
+  const editedChecks = selectedIncident ? editedChecksByIncident[selectedIncident.id] : undefined;
+  const resolvedTestCheckBool = selectedIncident
+    ? (editedChecks?.testCheck ?? (getBinaryIncidentCheckState(selectedIncident.testCheck).label === "Sí"))
     : null;
-  const selectedStartCheck = selectedIncident
-    ? getBinaryIncidentCheckState(selectedIncident.startCheck)
+  const resolvedStartCheckBool = selectedIncident
+    ? (editedChecks?.startCheck ?? (getBinaryIncidentCheckState(selectedIncident.startCheck).label === "Sí"))
     : null;
-  const selectedGraphicsCheck = selectedIncident
-    ? getBinaryIncidentCheckState(selectedIncident.graphicsCheck)
+  const resolvedGraphicsCheckBool = selectedIncident
+    ? (editedChecks?.graphicsCheck ?? (getBinaryIncidentCheckState(selectedIncident.graphicsCheck).label === "Sí"))
+    : null;
+  const resolvedAptoLineal = selectedIncident
+    ? (editedChecks?.aptoLineal ?? selectedIncident.aptoLineal)
+    : null;
+  const selectedTestCheck = resolvedTestCheckBool !== null ? getBooleanCheckState(resolvedTestCheckBool) : null;
+  const selectedStartCheck = resolvedStartCheckBool !== null ? getBooleanCheckState(resolvedStartCheckBool) : null;
+  const selectedGraphicsCheck = resolvedGraphicsCheckBool !== null ? getBooleanCheckState(resolvedGraphicsCheckBool) : null;
+  const resolvedTestTime = selectedIncident
+    ? (editedChecks?.testTime ?? selectedIncident.testTime)
+    : null;
+  const resolvedTechnicalObservation = selectedIncident
+    ? (editedChecks?.technicalObservation ?? selectedIncident.technicalObservation)
+    : null;
+  const resolvedBuildingObservation = selectedIncident
+    ? (editedChecks?.buildingObservation ?? selectedIncident.buildingObservation)
+    : null;
+  const resolvedGeneralObservation = selectedIncident
+    ? (editedChecks?.generalObservation ?? selectedIncident.generalObservation)
     : null;
   const selectedSpeedtestPreviewSrc = getIncidentAttachmentPreviewSource(
     selectedSpeedtestAttachment,
@@ -1098,6 +1216,11 @@ export function IncidentsWorkspace({
     "GPU",
     "#7C3AED",
   );
+  const isDesktopEvidenceBusy =
+    isRefreshingEvidence ||
+    selectedUploadState.speedtest?.state === "loading" ||
+    selectedUploadState.ping?.state === "loading" ||
+    selectedUploadState.gpu?.state === "loading";
 
   function handleVenueImagesChange(incident: IncidentRecord, files: FileList | null) {
     if (!files?.length) {
@@ -1117,6 +1240,28 @@ export function IncidentsWorkspace({
     }));
   }
 
+  function toggleEditedCheck(
+    incidentId: string,
+    field: "testCheck" | "startCheck" | "graphicsCheck" | "aptoLineal",
+    currentValue: boolean,
+  ) {
+    setEditedChecksByIncident((prev) => ({
+      ...prev,
+      [incidentId]: { ...prev[incidentId], [field]: !currentValue },
+    }));
+  }
+
+  function setEditedField(
+    incidentId: string,
+    field: "testTime" | "technicalObservation" | "buildingObservation" | "generalObservation",
+    value: string,
+  ) {
+    setEditedChecksByIncident((prev) => ({
+      ...prev,
+      [incidentId]: { ...prev[incidentId], [field]: value },
+    }));
+  }
+
   function openEvidencePreview(
     title: string,
     attachment: IncidentAttachment | null | undefined,
@@ -1131,6 +1276,157 @@ export function IncidentsWorkspace({
       fileName: attachment.fileName,
       src,
     });
+  }
+
+  function setIncidentUploadState(
+    incidentId: string,
+    kind: TechnicalCaptureKind,
+    nextState: EvidenceUploadState,
+  ) {
+    setUploadStateByIncident((current) => ({
+      ...current,
+      [incidentId]: {
+        ...current[incidentId],
+        [kind]: nextState,
+      },
+    }));
+  }
+
+  function openDesktopEvidencePicker(
+    incident: IncidentRecord,
+    kind: TechnicalCaptureKind,
+  ) {
+    if (!canManageEvidence) {
+      return;
+    }
+
+    setDesktopUploadTarget({
+      incidentId: incident.id,
+      kind,
+    });
+
+    if (desktopEvidenceInputRef.current) {
+      desktopEvidenceInputRef.current.value = "";
+      desktopEvidenceInputRef.current.click();
+    }
+  }
+
+  async function handleDesktopEvidenceUpload(
+    incident: IncidentRecord,
+    kind: TechnicalCaptureKind,
+    file: File,
+  ) {
+    setIncidentUploadState(incident.id, kind, {
+      state: "loading",
+      message: "Subiendo evidencia...",
+    });
+
+    try {
+      const formData = new FormData();
+      formData.set("assignmentId", incident.assignmentId);
+      formData.set("matchId", incident.matchId);
+      formData.set("reportId", incident.sourceReportId);
+      formData.set("kind", kind);
+      formData.set("image", file);
+
+      const response = await fetch("/api/collaborator-reports/attachments", {
+        method: "POST",
+        body: formData,
+      });
+
+      const payload = (await response.json().catch(() => null)) as
+        | {
+            attachment?: CollaboratorReportAttachment & { signedUrl?: string };
+            value?: string | null;
+            note?: string;
+            error?: string;
+          }
+        | null;
+
+      if (!response.ok) {
+        throw new Error(
+          payload?.error?.trim() || "No pudimos subir la evidencia técnica.",
+        );
+      }
+
+      const uploadedAttachment =
+        payload?.attachment && typeof payload.attachment.fileName === "string"
+          ? toIncidentAttachment(payload.attachment)
+          : null;
+      const uploadedValue =
+        typeof payload?.value === "string" && payload.value.trim()
+          ? payload.value.trim()
+          : null;
+
+      setEvidenceByIncident((current) => {
+        const incidentEvidence = current[incident.id] ?? {};
+
+        return {
+          ...current,
+          [incident.id]: {
+            ...incidentEvidence,
+            ...(kind === "speedtest"
+              ? {
+                  speedtestAttachment:
+                    uploadedAttachment ?? incidentEvidence.speedtestAttachment ?? null,
+                  ...(uploadedValue ? { speedtest: uploadedValue } : {}),
+                }
+              : kind === "ping"
+                ? {
+                    pingAttachment:
+                      uploadedAttachment ?? incidentEvidence.pingAttachment ?? null,
+                    ...(uploadedValue ? { ping: uploadedValue } : {}),
+                  }
+                : {
+                    gpuAttachment:
+                      uploadedAttachment ?? incidentEvidence.gpuAttachment ?? null,
+                    ...(uploadedValue ? { gpuLoad: uploadedValue } : {}),
+                  }),
+          },
+        };
+      });
+
+      setIncidentUploadState(incident.id, kind, {
+        state: "done",
+        message: uploadedValue
+          ? payload?.note?.trim() ||
+            "Evidencia actualizada y sincronizada con el reporte."
+          : "Evidencia cargada. Si el valor no cambió, la lectura automática no devolvió dato.",
+      });
+
+      startRefreshingEvidence(() => {
+        router.refresh();
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error && error.message.trim()
+          ? error.message
+          : "No pudimos subir la evidencia técnica.";
+
+      setIncidentUploadState(incident.id, kind, {
+        state: "error",
+        message,
+      });
+    }
+  }
+
+  function handleDesktopEvidenceInputChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0] ?? null;
+    const target = desktopUploadTarget;
+    event.currentTarget.value = "";
+    setDesktopUploadTarget(null);
+
+    if (!file || !target) {
+      return;
+    }
+
+    const incident = incidents.find((item) => item.id === target.incidentId);
+
+    if (!incident) {
+      return;
+    }
+
+    void handleDesktopEvidenceUpload(incident, target.kind, file);
   }
 
   const metrics = useMemo(() => {
@@ -1306,7 +1602,7 @@ export function IncidentsWorkspace({
         : column === "id"
           ? "ID"
           : column === "date"
-            ? "FECHA"
+            ? "F.A"
           : column === "match"
             ? "PARTIDO"
             : column === "severity"
@@ -1322,12 +1618,15 @@ export function IncidentsWorkspace({
     return (
       <th
         key={column}
+        draggable
+        onDragStart={() => handleColumnDragStart(column)}
+        onDragEnd={handleColumnDragEnd}
         className={cn(
-          "px-6 py-4 transition-colors",
-          INCIDENT_CONTROL_LAPTOP_HIDDEN_COLUMNS.has(column) &&
-            "hidden 2xl:table-cell",
-          column === "match" && "px-8",
-          isRightAligned && "px-8 text-right",
+          "px-3 py-2 transition-colors",
+          column === "match" && "px-4",
+          column === "date" && "text-center",
+          "cursor-grab select-none active:cursor-grabbing",
+          isRightAligned && "px-3 text-right",
           isDropTarget && "bg-[#f8fafc]",
         )}
         onDragOver={(event) => {
@@ -1342,6 +1641,7 @@ export function IncidentsWorkspace({
         <div
           className={cn(
             "flex items-center gap-2",
+            column === "date" && "justify-center",
             isRightAligned ? "justify-end" : "justify-between",
           )}
         >
@@ -1351,24 +1651,11 @@ export function IncidentsWorkspace({
               active={sortBy === sortKey}
               direction={sortDirection}
               onClick={() => handleSort(sortKey)}
-              align={isRightAligned ? "right" : "left"}
+              align={isRightAligned ? "right" : column === "date" ? "center" : "left"}
             />
           ) : (
             <span>{label}</span>
           )}
-          <button
-            type="button"
-            draggable
-            aria-label={`Reordenar columna ${label}`}
-            onDragStart={() => handleColumnDragStart(column)}
-            onDragEnd={handleColumnDragEnd}
-            className={cn(
-              "inline-flex size-6 items-center justify-center rounded-md text-[#b0bccd] transition hover:bg-[#eef2f7] hover:text-[#617187]",
-              draggedColumn === column && "bg-white text-[#617187] shadow-sm",
-            )}
-          >
-            <GripVertical className="size-3.5" />
-          </button>
         </div>
       </th>
     );
@@ -1378,43 +1665,45 @@ export function IncidentsWorkspace({
     incident: IncidentRecord,
     column: IncidentControlColumn,
   ) => {
-    const cellClassName = cn(
-      "px-4 py-4 xl:px-5 2xl:px-6 2xl:py-5",
-      INCIDENT_CONTROL_LAPTOP_HIDDEN_COLUMNS.has(column) &&
-        "hidden 2xl:table-cell",
-      column === "match" && (selectedIncident ? "px-5" : "px-8"),
-      column === "updated" && "px-8 text-right",
-    );
-
     switch (column) {
       case "league":
         return (
-          <td key={column} className={cellClassName}>
+          <td key={column} className="px-3 py-2 2xl:px-5 2xl:py-3">
             <LeagueLogoMarkClient
               league={getIncidentLeagueLabel(incident.competition)}
-              className="h-[3.3rem] w-[4.8rem]"
+              className="h-9 w-12"
             />
           </td>
         );
       case "id":
         return (
-          <td key={column} className={cellClassName}>
-            <span className="inline-flex rounded-full border border-[#f3cfd8] bg-[#fff3f6] px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-[var(--accent)]">
+          <td key={column} className="px-3 py-2 2xl:px-5 2xl:py-3">
+            <span className="inline-flex rounded-full border border-[#f3cfd8] bg-[#fff3f6] px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--accent)]">
               {incident.id}
             </span>
           </td>
         );
-      case "date":
+      case "date": {
+        const [dateDay, dateMonth] = formatCompactIncidentDate(incident.eventDate).split(" ");
         return (
-          <td key={column} className={cellClassName}>
-            <span className="inline-flex text-sm font-black uppercase tracking-[0.12em] text-[#617187]">
-              {formatCompactIncidentDate(incident.eventDate)}
+          <td key={column} className="px-2 py-2 text-center 2xl:px-5 2xl:py-3">
+            <span className="inline-flex flex-col items-center leading-none">
+              <span className="text-sm font-black uppercase tracking-[0.12em] text-[#617187]">{dateDay}</span>
+              <span className="text-[10px] font-black uppercase tracking-[0.12em] text-[#94a3b8]">{dateMonth}</span>
             </span>
           </td>
         );
+      }
       case "match":
         return (
-          <td key={column} className={cellClassName}>
+          <td
+            key={column}
+            className={cn(
+              selectedIncident
+                ? "px-3 py-2 2xl:px-5 2xl:py-3"
+                : "px-3 py-2 xl:px-4 2xl:px-6 2xl:py-3",
+            )}
+          >
             <MatchSummaryCell
               matchLabel={incident.matchLabel}
               competition={incident.competition}
@@ -1425,7 +1714,7 @@ export function IncidentsWorkspace({
         );
       case "severity":
         return (
-          <td key={column} className={cellClassName}>
+          <td key={column} className="px-2 py-2 2xl:px-5 2xl:py-3">
             <SeverityBadge
               severity={incident.severity}
               className="rounded-full text-xs"
@@ -1434,44 +1723,38 @@ export function IncidentsWorkspace({
         );
       case "operator":
         return (
-          <td key={column} className={cellClassName}>
-            <div className="flex min-w-0 items-center gap-3 text-sm font-medium text-[#4b5c74]">
-              <HoverAvatarBadge
-                initials={getInitials(incident.operatorControl)}
-                roleLabel="Operador"
-                tone="accent"
-                size="sm"
-              />
-              <span className="min-w-0 flex-1 truncate">{incident.operatorControl}</span>
-            </div>
+          <td key={column} className="px-3 py-2 2xl:px-5 2xl:py-3">
+            <PersonRoleStack
+              label="Operador"
+              value={incident.operatorControl}
+              initials={getInitials(incident.operatorControl)}
+              size="sm"
+            />
           </td>
         );
       case "streamer":
         return (
-          <td key={column} className={cellClassName}>
-            <div className="flex min-w-0 items-center gap-3 text-sm font-medium text-[#4b5c74]">
-              <HoverAvatarBadge
-                initials={getInitials(incident.streamer)}
-                roleLabel="Streamer"
-                tone="neutral"
-                size="sm"
-              />
-              <span className="min-w-0 flex-1 truncate">{incident.streamer}</span>
-            </div>
+          <td key={column} className="px-3 py-2 2xl:px-5 2xl:py-3">
+            <PersonRoleStack
+              label="Streamer"
+              value={incident.streamer}
+              initials={getInitials(incident.streamer)}
+              size="sm"
+            />
           </td>
         );
       case "issue":
         return (
           <td
             key={column}
-            className={cn(cellClassName, "max-w-[320px] text-sm font-medium text-[#4b5c74]")}
+            className="max-w-[260px] px-2 py-2 text-sm font-medium text-[#4b5c74] 2xl:px-5 2xl:py-3"
           >
             <ActiveProblemSummary problems={incident.problems} />
           </td>
         );
       case "updated":
         return (
-          <td key={column} className={cn(cellClassName, "text-sm text-[#70819b]")}>
+          <td key={column} className="px-2 py-2 text-right text-sm text-[#70819b] 2xl:px-5 2xl:py-3">
             {incident.updatedRelative}
           </td>
         );
@@ -1487,7 +1770,6 @@ export function IncidentsWorkspace({
         value={query}
         onChange={(event) => setQuery(event.target.value)}
         placeholder="Buscar incidencia, partido u operador..."
-        className="w-full xl:min-w-[18rem] 2xl:min-w-[280px]"
         inputClassName="text-sm font-medium text-[var(--foreground)] placeholder:text-[#94a3b8]"
       />
 
@@ -1538,26 +1820,27 @@ export function IncidentsWorkspace({
   }, [columnOrder, selectedIncident]);
 
   const workspaceContent = (
-    <div className="flex min-w-0 flex-col gap-8">
+    <div className="flex min-w-0 flex-col gap-0">
       {embedded && !headerActionsPortal ? workspaceActions : null}
       <section
         className={cn(
-          "grid gap-4 sm:grid-cols-2",
-          selectedIncident ? "xl:grid-cols-2 2xl:grid-cols-4" : "lg:grid-cols-4",
+          "grid gap-4 pb-6 pt-5 sm:grid-cols-2 lg:grid-cols-4",
         )}
       >
-        <article className="panel-surface border border-[var(--border)] bg-[var(--surface)] p-5">
-          <p className="text-[11px] font-black uppercase tracking-[0.18em] text-[#70819b]">
-            Total incidencias
-          </p>
-          <p className="mt-3 text-4xl font-black tracking-[-0.04em] text-[var(--foreground)]">
-            {metrics.total}
-          </p>
-          <div className="mt-5 flex items-center justify-between gap-4">
+        <article className="panel-surface !h-[120px] !min-h-[120px] flex flex-col overflow-hidden border border-[var(--border)] bg-[var(--surface)] p-4">
+          <div className="flex min-w-0 items-start justify-between gap-3">
+            <p className="min-w-0 pt-1 text-[11px] font-black uppercase tracking-[0.18em] text-[#70819b]">
+              Total incidencias
+            </p>
+            <p className="shrink-0 text-4xl font-black leading-none tracking-[-0.04em] text-[var(--foreground)]">
+              {metrics.total}
+            </p>
+          </div>
+          <div className="mt-auto flex items-center gap-3">
             <span className="inline-flex items-center rounded-xl bg-[#f4f7fb] px-2.5 py-1 text-[11px] font-bold text-[#617187]">
               {metrics.competitionCount} competencias
             </span>
-            <div className="h-1.5 w-24 overflow-hidden rounded-full bg-[#e7edf5]">
+            <div className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-[#e7edf5]">
               <div
                 className="h-full rounded-full bg-[var(--accent)]"
                 style={{ width: `${Math.max(10, Math.min(metrics.total * 18, 100))}%` }}
@@ -1566,18 +1849,20 @@ export function IncidentsWorkspace({
           </div>
         </article>
 
-        <article className="panel-surface border border-[#ffd7df] bg-[#fff5f7] p-5 ring-1 ring-[#ffd7df]">
-          <p className="text-[11px] font-black uppercase tracking-[0.18em] text-[var(--accent)]">
-            Críticas
-          </p>
-          <p className="mt-3 text-4xl font-black tracking-[-0.04em] text-[var(--accent)]">
-            {metrics.critical}
-          </p>
-          <div className="mt-5 flex items-center justify-between gap-4">
+        <article className="panel-surface !h-[120px] !min-h-[120px] flex flex-col overflow-hidden border border-[#ffd7df] bg-[#fff5f7] p-4 ring-1 ring-[#ffd7df]">
+          <div className="flex min-w-0 items-start justify-between gap-3">
+            <p className="min-w-0 pt-1 text-[11px] font-black uppercase tracking-[0.18em] text-[var(--accent)]">
+              Críticas
+            </p>
+            <p className="shrink-0 text-4xl font-black leading-none tracking-[-0.04em] text-[var(--accent)]">
+              {metrics.critical}
+            </p>
+          </div>
+          <div className="mt-auto flex items-center gap-3">
             <span className="inline-flex items-center rounded-xl bg-[#ffe4ea] px-2.5 py-1 text-[11px] font-bold text-[var(--accent)]">
               Atención inmediata
             </span>
-            <div className="h-1.5 w-24 overflow-hidden rounded-full bg-[#f3c8d4]">
+            <div className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-[#f3c8d4]">
               <div
                 className="h-full rounded-full bg-[var(--accent)]"
                 style={{ width: `${metrics.criticalPercent}%` }}
@@ -1586,18 +1871,20 @@ export function IncidentsWorkspace({
           </div>
         </article>
 
-        <article className="panel-surface border border-[#ffe6c7] bg-white p-5">
-          <p className="text-[11px] font-black uppercase tracking-[0.18em] text-[#8a6a27]">
-            Altas y medias
-          </p>
-          <p className="mt-3 text-4xl font-black tracking-[-0.04em] text-[var(--foreground)]">
-            {metrics.mediumHigh}
-          </p>
-          <div className="mt-5 flex items-center justify-between gap-4">
+        <article className="panel-surface !h-[120px] !min-h-[120px] flex flex-col overflow-hidden border border-[#ffe6c7] bg-white p-4">
+          <div className="flex min-w-0 items-start justify-between gap-3">
+            <p className="min-w-0 pt-1 text-[11px] font-black uppercase tracking-[0.18em] text-[#8a6a27]">
+              Altas y medias
+            </p>
+            <p className="shrink-0 text-4xl font-black leading-none tracking-[-0.04em] text-[var(--foreground)]">
+              {metrics.mediumHigh}
+            </p>
+          </div>
+          <div className="mt-auto flex items-center gap-3">
             <span className="inline-flex items-center rounded-xl bg-[#fff4e8] px-2.5 py-1 text-[11px] font-bold text-[#d97706]">
               {metrics.mediumHighPercent}% del total
             </span>
-            <div className="h-1.5 w-24 overflow-hidden rounded-full bg-[#fae5c5]">
+            <div className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-[#fae5c5]">
               <div
                 className="h-full rounded-full bg-[#f59e0b]"
                 style={{ width: `${metrics.mediumHighPercent}%` }}
@@ -1606,18 +1893,20 @@ export function IncidentsWorkspace({
           </div>
         </article>
 
-        <article className="panel-surface border border-[#d8f0e3] bg-[var(--surface)] p-5">
-          <p className="text-[11px] font-black uppercase tracking-[0.18em] text-[#4b7a61]">
-            Partidos afectados
-          </p>
-          <p className="mt-3 text-4xl font-black tracking-[-0.04em] text-[var(--foreground)]">
-            {metrics.affectedMatches}
-          </p>
-          <div className="mt-5 flex items-center justify-between gap-4">
+        <article className="panel-surface !h-[120px] !min-h-[120px] flex flex-col overflow-hidden border border-[#d8f0e3] bg-[var(--surface)] p-4">
+          <div className="flex min-w-0 items-start justify-between gap-3">
+            <p className="min-w-0 pt-1 text-[11px] font-black uppercase tracking-[0.18em] text-[#4b7a61]">
+              Partidos afectados
+            </p>
+            <p className="shrink-0 text-4xl font-black leading-none tracking-[-0.04em] text-[var(--foreground)]">
+              {metrics.affectedMatches}
+            </p>
+          </div>
+          <div className="mt-auto flex items-center gap-3">
             <span className="inline-flex items-center rounded-xl bg-[#ebfaf1] px-2.5 py-1 text-[11px] font-bold text-[#0f9f61]">
               {metrics.affectedMatchesPercent}% del total
             </span>
-            <div className="h-1.5 w-24 overflow-hidden rounded-full bg-[#dcefe5]">
+            <div className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-[#dcefe5]">
               <div
                 className="h-full rounded-full bg-[#10b981]"
                 style={{ width: `${metrics.affectedMatchesPercent}%` }}
@@ -1641,64 +1930,72 @@ export function IncidentsWorkspace({
               <p className="text-xs font-black uppercase tracking-[0.14em] text-[#617187]">
                 Mostrando {filteredIncidents.length} de {incidents.length} incidencias
               </p>
-              <div className="flex gap-1">
-                <button className="inline-flex size-9 items-center justify-center rounded-lg border border-[var(--border)] bg-white text-[#94a3b8]">
-                  1
-                </button>
-              </div>
             </>
           }
           className="flex h-full min-h-0 min-w-0 flex-col"
         >
-          <div className="min-w-0 flex-1 overflow-auto">
-            <table className="min-w-full table-fixed text-left">
-              <colgroup>
-                {columnOrder.map((column) => (
-                  <col
-                    key={column}
-                    className={cn(
-                      INCIDENT_CONTROL_LAPTOP_HIDDEN_COLUMNS.has(column) &&
-                        "hidden 2xl:table-column",
+          {filteredIncidents.length ? (
+            <div className="min-w-0 flex-1 overflow-auto">
+              <table className="min-w-full table-fixed text-left">
+                <colgroup>
+                  {columnOrder.map((column) => (
+                    <col
+                      key={column}
+                      style={{ width: incidentColumnWidths[column] }}
+                    />
+                  ))}
+                </colgroup>
+                <thead>
+                  <tr className="bg-[#fafbfd] text-[11px] font-black uppercase tracking-[0.18em] text-[#94a3b8]">
+                    {columnOrder.map((column) =>
+                      renderIncidentControlHeader(column),
                     )}
-                    style={{ width: incidentColumnWidths[column] }}
-                  />
-                ))}
-              </colgroup>
-              <thead>
-                <tr className="bg-[#fafbfd] text-[11px] font-black uppercase tracking-[0.18em] text-[#94a3b8]">
-                  {columnOrder.map((column) =>
-                    renderIncidentControlHeader(column),
-                  )}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[#edf1f6]">
-                {sortedIncidents.map((incident) => {
-                  const active = selectedIncident?.id === incident.id;
-                  const rowTone = getIncidentRowTone(incident.severity);
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#edf1f6]">
+                  {sortedIncidents.map((incident) => {
+                    const active = selectedIncident?.id === incident.id;
+                    const rowTone = getIncidentRowTone(incident.severity);
 
-                  return (
-                    <tr
-                      key={incident.id}
-                      onClick={() => {
-                        setSelectedId(incident.id);
-                        setDrawerTab("details");
-                      }}
-                      className={cn(
-                        "cursor-pointer transition",
-                        active
-                          ? rowTone.active
-                          : rowTone.hover,
-                      )}
-                    >
-                      {columnOrder.map((column) =>
-                        renderIncidentControlCell(incident, column),
-                      )}
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                    return (
+                      <tr
+                        key={incident.id}
+                        onClick={() => {
+                          setSelectedId(incident.id);
+                          setDrawerTab("details");
+                        }}
+                        className={cn(
+                          "cursor-pointer transition",
+                          active
+                            ? rowTone.active
+                            : rowTone.hover,
+                        )}
+                      >
+                        {columnOrder.map((column) =>
+                          renderIncidentControlCell(incident, column),
+                        )}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="p-8">
+              <EmptyState
+                title={
+                  incidents.length
+                    ? "No encontramos incidencias con ese filtro"
+                    : "Todavía no hay incidencias cargadas"
+                }
+                description={
+                  incidents.length
+                    ? "Prueba con otra liga o búsqueda para volver al tablero completo."
+                    : "Cuando un colaborador reporte una incidencia desde Mi jornada, aparecerá aquí con su detalle técnico."
+                }
+              />
+            </div>
+          )}
         </SectionTableCard>
       </div>
     </div>
@@ -1706,8 +2003,8 @@ export function IncidentsWorkspace({
 
   const selectedIncidentDrawer = selectedIncident ? (
     <aside className="min-w-0 self-start 2xl:sticky 2xl:top-24">
-      <div className="panel-surface fixed inset-x-4 bottom-4 top-20 z-40 flex flex-col overflow-hidden border border-[var(--border)] bg-[var(--surface)] 2xl:static 2xl:h-[calc(100vh-8rem)] 2xl:w-full">
-        <div className="border-b border-[var(--border)] p-6">
+      <div className="panel-surface fixed inset-x-2 bottom-3 top-3 z-40 flex flex-col overflow-hidden border border-[var(--border)] bg-[var(--surface)] shadow-[0_28px_70px_rgba(15,23,42,0.18)] transition md:left-auto md:right-2 md:w-[25rem] md:max-w-[calc(100vw-1rem)] 2xl:static 2xl:h-[calc(100vh-8rem)] 2xl:w-full 2xl:shadow-none">
+        <div className="border-b border-[var(--border)] p-5">
         <div className="mb-4 flex items-center justify-between gap-4">
           <div className="flex flex-wrap items-center gap-2">
             <span className="inline-flex rounded-full border border-[#f3cfd8] bg-[#fff3f6] px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-[var(--accent)]">
@@ -1718,11 +2015,14 @@ export function IncidentsWorkspace({
                 backgroundColor: getTeamLeagueColorSet(
                   getIncidentLeagueLabel(selectedIncident.competition),
                 ).soft,
+                borderColor: getTeamLeagueColorSet(
+                  getIncidentLeagueLabel(selectedIncident.competition),
+                ).accent,
                 color: getTeamLeagueColorSet(
                   getIncidentLeagueLabel(selectedIncident.competition),
                 ).accent,
               }}
-              className="inline-flex rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em]"
+              className="inline-flex rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em]"
             >
               {getIncidentLeagueLabel(selectedIncident.competition)}
             </span>
@@ -1743,9 +2043,30 @@ export function IncidentsWorkspace({
         <div className="flex items-end justify-between gap-6">
           <div className="min-w-0">
           <div className="space-y-1">
-            <p className="text-[1.6rem] font-black leading-[1.05] tracking-[-0.04em] text-[var(--foreground)]">
-              {selectedIncidentTeams?.homeTeam ?? selectedIncident.matchLabel}
-            </p>
+            <div className="flex min-w-0 items-center gap-2">
+              <p className="min-w-0 text-[1.6rem] font-black leading-[1.05] tracking-[-0.04em] text-[var(--foreground)]">
+                {selectedIncidentTeams?.homeTeam ?? selectedIncident.matchLabel}
+              </p>
+              {canManageEvidence ? (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setEditingIncidentId((current) =>
+                      current === selectedIncident.id ? null : selectedIncident.id,
+                    )
+                  }
+                  aria-label={isSelectedIncidentEditing ? "Cerrar edición" : "Editar incidencia"}
+                  className={cn(
+                    "inline-flex size-8 shrink-0 items-center justify-center rounded-full transition",
+                    isSelectedIncidentEditing
+                      ? "bg-[var(--accent)] text-white hover:bg-[var(--accent-strong)]"
+                      : "bg-[#f4f7fb] text-[#70819b] hover:bg-[#eef2f6] hover:text-[var(--accent)]",
+                  )}
+                >
+                  <Pencil className="size-4" />
+                </button>
+              ) : null}
+            </div>
             <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-[1.6rem] font-black leading-[1.05] tracking-[-0.04em] text-[var(--foreground)]">
               <span className="text-[var(--accent)]">vs</span>
               <span>{selectedIncidentTeams?.awayTeam || selectedIncident.matchLabel}</span>
@@ -1781,18 +2102,18 @@ export function IncidentsWorkspace({
               onClick: () => setDrawerTab("details"),
             },
             {
+              key: "notes",
+              label: "Obs.",
+              icon: FileText,
+              active: drawerTab === "notes",
+              onClick: () => setDrawerTab("notes"),
+            },
+            {
               key: "activity",
               label: "Log",
               icon: History,
               active: drawerTab === "activity",
               onClick: () => setDrawerTab("activity"),
-            },
-            {
-              key: "notes",
-              label: "Notas",
-              icon: FileText,
-              active: drawerTab === "notes",
-              onClick: () => setDrawerTab("notes"),
             },
             {
               key: "images",
@@ -1804,12 +2125,12 @@ export function IncidentsWorkspace({
           ]}
         />
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6 xl:max-h-none">
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 xl:max-h-none">
           {drawerTab === "details" ? (
             <div className="space-y-8">
         <section className="space-y-4">
           <h4 className="text-[11px] font-black uppercase tracking-[0.18em] text-[#94a3b8]">
-            Severidad
+            Gravedad
           </h4>
           <div className="grid gap-3">
             <div
@@ -1843,37 +2164,21 @@ export function IncidentsWorkspace({
             Responsables
           </h4>
           <div className="grid grid-cols-2 gap-3">
-            <div className="panel-radius border border-[var(--border)] bg-white p-4">
-              <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#94a3b8]">
-                Operador
-              </p>
-              <div className="mt-3 flex items-center gap-3">
-                <HoverAvatarBadge
-                  initials={getInitials(selectedIncident.operatorControl)}
-                  roleLabel="Operador"
-                  tone="accent"
-                  size="md"
-                />
-                <p className="text-sm font-bold text-[var(--foreground)]">
-                  {selectedIncident.operatorControl}
-                </p>
-              </div>
+            <div className="panel-radius min-w-0 border border-[var(--border)] bg-white p-3">
+              <PersonRoleStack
+                label="Operador"
+                value={selectedIncident.operatorControl}
+                initials={getInitials(selectedIncident.operatorControl)}
+                size="sm"
+              />
             </div>
-            <div className="panel-radius border border-[var(--border)] bg-white p-4">
-              <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#94a3b8]">
-                Streamer
-              </p>
-              <div className="mt-3 flex items-center gap-3">
-                <HoverAvatarBadge
-                  initials={getInitials(selectedIncident.streamer)}
-                  roleLabel="Streamer"
-                  tone="neutral"
-                  size="md"
-                />
-                <p className="text-sm font-bold text-[var(--foreground)]">
-                  {selectedIncident.streamer}
-                </p>
-              </div>
+            <div className="panel-radius min-w-0 border border-[var(--border)] bg-white p-3">
+              <PersonRoleStack
+                label="Streamer"
+                value={selectedIncident.streamer}
+                initials={getInitials(selectedIncident.streamer)}
+                size="sm"
+              />
             </div>
           </div>
         </section>
@@ -1882,67 +2187,65 @@ export function IncidentsWorkspace({
           <h4 className="text-[11px] font-black uppercase tracking-[0.18em] text-[#94a3b8]">
             Contexto del partido
           </h4>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="panel-radius flex min-h-[84px] items-center gap-3 border border-[var(--border)] bg-white p-4">
-              <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-full bg-[#f4f7fb] text-[#7c8aa0]">
-                <Cpu className="size-[18px]" />
+          <div className="grid grid-cols-3 gap-3">
+            <div className="panel-radius flex min-h-[42px] flex-col items-center justify-center gap-1 border border-[var(--border)] bg-white px-2 py-2">
+              <span className="inline-flex size-8 shrink-0 items-center justify-center rounded-full bg-[#f4f7fb] text-[#7c8aa0]">
+                <Cpu className="size-4" />
               </span>
-              <div className="min-w-0">
-                <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#94a3b8]">
-                  Tipo
-                </p>
-                <p className="mt-1 text-sm font-bold text-[var(--foreground)]">
-                  {selectedIncident.transmissionType}
-                </p>
-              </div>
+              <p className="text-[9px] font-black uppercase tracking-[0.14em] text-[#94a3b8]">Tipo</p>
+              <p className="truncate text-center text-xs font-bold text-[var(--foreground)]">
+                {selectedIncident.transmissionType}
+              </p>
             </div>
-            <div className="panel-radius flex min-h-[84px] items-center gap-3 border border-[var(--border)] bg-white p-4">
-              <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-full bg-[#f4f7fb] text-[#7c8aa0]">
-                <Wifi className="size-[18px]" />
+            <div className="panel-radius flex min-h-[42px] flex-col items-center justify-center gap-1 border border-[var(--border)] bg-white px-2 py-2">
+              <span className="inline-flex size-8 shrink-0 items-center justify-center rounded-full bg-[#f4f7fb] text-[#7c8aa0]">
+                <Wifi className="size-4" />
               </span>
-              <div className="min-w-0">
-                <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#94a3b8]">
-                  Señal
-                </p>
-                <p className="mt-1 text-sm font-bold text-[var(--foreground)]">
-                  {selectedIncident.signalDelivery}
-                </p>
-              </div>
+              <p className="text-[9px] font-black uppercase tracking-[0.14em] text-[#94a3b8]">Señal</p>
+              <p className="truncate text-center text-xs font-bold text-[var(--foreground)]">
+                {selectedIncident.signalDelivery}
+              </p>
             </div>
             <div
+              role={isSelectedIncidentEditing ? "button" : undefined}
+              tabIndex={isSelectedIncidentEditing ? 0 : undefined}
+              onClick={
+                isSelectedIncidentEditing
+                  ? () => toggleEditedCheck(selectedIncident.id, "aptoLineal", resolvedAptoLineal!)
+                  : undefined
+              }
+              onKeyDown={
+                isSelectedIncidentEditing
+                  ? (e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        toggleEditedCheck(selectedIncident.id, "aptoLineal", resolvedAptoLineal!);
+                      }
+                    }
+                  : undefined
+              }
               className={cn(
-                "panel-radius col-span-2 flex min-h-[84px] items-center justify-between gap-3 border px-4 py-3",
-                selectedIncident.aptoLineal
+                "panel-radius flex min-h-[42px] flex-col items-center justify-center gap-1 border px-2 py-2 transition",
+                isSelectedIncidentEditing && "cursor-pointer hover:opacity-80",
+                resolvedAptoLineal
                   ? "border-[#d7eadf] bg-[#f3fcf6]"
                   : "border-[#ffd8df] bg-[#fff3f6]",
               )}
             >
-              <div>
-                <p
-                  className={cn(
-                    "text-[10px] font-black uppercase tracking-[0.16em]",
-                    selectedIncident.aptoLineal
-                      ? "text-[#178a56]"
-                      : "text-[#b42318]",
-                  )}
-                >
-                  Apto lineal
-                </p>
-              </div>
               <span
                 className={cn(
-                  "inline-flex size-10 items-center justify-center rounded-full",
-                  selectedIncident.aptoLineal
-                    ? "bg-[#dcfce7] text-[#12b76a]"
-                    : "bg-[#ffe7ed] text-[#f04461]",
+                  "inline-flex size-8 items-center justify-center rounded-full",
+                  resolvedAptoLineal ? "bg-[#dcfce7] text-[#12b76a]" : "bg-[#ffe7ed] text-[#f04461]",
                 )}
               >
-                {selectedIncident.aptoLineal ? (
-                  <CheckCircle2 className="size-7" />
-                ) : (
-                  <CircleX className="size-7" />
-                )}
+                {resolvedAptoLineal ? <CheckCircle2 className="size-5" /> : <CircleX className="size-5" />}
               </span>
+              <p className={cn(
+                "text-[9px] font-black uppercase tracking-[0.14em]",
+                resolvedAptoLineal ? "text-[#178a56]" : "text-[#b42318]",
+              )}>
+                Apto lineal
+              </p>
             </div>
           </div>
         </section>
@@ -1952,201 +2255,147 @@ export function IncidentsWorkspace({
             Pruebas de salida
           </h4>
           <div className="grid grid-cols-2 gap-3">
-            <div className="panel-radius flex min-h-[84px] items-center gap-3 border border-[var(--border)] bg-white p-4">
+            <div className="panel-radius flex min-h-[42px] items-center gap-3 border border-[var(--border)] bg-white px-3 py-2">
               <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-full bg-[#f4f7fb] text-[#94a3b8]">
                 <Clock3 className="size-7" />
               </span>
-              <div>
+              <div className="min-w-0 flex-1">
                 <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#94a3b8]">
                   Hora
                 </p>
-                <p className="mt-2 text-sm font-bold text-[var(--foreground)]">
-                  {selectedIncident.testTime}
-                </p>
+                {isSelectedIncidentEditing ? (
+                  <input
+                    type="time"
+                    value={resolvedTestTime ?? ""}
+                    onChange={(e) => setEditedField(selectedIncident.id, "testTime", e.target.value)}
+                    className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[#f8fafc] px-2 py-1 text-sm font-bold text-[var(--foreground)] focus:border-[var(--accent)] focus:outline-none"
+                  />
+                ) : (
+                  <p className="mt-2 text-sm font-bold text-[var(--foreground)]">
+                    {resolvedTestTime}
+                  </p>
+                )}
               </div>
             </div>
-            <div
-              className={cn(
-                "panel-radius flex min-h-[84px] items-center gap-3 border p-4",
-                selectedTestCheck?.panelClassName,
-              )}
-            >
-              <span
+            {(
+              [
+                { field: "testCheck" as const, label: "Prueba", check: selectedTestCheck, bool: resolvedTestCheckBool },
+                { field: "startCheck" as const, label: "Inicio", check: selectedStartCheck, bool: resolvedStartCheckBool },
+                { field: "graphicsCheck" as const, label: "Gráfica", check: selectedGraphicsCheck, bool: resolvedGraphicsCheckBool },
+              ] as const
+            ).map(({ field, label, check, bool }) => (
+              <div
+                key={field}
+                role={isSelectedIncidentEditing ? "button" : undefined}
+                tabIndex={isSelectedIncidentEditing ? 0 : undefined}
+                onClick={
+                  isSelectedIncidentEditing
+                    ? () => toggleEditedCheck(selectedIncident.id, field, bool!)
+                    : undefined
+                }
+                onKeyDown={
+                  isSelectedIncidentEditing
+                    ? (e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          toggleEditedCheck(selectedIncident.id, field, bool!);
+                        }
+                      }
+                    : undefined
+                }
                 className={cn(
-                  "inline-flex size-10 shrink-0 items-center justify-center rounded-full",
-                  selectedTestCheck?.iconWrapClassName,
-                  selectedTestCheck?.iconClassName,
+                  "panel-radius flex min-h-[42px] items-center gap-3 border px-3 py-2 transition",
+                  isSelectedIncidentEditing && "cursor-pointer hover:opacity-80",
+                  check?.panelClassName,
                 )}
               >
-                {selectedTestCheck ? (
-                  <selectedTestCheck.Icon className="size-7" />
-                ) : null}
-              </span>
-              <div>
-                <p
+                <span
                   className={cn(
-                    "text-[10px] font-black uppercase tracking-[0.16em]",
-                    selectedTestCheck?.labelClassName,
+                    "inline-flex size-10 shrink-0 items-center justify-center rounded-full",
+                    check?.iconWrapClassName,
+                    check?.iconClassName,
                   )}
                 >
-                  Prueba
-                </p>
+                  {check ? <check.Icon className="size-7" /> : null}
+                </span>
+                <div>
+                  <p
+                    className={cn(
+                      "text-[10px] font-black uppercase tracking-[0.16em]",
+                      check?.labelClassName,
+                    )}
+                  >
+                    {label}
+                  </p>
+                </div>
               </div>
-            </div>
-            <div
-              className={cn(
-                "panel-radius flex min-h-[84px] items-center gap-3 border p-4",
-                selectedStartCheck?.panelClassName,
-              )}
-            >
-              <span
-                className={cn(
-                  "inline-flex size-10 shrink-0 items-center justify-center rounded-full",
-                  selectedStartCheck?.iconWrapClassName,
-                  selectedStartCheck?.iconClassName,
-                )}
-              >
-                {selectedStartCheck ? (
-                  <selectedStartCheck.Icon className="size-7" />
-                ) : null}
-              </span>
-              <div>
-                <p
-                  className={cn(
-                    "text-[10px] font-black uppercase tracking-[0.16em]",
-                    selectedStartCheck?.labelClassName,
-                  )}
-                >
-                  Inicio
-                </p>
-              </div>
-            </div>
-            <div
-              className={cn(
-                "panel-radius flex min-h-[84px] items-center gap-3 border p-4",
-                selectedGraphicsCheck?.panelClassName,
-              )}
-            >
-              <span
-                className={cn(
-                  "inline-flex size-10 shrink-0 items-center justify-center rounded-full",
-                  selectedGraphicsCheck?.iconWrapClassName,
-                  selectedGraphicsCheck?.iconClassName,
-                )}
-              >
-                {selectedGraphicsCheck ? (
-                  <selectedGraphicsCheck.Icon className="size-7" />
-                ) : null}
-              </span>
-              <div>
-                <p
-                  className={cn(
-                    "text-[10px] font-black uppercase tracking-[0.16em]",
-                    selectedGraphicsCheck?.labelClassName,
-                  )}
-                >
-                  Gráfica
-                </p>
-              </div>
-            </div>
+            ))}
           </div>
         </section>
 
-        <section className="space-y-4">
+        <section className="space-y-3">
           <h4 className="text-[11px] font-black uppercase tracking-[0.18em] text-[#94a3b8]">
             Bloque técnico
           </h4>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="panel-radius min-h-[84px] border border-[var(--border)] bg-white p-4">
-              <div className="flex items-center gap-4">
-                <button
-                  type="button"
-                  onClick={() =>
-                    openEvidencePreview(
-                      "Speedtest",
-                      selectedSpeedtestAttachment,
-                      selectedSpeedtestPreviewSrc,
-                    )
-                  }
-                  disabled={!selectedSpeedtestAttachment || !selectedSpeedtestPreviewSrc}
-                  className={cn(
-                    "inline-flex size-10 shrink-0 items-center justify-center rounded-full border transition",
-                    selectedSpeedtestAttachment && selectedSpeedtestPreviewSrc
-                      ? "border-[#ffd7df] bg-[#fff5f7] text-[var(--accent)] hover:border-[var(--accent)] hover:bg-[#fff0f4]"
-                      : "cursor-not-allowed border-[var(--border)] bg-[#f8fafc] text-[#c3ccd9]",
-                  )}
-                  aria-label="Abrir captura de speedtest"
-                >
-                  <Gauge className="size-4" />
-                </button>
-                <div className="min-w-0">
-                  <p className="text-sm font-bold text-[var(--foreground)]">
-                    Speedtest
+          <div className="grid grid-cols-3 gap-2">
+            {(
+              [
+                {
+                  label: "Speed Test",
+                  kind: "speedtest" as const,
+                  attachment: selectedSpeedtestAttachment,
+                  previewSrc: selectedSpeedtestPreviewSrc,
+                  value: resolvedSpeedtest,
+                  uploadState: selectedUploadState.speedtest,
+                },
+                {
+                  label: "Ping",
+                  kind: "ping" as const,
+                  attachment: selectedPingAttachment,
+                  previewSrc: selectedPingPreviewSrc,
+                  value: resolvedPingValue,
+                  uploadState: selectedUploadState.ping,
+                },
+                {
+                  label: "GPU",
+                  kind: "gpu" as const,
+                  attachment: selectedGpuAttachment,
+                  previewSrc: selectedGpuPreviewSrc,
+                  value: resolvedGpuValue,
+                  uploadState: selectedUploadState.gpu,
+                },
+              ] as const
+            ).map(({ label, kind, attachment, previewSrc, value, uploadState }) => (
+              <div
+                key={kind}
+                className="flex flex-col gap-2 rounded-xl border border-[var(--border)] bg-[#fafbfd] p-2"
+              >
+                <p className="text-center text-[10px] font-black uppercase tracking-[0.16em] text-[#94a3b8]">{label}</p>
+                {isSelectedIncidentEditing ? (
+                  <button
+                    type="button"
+                    onClick={() => openDesktopEvidencePicker(selectedIncident, kind)}
+                    disabled={!canManageEvidence || isDesktopEvidenceBusy}
+                    className="mx-auto inline-flex size-9 items-center justify-center rounded-full bg-[#f5f0e8] text-[#b07d3c] shadow-sm transition hover:bg-[#ede5d6] disabled:cursor-not-allowed disabled:opacity-50"
+                    aria-label={`Adjuntar ${label}`}
+                  >
+                    <Upload className="size-3.5" />
+                  </button>
+                ) : null}
+                <p className="text-center text-sm font-bold text-[var(--foreground)]">{value}</p>
+                {uploadState?.message ? (
+                  <p className={cn(
+                    "text-center text-[10px] leading-4",
+                    uploadState.state === "error" ? "text-[#cf2246]"
+                      : uploadState.state === "done" ? "text-[#178a56]"
+                      : "text-[#70819b]",
+                  )}>
+                    {uploadState.message}
                   </p>
-                  <p className="mt-1 truncate text-sm font-mono font-bold text-[var(--accent)]">
-                    {resolvedSpeedtest}
-                  </p>
-                </div>
+                ) : null}
               </div>
-            </div>
-            <div className="panel-radius min-h-[84px] border border-[var(--border)] bg-white p-4">
-              <div className="flex items-center gap-4">
-                <button
-                  type="button"
-                  onClick={() =>
-                    openEvidencePreview("Ping", selectedPingAttachment, selectedPingPreviewSrc)
-                  }
-                  disabled={!selectedPingAttachment || !selectedPingPreviewSrc}
-                  className={cn(
-                    "inline-flex size-10 shrink-0 items-center justify-center rounded-full border transition",
-                    selectedPingAttachment && selectedPingPreviewSrc
-                      ? "border-[#d6f0eb] bg-[#f3fcfa] text-[#0f766e] hover:border-[#0f766e] hover:bg-[#ecfdf8]"
-                      : "cursor-not-allowed border-[var(--border)] bg-[#f8fafc] text-[#c3ccd9]",
-                  )}
-                  aria-label="Abrir captura de ping"
-                >
-                  <Wifi className="size-4" />
-                </button>
-                <div className="min-w-0">
-                  <p className="text-sm font-bold text-[var(--foreground)]">
-                    Ping
-                  </p>
-                  <p className="mt-1 truncate text-sm font-mono font-bold text-[var(--foreground)]">
-                    {resolvedPing}
-                  </p>
-                </div>
-              </div>
-            </div>
-            <div className="panel-radius min-h-[84px] border border-[var(--border)] bg-white p-4">
-              <div className="flex items-center gap-4">
-                <button
-                  type="button"
-                  onClick={() =>
-                    openEvidencePreview("GPU", selectedGpuAttachment, selectedGpuPreviewSrc)
-                  }
-                  disabled={!selectedGpuAttachment || !selectedGpuPreviewSrc}
-                  className={cn(
-                    "inline-flex size-10 shrink-0 items-center justify-center rounded-full border transition",
-                    selectedGpuAttachment && selectedGpuPreviewSrc
-                      ? "border-[#ebe0ff] bg-[#f8f5ff] text-[#7c3aed] hover:border-[#7c3aed] hover:bg-[#f4f0ff]"
-                      : "cursor-not-allowed border-[var(--border)] bg-[#f8fafc] text-[#c3ccd9]",
-                  )}
-                  aria-label="Abrir captura de GPU"
-                >
-                  <Cpu className="size-4" />
-                </button>
-                <div className="min-w-0">
-                  <p className="text-sm font-bold text-[var(--foreground)]">
-                    GPU
-                  </p>
-                  <p className="mt-1 truncate text-sm font-mono font-bold text-[var(--foreground)]">
-                    {selectedIncident.gpuLoad}
-                  </p>
-                </div>
-              </div>
-            </div>
+            ))}
           </div>
-
         </section>
 
         <section className="space-y-4">
@@ -2224,32 +2473,45 @@ export function IncidentsWorkspace({
             )}
             </section>
           ) : drawerTab === "notes" ? (
-            <section className="space-y-5">
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2">
-                <FileText className="size-4 text-[var(--accent)]" />
-                <h4 className="text-[11px] font-black uppercase tracking-[0.18em] text-[#94a3b8]">
-                  Notas
-                </h4>
-              </div>
-              <span className="rounded-full bg-[var(--background-soft)] px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-[#7d8ca1]">
-                Observación técnica
-              </span>
-            </div>
-
-            <div className="rounded-2xl border border-[var(--border)] bg-[var(--background-soft)] p-4">
-              <p className="text-sm leading-7 text-[#4b5c74]">
-                {selectedIncident.observations}
-              </p>
-              <div className="mt-4 flex items-center justify-between border-t border-[var(--border)] pt-4">
+            <section className="space-y-4">
+              {(
+                [
+                  { field: "technicalObservation" as const, label: "Obs. técnica", value: resolvedTechnicalObservation },
+                  { field: "buildingObservation" as const, label: "Obs. edilicia", value: resolvedBuildingObservation },
+                  { field: "generalObservation" as const, label: "Obs. general", value: resolvedGeneralObservation },
+                ] as const
+              ).map(({ field, label, value }) => (
+                <div key={field} className="space-y-3">
+                  <h4 className="text-[11px] font-black uppercase tracking-[0.18em] text-[#94a3b8]">
+                    {label}
+                  </h4>
+                  {isSelectedIncidentEditing ? (
+                    <textarea
+                      value={value ?? ""}
+                      onChange={(e) => setEditedField(selectedIncident.id, field, e.target.value)}
+                      placeholder="Agregar observación..."
+                      rows={3}
+                      className="w-full resize-none rounded-xl border border-[var(--border)] bg-[#f8fafc] px-3 py-2 text-sm text-[#4b5c74] placeholder:text-[#c3ccd9] focus:border-[var(--accent)] focus:outline-none"
+                    />
+                  ) : value ? (
+                    <div className="rounded-xl border border-[var(--border)] bg-[var(--background-soft)] px-3 py-2.5">
+                      <p className="text-sm leading-6 text-[#4b5c74]">{value}</p>
+                    </div>
+                  ) : (
+                    <div className="rounded-xl border border-dashed border-[var(--border)] bg-[#fafbfd] px-3 py-2.5">
+                      <p className="text-sm text-[#c3ccd9]">Sin observación</p>
+                    </div>
+                  )}
+                </div>
+              ))}
+              <div className="flex items-center justify-between border-t border-[var(--border)] pt-3">
                 <span className="text-[11px] font-bold text-[#94a3b8]">
-                  Operador: {selectedIncident.reporter}
+                  {selectedIncident.reporter}
                 </span>
                 <span className="text-[11px] font-bold text-[#94a3b8]">
                   {selectedIncident.updatedAt}
                 </span>
               </div>
-            </div>
             </section>
           ) : (
             <section className="space-y-5">
@@ -2265,31 +2527,33 @@ export function IncidentsWorkspace({
               </span>
             </div>
 
-            <label className="flex cursor-pointer items-center gap-3 rounded-[10px] border border-dashed border-[#d7dee8] bg-[#fafbfd] px-4 py-3 transition hover:border-[var(--accent)] hover:bg-[#fff7f9]">
-              <span className="inline-flex size-10 items-center justify-center rounded-xl bg-white text-[#94a3b8] shadow-sm">
-                <Upload className="size-4" />
-              </span>
-              <span className="flex-1">
-                <span className="block text-sm font-bold text-[var(--foreground)]">
-                  Subir imágenes de la cancha
+            {canManageEvidence ? (
+              <label className="flex cursor-pointer items-center gap-3 rounded-[10px] border border-dashed border-[#d7dee8] bg-[#fafbfd] px-4 py-3 transition hover:border-[var(--accent)] hover:bg-[#fff7f9]">
+                <span className="inline-flex size-10 items-center justify-center rounded-xl bg-white text-[#94a3b8] shadow-sm">
+                  <Upload className="size-4" />
                 </span>
-                <span className="block text-xs text-[#94a3b8]">
-                  Puedes cargar una o varias fotos del estadio, cabina o contexto operativo.
+                <span className="flex-1">
+                  <span className="block text-sm font-bold text-[var(--foreground)]">
+                    Subir imágenes de la cancha
+                  </span>
+                  <span className="block text-xs text-[#94a3b8]">
+                    Puedes cargar una o varias fotos del estadio, cabina o contexto operativo.
+                  </span>
                 </span>
-              </span>
-              <input
-                type="file"
-                accept="image/png,image/jpeg,image/webp,image/jpg"
-                multiple
-                className="hidden"
-                onChange={(event) =>
-                  handleVenueImagesChange(
-                    selectedIncident,
-                    event.target.files ?? null,
-                  )
-                }
-              />
-            </label>
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,image/jpg"
+                  multiple
+                  className="hidden"
+                  onChange={(event) =>
+                    handleVenueImagesChange(
+                      selectedIncident,
+                      event.target.files ?? null,
+                    )
+                  }
+                />
+              </label>
+            ) : null}
 
             {selectedVenueImages.length ? (
               <div className="space-y-2">
@@ -2323,11 +2587,6 @@ export function IncidentsWorkspace({
           )}
         </div>
 
-        <div className="border-t border-[var(--border)] bg-[var(--surface)] p-6">
-          <button className="w-full rounded-2xl bg-[var(--accent)] px-5 py-3 text-sm font-black uppercase tracking-[0.16em] text-white shadow-[0_14px_28px_rgba(230,18,56,0.18)] transition hover:bg-[var(--accent-strong)]">
-            Editar incidencia
-          </button>
-        </div>
       </div>
     </aside>
   ) : null;
@@ -2379,6 +2638,14 @@ export function IncidentsWorkspace({
           {workspaceContent}
         </>
       )}
+
+      <input
+        ref={desktopEvidenceInputRef}
+        type="file"
+        accept="image/png,image/jpeg,image/webp,image/jpg"
+        className="hidden"
+        onChange={handleDesktopEvidenceInputChange}
+      />
 
       {evidencePreview ? (
         <div

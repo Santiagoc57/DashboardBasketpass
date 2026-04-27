@@ -23,6 +23,10 @@ const ROLE_DISPLAY_NAMES: Record<string, string> = {
   "Camara 5": "Cámara 5",
 };
 
+const COMPACT_ROLE_DISPLAY_NAMES: Record<string, string> = {
+  "operador de control": "O. Control",
+};
+
 const CATEGORY_DISPLAY_NAMES: Record<string, string> = {
   Coordinacion: "Coordinación",
   Produccion: "Producción",
@@ -51,6 +55,21 @@ export function getRoleDisplayName(value?: string | null) {
   }
 
   return ROLE_DISPLAY_NAMES[value] ?? value;
+}
+
+export function getCompactRoleDisplayName(value?: string | null) {
+  if (!value) {
+    return "";
+  }
+
+  const displayName = getRoleDisplayName(value);
+  const normalizedDisplayName = displayName
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+
+  return COMPACT_ROLE_DISPLAY_NAMES[normalizedDisplayName] ?? displayName;
 }
 
 export function getRoleCategoryDisplayName(value?: string | null) {

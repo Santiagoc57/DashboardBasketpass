@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
@@ -22,9 +21,7 @@ import {
   Palette,
   ReceiptText,
   Save,
-  SendHorizontal,
   ShieldAlert,
-  SquarePen,
   Type,
   Upload,
   Wifi,
@@ -34,13 +31,16 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
+import type {
+  CollaboratorReportAttachment,
+  TechnicalCaptureKind,
+} from "@/lib/collaborator-report-attachments";
 import type { CollaboratorAssignmentItem } from "@/lib/data/collaborators";
 import { cn } from "@/lib/utils";
 
 type IssueKey = "internet" | "img" | "ocr" | "overlays" | "grafica";
 type ToggleValue = "si" | "no";
 type IncidentLevel = "sin" | "baja" | "alta" | "critica";
-type TechnicalCaptureKind = "speedtest" | "ping" | "gpu";
 type ReadingState = "idle" | "loading" | "error" | "done";
 type SignalOption = "BP" | "BP / IMG";
 type CaptureSource = "camera" | "gallery";
@@ -65,9 +65,9 @@ type DraftState = {
   otherObservation: string;
   stObservation: string;
   clubObservation: string;
-  speedtestAttachmentName: string | null;
-  pingAttachmentName: string | null;
-  gpuAttachmentName: string | null;
+  speedtestAttachment: CollaboratorReportAttachment | null;
+  pingAttachment: CollaboratorReportAttachment | null;
+  gpuAttachment: CollaboratorReportAttachment | null;
   updatedAt: string;
 };
 
@@ -144,7 +144,9 @@ const INCIDENT_LEVEL_OPTIONS: Array<{
 ];
 
 function getDraftKey(assignmentId: string) {
-  return `basket-production.collaborator-report.${assignmentId}`;
+  // Bump this if the default draft shape changes so stale local drafts do not
+  // keep overriding the current initial state.
+  return `basket-production.collaborator-report.v2.${assignmentId}`;
 }
 
 function normalizeSignalLabel(value: string | null | undefined): SignalOption {
@@ -160,11 +162,11 @@ function normalizeSignalLabel(value: string | null | undefined): SignalOption {
 function buildDefaultDraft(): DraftState {
   return {
     incidentLevel: "sin",
-    paid: "si",
-    feedDetected: "si",
+    paid: "no",
+    feedDetected: "no",
     problems: DEFAULT_PROBLEMS,
     signalLabel: "BP",
-    aptoLineal: "si",
+    aptoLineal: "no",
     testTime: "",
     testCheck: "no",
     startCheck: "no",
@@ -178,9 +180,9 @@ function buildDefaultDraft(): DraftState {
     otherObservation: "",
     stObservation: "",
     clubObservation: "",
-    speedtestAttachmentName: null,
-    pingAttachmentName: null,
-    gpuAttachmentName: null,
+    speedtestAttachment: null,
+    pingAttachment: null,
+    gpuAttachment: null,
     updatedAt: new Date().toISOString(),
   };
 }
@@ -278,19 +280,84 @@ async function normalizeCaptureFile(file: File, kind: TechnicalCaptureKind) {
   });
 }
 
+function normalizeSavedAttachment(
+  value: unknown,
+  kind: TechnicalCaptureKind,
+): CollaboratorReportAttachment | null {
+  if (!value) {
+    return null;
+  }
+
+  if (typeof value === "string" && value.trim()) {
+    return {
+      kind,
+      path: "",
+      fileName: value.trim(),
+      sizeBytes: 0,
+      mimeType: "image/jpeg",
+      uploadedAt: new Date(0).toISOString(),
+    };
+  }
+
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+
+  const candidate = value as Partial<CollaboratorReportAttachment>;
+
+  if (
+    typeof candidate.fileName !== "string" ||
+    typeof candidate.mimeType !== "string" ||
+    typeof candidate.uploadedAt !== "string"
+  ) {
+    return null;
+  }
+
+  return {
+    kind,
+    path: typeof candidate.path === "string" ? candidate.path : "",
+    fileName: candidate.fileName,
+    sizeBytes: typeof candidate.sizeBytes === "number" ? candidate.sizeBytes : 0,
+    mimeType: candidate.mimeType,
+    uploadedAt: candidate.uploadedAt,
+  };
+}
+
 function parseSavedDraft(raw: string | null): DraftState | null {
   if (!raw) {
     return null;
   }
 
   try {
-    const parsed = JSON.parse(raw) as Partial<DraftState> & { notes?: string };
+    const parsed = JSON.parse(raw) as Partial<DraftState> & {
+      notes?: string;
+      speedtestAttachmentName?: string | null;
+      pingAttachmentName?: string | null;
+      gpuAttachmentName?: string | null;
+    };
     return {
       ...buildDefaultDraft(),
       ...parsed,
       signalLabel: normalizeSignalLabel(parsed.signalLabel),
       generalObservations:
         parsed.generalObservations ?? parsed.notes ?? "",
+      speedtestAttachment: normalizeSavedAttachment(
+        parsed.speedtestAttachment ??
+          ("speedtestAttachmentName" in parsed
+            ? parsed.speedtestAttachmentName
+            : null),
+        "speedtest",
+      ),
+      pingAttachment: normalizeSavedAttachment(
+        parsed.pingAttachment ??
+          ("pingAttachmentName" in parsed ? parsed.pingAttachmentName : null),
+        "ping",
+      ),
+      gpuAttachment: normalizeSavedAttachment(
+        parsed.gpuAttachment ??
+          ("gpuAttachmentName" in parsed ? parsed.gpuAttachmentName : null),
+        "gpu",
+      ),
       problems: {
         ...DEFAULT_PROBLEMS,
         ...(parsed.problems ?? {}),
@@ -338,9 +405,9 @@ function SegmentedToggle<T extends string>({
                   "flex h-full w-full items-center justify-center rounded-[calc(var(--panel-radius)-4px)] px-3 py-2 text-center text-sm font-bold uppercase leading-none tracking-[0.12em] transition",
                   value === option.value
                     ? isPositive
-                      ? "bg-[var(--surface)] text-[#1b7d43] shadow-sm"
+                      ? "bg-[#f3fcf6] text-[#1b7d43] shadow-sm ring-1 ring-[#d5ebdd]"
                       : isNegative
-                        ? "bg-[var(--surface)] text-[#cf2246] shadow-sm"
+                        ? "bg-[#fff0f3] text-[#cf2246] shadow-sm ring-1 ring-[#f0c4ce]"
                         : "bg-[var(--surface)] text-[var(--accent)] shadow-sm"
                     : "text-[var(--muted)] hover:text-[var(--foreground)]",
                 )}
@@ -429,14 +496,16 @@ function BinaryStateButton({
           "flex h-[62px] w-full items-center gap-3 rounded-[var(--panel-radius)] border px-4 text-left transition",
           active
             ? "border-[#d5ebdd] bg-[#f3fcf6] text-[#1b7d43]"
-            : "border-[var(--border)] bg-[var(--surface)] text-[var(--muted)] hover:border-[#d7d0ca]",
+            : "border-[#f0c4ce] bg-[#fff0f3] text-[#cf2246] hover:border-[#e9aebb]",
         )}
       >
         <span
           className={cn(
             REPORT_ICON_BUBBLE_BASE,
             "size-9",
-            active ? "border-[#d5ebdd] bg-[#faf7f3] text-[#1b7d43]" : "text-[var(--muted)]",
+            active
+              ? "border-[#d5ebdd] bg-[#faf7f3] text-[#1b7d43]"
+              : "border-[#f0c4ce] bg-white text-[#cf2246]",
           )}
         >
           <Icon className="size-4" />
@@ -600,10 +669,6 @@ export function CollaboratorReportForm({
     setDraft((previous) => updater(previous));
   };
 
-  const saveDraft = () => {
-    persistDraft(latestDraftRef.current, "Borrador guardado en este dispositivo.");
-  };
-
   const handleSendDraft = async () => {
     if (isSending) {
       return;
@@ -692,48 +757,49 @@ export function CollaboratorReportForm({
       const formData = new FormData();
       formData.append("image", normalizedFile);
       formData.append("kind", kind);
+      formData.append("assignmentId", assignment.assignmentId);
+      formData.append("matchId", assignment.matchId);
 
       setCaptureState((previous) => ({
         ...previous,
         [kind]: {
           state: "loading",
-          message: "Leyendo captura con IA...",
+          message: "Subiendo y leyendo captura...",
         },
       }));
-      updateDraft((previous) => ({
-        ...previous,
-        speedtestAttachmentName:
-          kind === "speedtest"
-            ? normalizedFile.name
-            : previous.speedtestAttachmentName,
-        pingAttachmentName:
-          kind === "ping" ? normalizedFile.name : previous.pingAttachmentName,
-        gpuAttachmentName:
-          kind === "gpu" ? normalizedFile.name : previous.gpuAttachmentName,
-      }));
 
-      const response = await fetch("/api/ai/metric-capture", {
+      const response = await fetch("/api/collaborator-reports/attachments", {
         method: "POST",
         body: formData,
       });
 
       const responseText = await response.text();
       let payload:
-        | { value: string | null; note?: string | null }
+        | {
+            attachment: CollaboratorReportAttachment;
+            value: string | null;
+            note?: string | null;
+            readOk?: boolean;
+          }
         | { error?: string }
         | null = null;
 
       try {
         payload = responseText
           ? ((JSON.parse(responseText) as
-              | { value: string | null; note?: string | null }
+              | {
+                  attachment: CollaboratorReportAttachment;
+                  value: string | null;
+                  note?: string | null;
+                  readOk?: boolean;
+                }
               | { error?: string }))
           : null;
       } catch {
         payload = null;
       }
 
-      if (!response.ok || !payload || !("value" in payload)) {
+      if (!response.ok || !payload || !("attachment" in payload)) {
         setCaptureState((previous) => ({
           ...previous,
           [kind]: {
@@ -749,6 +815,12 @@ export function CollaboratorReportForm({
 
       updateDraft((previous) => ({
         ...previous,
+        speedtestAttachment:
+          kind === "speedtest" ? payload.attachment : previous.speedtestAttachment,
+        pingAttachment:
+          kind === "ping" ? payload.attachment : previous.pingAttachment,
+        gpuAttachment:
+          kind === "gpu" ? payload.attachment : previous.gpuAttachment,
         speedtestValue:
           kind === "speedtest" ? (payload.value ?? "") : previous.speedtestValue,
         pingValue: kind === "ping" ? (payload.value ?? "") : previous.pingValue,
@@ -757,10 +829,11 @@ export function CollaboratorReportForm({
       setCaptureState((previous) => ({
         ...previous,
         [kind]: {
-          state: "done",
-          message: payload.value
-            ? "Lectura lista. Puedes ajustarla manualmente si hace falta."
-            : "No se pudo leer. Completa el valor manualmente.",
+          state: payload.readOk === false ? "error" : "done",
+          message:
+            payload.value
+              ? ""
+              : payload.note?.trim() || "No se pudo leer. Completa el valor manualmente.",
         },
       }));
     } catch {
@@ -818,7 +891,7 @@ export function CollaboratorReportForm({
             </h3>
             <p className="text-sm text-[#617187]">
               Carga rápida para {assignment.homeTeam} vs {assignment.awayTeam}. Puedes
-              guardar borrador local o enviar el reporte definitivo desde aquí.
+              completar, corregir y enviar el reporte desde esta misma pantalla.
             </p>
           </div>
 
@@ -1047,10 +1120,10 @@ export function CollaboratorReportForm({
                   className={cn(
                     REPORT_ICON_BUBBLE_BASE,
                     "size-10",
-                    draft.speedtestAttachmentName ? "text-[#1faa52]" : "text-[#8a6a43]",
+                    draft.speedtestAttachment ? "text-[#1faa52]" : "text-[#8a6a43]",
                   )}
                 >
-                  {draft.speedtestAttachmentName ? (
+                  {draft.speedtestAttachment ? (
                     <CheckCircle2 className="size-5" />
                   ) : (
                     <Upload className="size-5" />
@@ -1077,10 +1150,10 @@ export function CollaboratorReportForm({
                   className={cn(
                     REPORT_ICON_BUBBLE_BASE,
                     "size-10",
-                    draft.pingAttachmentName ? "text-[#1faa52]" : "text-[#8a6a43]",
+                    draft.pingAttachment ? "text-[#1faa52]" : "text-[#8a6a43]",
                   )}
                 >
-                  {draft.pingAttachmentName ? (
+                  {draft.pingAttachment ? (
                     <CheckCircle2 className="size-5" />
                   ) : (
                     <Upload className="size-5" />
@@ -1107,10 +1180,10 @@ export function CollaboratorReportForm({
                   className={cn(
                     REPORT_ICON_BUBBLE_BASE,
                     "size-10",
-                    draft.gpuAttachmentName ? "text-[#1faa52]" : "text-[#8a6a43]",
+                    draft.gpuAttachment ? "text-[#1faa52]" : "text-[#8a6a43]",
                   )}
                 >
-                  {draft.gpuAttachmentName ? (
+                  {draft.gpuAttachment ? (
                     <CheckCircle2 className="size-5" />
                   ) : (
                     <Upload className="size-5" />
@@ -1307,6 +1380,7 @@ export function CollaboratorReportForm({
               Observaciones técnicas
             </p>
             <Textarea
+              className="min-h-14"
               placeholder="Ej. Se cayó la cámara 1 en dos momentos y la VM tardó en responder."
               value={draft.technicalObservations}
               onChange={(event) =>
@@ -1322,6 +1396,7 @@ export function CollaboratorReportForm({
               Observaciones edilicias
             </p>
             <Textarea
+              className="min-h-14"
               placeholder="Ej. El responsable no tenía PC ni router 4G disponible."
               value={draft.buildingObservations}
               onChange={(event) =>
@@ -1337,6 +1412,7 @@ export function CollaboratorReportForm({
               Observaciones generales
             </p>
             <Textarea
+              className="min-h-14"
               placeholder="Ej. El realizador dio señal faltando una hora para el inicio."
               value={draft.generalObservations}
               onChange={(event) =>
@@ -1404,34 +1480,15 @@ export function CollaboratorReportForm({
           )}
           <span>
             {saveMessage ||
-              "Guarda un borrador local o envía el reporte definitivo."}
+              "Los cambios se guardan automáticamente. Envía el reporte cuando esté listo."}
           </span>
         </div>
-        <div className="grid grid-cols-3 gap-2">
-          <button
-            type="button"
-            onClick={saveDraft}
-            className="inline-flex h-12 min-w-0 items-center justify-center gap-2 rounded-[var(--panel-radius)] border border-[#2b6be7] bg-[#2b6be7] px-2 text-sm font-semibold text-white shadow-[0_10px_22px_rgba(43,107,231,0.22)] transition hover:border-[#1f5ad1] hover:bg-[#1f5ad1]"
-          >
-            <Save className="mr-2 size-4" />
-            Guardar
-          </button>
-          <Link href={`/mi-jornada/${assignment.matchId}/reportar`} className="block min-w-0">
-            <span className="inline-flex h-12 w-full min-w-0 items-center justify-center gap-2 rounded-[var(--panel-radius)] border border-[#f0d27a] bg-[#f3c332] px-2 text-sm font-semibold text-white shadow-[0_10px_22px_rgba(243,195,50,0.2)] transition hover:border-[#e3b71f] hover:bg-[#e3b71f]">
-              <SquarePen className="size-4" />
-              Editar
-            </span>
-          </Link>
+        <div className="flex justify-end">
           <Button
-            className="h-12 px-2 bg-[var(--accent)] text-white shadow-[0_12px_24px_rgba(230,18,56,0.22)] hover:bg-[var(--accent-strong)] disabled:cursor-wait disabled:opacity-80"
+            className="h-12 w-full bg-[var(--accent)] px-6 text-white shadow-[0_12px_24px_rgba(230,18,56,0.22)] hover:bg-[var(--accent-strong)] disabled:cursor-wait disabled:opacity-80 sm:w-auto sm:min-w-40"
             onClick={handleSendDraft}
             disabled={isSending}
           >
-            {isSending ? (
-              <Loader2 className="mr-2 size-4 animate-spin" />
-            ) : (
-              <SendHorizontal className="mr-2 size-4" />
-            )}
             {isSending ? "Enviando" : "Enviar"}
           </Button>
         </div>

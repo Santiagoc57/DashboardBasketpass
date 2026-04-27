@@ -5,9 +5,18 @@ export type ReportSeverity =
   | "Baja"
   | "Sin incidencia";
 
+export type ReportAttachment = {
+  fileName: string;
+  fileSizeLabel: string;
+  previewUrl?: string;
+};
+
 export type ReportRecord = {
   id_feed: string;
   id_bp: string;
+  sourceReportId: string;
+  assignmentId: string;
+  matchId: string;
   match_label: string;
   competition: string;
   league: string;
@@ -19,9 +28,17 @@ export type ReportRecord = {
   feed_detected: boolean;
   severity: ReportSeverity;
   problem: string;
+  speedtest: string;
+  ping: string;
+  gpuLoad: string;
+  speedtestAttachment?: ReportAttachment | null;
+  pingAttachment?: ReportAttachment | null;
+  gpuAttachment?: ReportAttachment | null;
+  technicalObservation: string;
   technical_notes: string;
   updated_relative: string;
   updated_at: string;
+  activity?: ReportActivity[];
 };
 
 export type ReportActivity = {
@@ -36,6 +53,9 @@ export const REPORT_DIRECTORY: ReportRecord[] = [
   {
     id_feed: "#FD-88219",
     id_bp: "BP-2026-0312-01",
+    sourceReportId: "report-88219",
+    assignmentId: "assignment-88219",
+    matchId: "match-88219",
     match_label: "Boca Juniors vs Atenas de Córdoba",
     competition: "Liga Nacional • J24",
     league: "Liga Nacional",
@@ -47,6 +67,10 @@ export const REPORT_DIRECTORY: ReportRecord[] = [
     feed_detected: true,
     severity: "Crítica",
     problem: "Corte en la detección de feed y ticket de pago sin validar",
+    speedtest: "12.4 Mbps",
+    ping: "45 ms",
+    gpuLoad: "88%",
+    technicalObservation: "",
     technical_notes:
       "Se abrió cierre prioritario porque el partido terminó sin consolidar validación del feed principal ni confirmación administrativa del pago.",
     updated_relative: "Hace 12 min",
@@ -55,6 +79,9 @@ export const REPORT_DIRECTORY: ReportRecord[] = [
   {
     id_feed: "#FD-88220",
     id_bp: "BP-2026-0312-02",
+    sourceReportId: "report-88220",
+    assignmentId: "assignment-88220",
+    matchId: "match-88220",
     match_label: "Real Madrid vs FC Barcelona",
     competition: "ACB • Final",
     league: "ACB",
@@ -66,6 +93,10 @@ export const REPORT_DIRECTORY: ReportRecord[] = [
     feed_detected: true,
     severity: "Alta",
     problem: "Seguimiento por desincronía de gráfica en cierre editorial",
+    speedtest: "18.2 Mbps",
+    ping: "61 ms",
+    gpuLoad: "65%",
+    technicalObservation: "",
     technical_notes:
       "La producción quedó estable al aire, pero el equipo mantiene abierta la validación final de overlays y continuidad del archivo master.",
     updated_relative: "Hace 32 min",
@@ -74,6 +105,9 @@ export const REPORT_DIRECTORY: ReportRecord[] = [
   {
     id_feed: "#FD-88221",
     id_bp: "BP-2026-0312-03",
+    sourceReportId: "report-88221",
+    assignmentId: "assignment-88221",
+    matchId: "match-88221",
     match_label: "Chicago Bulls vs Miami Heat",
     competition: "NBA • Regular Season",
     league: "NBA",
@@ -85,6 +119,10 @@ export const REPORT_DIRECTORY: ReportRecord[] = [
     feed_detected: true,
     severity: "Sin incidencia",
     problem: "Sin desvíos relevantes en el cierre de la transmisión",
+    speedtest: "-",
+    ping: "-",
+    gpuLoad: "-",
+    technicalObservation: "",
     technical_notes:
       "El reporte quedó cerrado sin hallazgos críticos. Archivo, highlights y validación de datos enviados correctamente.",
     updated_relative: "Hace 1 h",
@@ -93,6 +131,9 @@ export const REPORT_DIRECTORY: ReportRecord[] = [
   {
     id_feed: "#FD-88225",
     id_bp: "BP-2026-0312-04",
+    sourceReportId: "report-88225",
+    assignmentId: "assignment-88225",
+    matchId: "match-88225",
     match_label: "Virtus Bologna vs Olimpia Milano",
     competition: "EuroLeague • Round 24",
     league: "EuroLeague",
@@ -104,6 +145,10 @@ export const REPORT_DIRECTORY: ReportRecord[] = [
     feed_detected: true,
     severity: "Media",
     problem: "Cierre revisado con observaciones menores de archivo",
+    speedtest: "22.1 Mbps",
+    ping: "38 ms",
+    gpuLoad: "40%",
+    technicalObservation: "",
     technical_notes:
       "Se revisó la exportación final y quedó una observación de nomenclatura sin impacto operativo sobre la señal emitida.",
     updated_relative: "Hace 2 h",
@@ -112,6 +157,9 @@ export const REPORT_DIRECTORY: ReportRecord[] = [
   {
     id_feed: "#FD-88229",
     id_bp: "BP-2026-0312-05",
+    sourceReportId: "report-88229",
+    assignmentId: "assignment-88229",
+    matchId: "match-88229",
     match_label: "Quimsa vs Instituto de Córdoba",
     competition: "Liga Nacional • J24",
     league: "Liga Nacional",
@@ -123,6 +171,10 @@ export const REPORT_DIRECTORY: ReportRecord[] = [
     feed_detected: false,
     severity: "Alta",
     problem: "Control validó cierre parcial por inconsistencias de retorno",
+    speedtest: "18.2 Mbps",
+    ping: "61 ms",
+    gpuLoad: "65%",
+    technicalObservation: "",
     technical_notes:
       "La mesa técnica dejó el reporte abierto hasta consolidar el retorno de archivo y la evidencia de control local.",
     updated_relative: "Hace 18 min",
@@ -131,6 +183,9 @@ export const REPORT_DIRECTORY: ReportRecord[] = [
   {
     id_feed: "#FD-88231",
     id_bp: "BP-2026-0312-06",
+    sourceReportId: "report-88231",
+    assignmentId: "assignment-88231",
+    matchId: "match-88231",
     match_label: "Bochas Sport Club vs River Plate",
     competition: "Liga Argentina • J18",
     league: "Liga Argentina",
@@ -142,6 +197,10 @@ export const REPORT_DIRECTORY: ReportRecord[] = [
     feed_detected: false,
     severity: "Media",
     problem: "El cierre sigue abierto por documentación incompleta del off-tube",
+    speedtest: "10.8 Mbps",
+    ping: "72 ms",
+    gpuLoad: "54%",
+    technicalObservation: "",
     technical_notes:
       "Faltan validaciones del flujo remoto, datos de operación y confirmación de que el paquete técnico final fue entregado.",
     updated_relative: "Hace 48 min",

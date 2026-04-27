@@ -8,7 +8,17 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "check": "npm run lint && npm run typecheck && npm run build",
+    "test:compile": "tsc -p tsconfig.tests.json",
+    "test:unit": "npm run test:compile && node tests/setup-test-alias.mjs && node --test tests/*.test.mjs",
+    "test": "npm run test:unit",
+    "check": "npm run lint && npm run typecheck && npm run test:unit && npm run build",
+    "ops:db-backup": "node tools/ops/db-backup.mjs",
+    "ops:db-backup:plain": "node tools/ops/db-backup.mjs --format plain",
+    "ops:db-backups": "node tools/ops/list-backups.mjs",
+    "ops:db-apply": "node tools/ops/db-apply-sql.mjs",
+    "ops:db-restore": "node tools/ops/db-restore.mjs",
+    "ops:db-restore:dry-run": "node tools/ops/db-restore.mjs --dry-run",
+    "ops:recovery-smoke": "node tools/ops/recovery-smoke.mjs",
     "import:csv": "node tools/import/index.mjs"
   },
   "dependencies": {

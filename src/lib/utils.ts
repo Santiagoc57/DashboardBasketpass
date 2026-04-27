@@ -40,6 +40,10 @@ export function pickFirstString(
 }
 
 export function ensureErrorMessage(error: unknown) {
+  if (isSupabaseConnectionError(error)) {
+    return "No se pudo conectar con Supabase. Revisa NEXT_PUBLIC_SUPABASE_URL en .env.local y confirma que el proyecto exista.";
+  }
+
   if (error instanceof Error) {
     return error.message;
   }
@@ -73,6 +77,44 @@ export function ensureErrorMessage(error: unknown) {
   }
 
   return "Ocurrio un error inesperado.";
+}
+
+function isSupabaseConnectionError(error: unknown) {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  const normalizedMessage = error.message.toLowerCase();
+
+  if (normalizedMessage.includes("fetch failed")) {
+    return true;
+  }
+
+  const cause = error.cause as
+    | {
+        code?: unknown;
+        syscall?: unknown;
+      }
+    | undefined;
+
+  if (!cause) {
+    return false;
+  }
+
+  const code = typeof cause.code === "string" ? cause.code : "";
+  const syscall = typeof cause.syscall === "string" ? cause.syscall : "";
+
+  return (
+    [
+      "ENOTFOUND",
+      "EAI_AGAIN",
+      "ECONNREFUSED",
+      "ETIMEDOUT",
+      "ENETUNREACH",
+      "EHOSTUNREACH",
+      "UND_ERR_CONNECT_TIMEOUT",
+    ].includes(code) || syscall === "getaddrinfo"
+  );
 }
 
 export function maybeNull(value: string | null | undefined) {

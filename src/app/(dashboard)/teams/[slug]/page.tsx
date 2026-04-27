@@ -2,9 +2,11 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ExternalLink, Globe, Instagram, Mail, MapPinned, MessageCircle, ShieldAlert, UserRound } from "lucide-react";
 
+import { CreateTeamModal } from "@/components/teams/create-team-modal";
 import { TeamLogoMark } from "@/components/team-logo-mark";
 import { Card } from "@/components/ui/card";
 import { getUserContext } from "@/lib/auth";
+import { isCollaboratorLimitedRole } from "@/lib/constants";
 import { getPeopleData } from "@/lib/data/dashboard";
 import {
   buildTeamResponsibleLookup,
@@ -71,6 +73,7 @@ export default async function TeamDetailPage({ params }: PageProps) {
 
   const user = await getUserContext();
   const people = user.userId ? await getPeopleData() : [];
+  const canManageTeams = user.canEdit && !isCollaboratorLimitedRole(user.role);
   const responsibleLookup = buildTeamResponsibleLookup(people);
   const responsibleContact = getTeamResponsibleContact(
     team.official_name,
@@ -80,6 +83,7 @@ export default async function TeamDetailPage({ params }: PageProps) {
   const responsibleLabel =
     responsibleContact?.fullName ?? team.manager ?? "Sin responsable";
   const leagueBadges = splitTeamCompetitions(team.competition);
+  const hasCustomDisplayName = team.display_name !== team.official_name;
 
   return (
     <div className="space-y-8">
@@ -88,7 +92,7 @@ export default async function TeamDetailPage({ params }: PageProps) {
           Equipos
         </Link>
         <span>/</span>
-        <span className="text-[#627086]">{team.official_name}</span>
+        <span className="text-[#627086]">{team.display_name}</span>
       </nav>
 
       <section className="rounded-[24px] border border-[var(--border)] bg-[var(--surface)] p-6 xl:p-8 shadow-[0_10px_28px_rgba(28,13,16,0.05)]">
@@ -113,8 +117,13 @@ export default async function TeamDetailPage({ params }: PageProps) {
                 ))}
               </div>
               <h1 className="text-3xl font-black tracking-tight text-[var(--foreground)] sm:text-4xl">
-                {team.official_name}
+                {team.display_name}
               </h1>
+              {hasCustomDisplayName ? (
+                <p className="text-sm font-medium text-[#617187]">
+                  {team.official_name}
+                </p>
+              ) : null}
               <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm font-medium text-[#617187]">
                 <span className="flex items-center gap-2">
                   <MapPinned className="size-4" />
@@ -129,18 +138,18 @@ export default async function TeamDetailPage({ params }: PageProps) {
                       target="_blank"
                       rel="noreferrer"
                       aria-label={`Escribir por WhatsApp a ${responsibleContact.fullName}`}
-                      className="inline-flex size-8 items-center justify-center rounded-full bg-[#ecfdf3] text-[#16a34a] transition hover:bg-[#dcfce7]"
+                      className="inline-flex size-[27px] items-center justify-center rounded-full bg-[#ecfdf3] text-[#16a34a] transition hover:bg-[#dcfce7]"
                     >
-                      <MessageCircle className="size-4" />
+                      <MessageCircle className="size-[13px]" />
                     </a>
                   ) : null}
                   {responsibleContact?.email ? (
                     <a
                       href={`mailto:${responsibleContact.email}`}
                       aria-label={`Escribir por correo a ${responsibleContact.fullName}`}
-                      className="inline-flex size-8 items-center justify-center rounded-full bg-[#eef2ff] text-[#4f46e5] transition hover:bg-[#e0e7ff]"
+                      className="inline-flex size-[27px] items-center justify-center rounded-full bg-[#eef2ff] text-[#4f46e5] transition hover:bg-[#e0e7ff]"
                     >
-                      <Mail className="size-4" />
+                      <Mail className="size-[13px]" />
                     </a>
                   ) : null}
                 </span>
@@ -148,14 +157,24 @@ export default async function TeamDetailPage({ params }: PageProps) {
             </div>
           </div>
 
-          <span
-            className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-bold ${getIncidentBadgeClass(
-              team.incident_count,
-            )}`}
-          >
-            <ShieldAlert className="size-4" />
-            {team.incident_count} incidencias
-          </span>
+          <div className="flex flex-wrap items-center gap-3">
+            {canManageTeams ? (
+              <CreateTeamModal
+                canEdit={canManageTeams}
+                defaultCompetition={team.competition}
+                initialTeam={team}
+                people={people}
+              />
+            ) : null}
+            <span
+              className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-bold ${getIncidentBadgeClass(
+                team.incident_count,
+              )}`}
+            >
+              <ShieldAlert className="size-4" />
+              {team.incident_count} incidencias
+            </span>
+          </div>
         </div>
       </section>
 
@@ -173,12 +192,22 @@ export default async function TeamDetailPage({ params }: PageProps) {
           <div className="grid gap-4 md:grid-cols-2">
             <div className="rounded-2xl border border-[var(--border)] bg-[var(--background-soft)] px-4 py-4">
               <p className="text-[11px] font-black uppercase tracking-[0.16em] text-[#94a3b8]">
-                Nombre oficial
+                Nombre visible
               </p>
               <p className="mt-2 text-base font-bold text-[var(--foreground)]">
-                {team.official_name}
+                {team.display_name}
               </p>
             </div>
+            {hasCustomDisplayName ? (
+              <div className="rounded-2xl border border-[var(--border)] bg-[var(--background-soft)] px-4 py-4">
+                <p className="text-[11px] font-black uppercase tracking-[0.16em] text-[#94a3b8]">
+                  Nombre oficial
+                </p>
+                <p className="mt-2 text-base font-bold text-[var(--foreground)]">
+                  {team.official_name}
+                </p>
+              </div>
+            ) : null}
             <div className="rounded-2xl border border-[var(--border)] bg-[var(--background-soft)] px-4 py-4">
               <p className="text-[11px] font-black uppercase tracking-[0.16em] text-[#94a3b8]">
                 Liga
@@ -216,18 +245,18 @@ export default async function TeamDetailPage({ params }: PageProps) {
                     target="_blank"
                     rel="noreferrer"
                     aria-label={`Escribir por WhatsApp a ${responsibleContact.fullName}`}
-                    className="inline-flex size-8 items-center justify-center rounded-full bg-[#ecfdf3] text-[#16a34a] transition hover:bg-[#dcfce7]"
+                    className="inline-flex size-[27px] items-center justify-center rounded-full bg-[#ecfdf3] text-[#16a34a] transition hover:bg-[#dcfce7]"
                   >
-                    <MessageCircle className="size-4" />
+                    <MessageCircle className="size-[13px]" />
                   </a>
                 ) : null}
                 {responsibleContact?.email ? (
                   <a
                     href={`mailto:${responsibleContact.email}`}
                     aria-label={`Escribir por correo a ${responsibleContact.fullName}`}
-                    className="inline-flex size-8 items-center justify-center rounded-full bg-[#eef2ff] text-[#4f46e5] transition hover:bg-[#e0e7ff]"
+                    className="inline-flex size-[27px] items-center justify-center rounded-full bg-[#eef2ff] text-[#4f46e5] transition hover:bg-[#e0e7ff]"
                   >
-                    <Mail className="size-4" />
+                    <Mail className="size-[13px]" />
                   </a>
                 ) : null}
               </div>

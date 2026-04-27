@@ -2,10 +2,12 @@ import { parseISO } from "date-fns";
 
 import { PRODUCTION_MODE_OPTIONS, ROLE_CATEGORY_ORDER } from "@/lib/constants";
 import {
+  getDateRangeWindow,
   getMatchEndIso,
   resolveDateWindow,
   toDateKey,
 } from "@/lib/date";
+import { getTeamDisplayName } from "@/lib/team-directory";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { MatchRow, PersonRow, RoleRow } from "@/lib/database.types";
 import type {
@@ -31,6 +33,11 @@ export type GridCalendarDaySummary = {
   total: number;
   competitions: Record<string, number>;
 };
+
+type GridScopedFilters = Pick<
+  GridFilters,
+  "q" | "league" | "mode" | "status" | "owner" | "timezone"
+>;
 
 type ActiveRole = Pick<
   RoleRow,
@@ -67,6 +74,9 @@ function normalizeGridAssignments(params: {
       role_id: role.id,
       person_id: null,
       confirmed: false,
+      confirmation_status: "pending",
+      confirmation_token: null,
+      confirmation_responded_at: null,
       notes: null,
       role,
       person: null,
@@ -74,41 +84,41 @@ function normalizeGridAssignments(params: {
   });
 }
 
-export async function getGridData(filters: GridFilters) {
+async function getGridMatchesInWindow(
+  params: GridScopedFilters & {
+    startUtc: string;
+    endUtc: string;
+  },
+) {
   const supabase = await createSupabaseServerClient();
-  const window = resolveDateWindow({
-    view: filters.view,
-    date: filters.date,
-    timezone: filters.timezone,
-  });
 
   let query = supabase
     .from("matches")
     .select(
-      "*, owner:people!matches_owner_id_fkey(id, full_name, phone)",
+      "*, owner:people!matches_owner_id_fkey(id, full_name, phone, email)",
     )
-    .gte("kickoff_at", window.startUtc)
-    .lte("kickoff_at", window.endUtc)
+    .gte("kickoff_at", params.startUtc)
+    .lte("kickoff_at", params.endUtc)
     .order("kickoff_at", { ascending: true });
 
-  if (filters.league) {
-    query = query.eq("competition", filters.league);
+  if (params.league) {
+    query = query.eq("competition", params.league);
   }
 
-  if (filters.mode) {
-    query = query.eq("production_mode", filters.mode);
+  if (params.mode) {
+    query = query.eq("production_mode", params.mode);
   }
 
-  if (filters.status) {
-    query = query.eq("status", filters.status as MatchRow["status"]);
+  if (params.status) {
+    query = query.eq("status", params.status as MatchRow["status"]);
   }
 
-  if (filters.owner) {
-    query = query.eq("owner_id", filters.owner);
+  if (params.owner) {
+    query = query.eq("owner_id", params.owner);
   }
 
-  if (filters.q) {
-    const term = filters.q.replaceAll(",", " ").trim();
+  if (params.q) {
+    const term = params.q.replaceAll(",", " ").trim();
     query = query.or(
       `home_team.ilike.%${term}%,away_team.ilike.%${term}%,competition.ilike.%${term}%`,
     );
@@ -116,38 +126,18 @@ export async function getGridData(filters: GridFilters) {
 
   const [
     { data: matchesData, error: matchesError },
-    optionsResult,
-    ownersResult,
     rolesResult,
-  ] =
-    await Promise.all([
-      query,
-      supabase
-        .from("matches")
-        .select("competition")
-        .order("kickoff_at", { ascending: false }),
-      supabase
-        .from("people")
-        .select("id, full_name, phone, email")
-        .eq("active", true)
-        .order("full_name"),
-      supabase
-        .from("roles")
-        .select("id, name, category, sort_order, active")
-        .eq("active", true)
-        .order("sort_order", { ascending: true }),
-    ]);
+  ] = await Promise.all([
+    query,
+    supabase
+      .from("roles")
+      .select("id, name, category, sort_order, active")
+      .eq("active", true)
+      .order("sort_order", { ascending: true }),
+  ]);
 
   if (matchesError) {
     throw matchesError;
-  }
-
-  if (optionsResult.error) {
-    throw optionsResult.error;
-  }
-
-  if (ownersResult.error) {
-    throw ownersResult.error;
   }
 
   if (rolesResult.error) {
@@ -155,7 +145,7 @@ export async function getGridData(filters: GridFilters) {
   }
 
   const activeRoles = (rolesResult.data ?? []) as ActiveRole[];
-  const baseMatches = (matchesData ?? []) as Array<
+  const baseMatches = (matchesData ?? []) as unknown as Array<
     Omit<MatchListItem, "assignments">
   >;
   const matchIds = baseMatches.map((match) => match.id);
@@ -166,7 +156,7 @@ export async function getGridData(filters: GridFilters) {
     const assignmentsResult = await supabase
       .from("assignments")
       .select(
-        "id, match_id, role_id, person_id, confirmed, notes, role:roles!assignments_role_id_fkey(id, name, category, sort_order, active), person:people!assignments_person_id_fkey(id, full_name, phone, email)",
+        "id, match_id, role_id, person_id, confirmed, confirmation_status, confirmation_token, confirmation_responded_at, notes, role:roles!assignments_role_id_fkey(id, name, category, sort_order, active), person:people!assignments_person_id_fkey(id, full_name, phone, email)",
       )
       .in("match_id", matchIds);
 
@@ -174,7 +164,7 @@ export async function getGridData(filters: GridFilters) {
       throw assignmentsResult.error;
     }
 
-    assignmentsData = (assignmentsResult.data ?? []) as GridAssignment[];
+    assignmentsData = (assignmentsResult.data ?? []) as unknown as GridAssignment[];
   }
 
   const assignmentsByMatch = assignmentsData.reduce<Map<string, GridAssignment[]>>(
@@ -187,14 +177,75 @@ export async function getGridData(filters: GridFilters) {
     new Map(),
   );
 
-  const matches = baseMatches.map((match) => ({
+  return baseMatches.map((match) => ({
     ...match,
     assignments: normalizeGridAssignments({
       matchId: match.id,
       roles: activeRoles,
       assignments: assignmentsByMatch.get(match.id) ?? [],
     }),
-  })) as MatchListItem[];
+  })) as unknown as MatchListItem[];
+}
+
+export async function getGridMatchesForDateRange(
+  params: GridScopedFilters & {
+    startDate: string;
+    endDate: string;
+  },
+) {
+  const window = getDateRangeWindow(
+    params.startDate,
+    params.endDate,
+    params.timezone,
+  );
+
+  return getGridMatchesInWindow({
+    ...params,
+    ...window,
+  });
+}
+
+export async function getGridData(filters: GridFilters) {
+  const supabase = await createSupabaseServerClient();
+  const window = resolveDateWindow({
+    view: filters.view,
+    date: filters.date,
+    timezone: filters.timezone,
+  });
+
+  const [
+    matches,
+    optionsResult,
+    ownersResult,
+  ] =
+    await Promise.all([
+      getGridMatchesInWindow({
+        q: filters.q,
+        league: filters.league,
+        mode: filters.mode,
+        status: filters.status,
+        owner: filters.owner,
+        timezone: filters.timezone,
+        ...window,
+      }),
+      supabase
+        .from("matches")
+        .select("competition")
+        .order("kickoff_at", { ascending: false }),
+      supabase
+        .from("people")
+        .select("id, full_name, phone, email")
+        .eq("active", true)
+        .order("full_name"),
+    ]);
+
+  if (optionsResult.error) {
+    throw optionsResult.error;
+  }
+
+  if (ownersResult.error) {
+    throw ownersResult.error;
+  }
 
   const dayGroups = matches.reduce<
     Array<{ key: string; label: string; items: MatchListItem[] }>
@@ -389,7 +440,7 @@ export async function getMatchDetailData(matchId: string) {
     RoleRow,
     "id" | "name" | "category" | "sort_order" | "active"
   >[];
-  const rawAssignments = (assignmentsResult.data ?? []) as MatchDetail["assignments"];
+  const rawAssignments = (assignmentsResult.data ?? []) as unknown as MatchDetail["assignments"];
   const assignmentMap = new Map(
     rawAssignments.map((assignment) => [assignment.role_id, assignment]),
   );
@@ -407,6 +458,9 @@ export async function getMatchDetailData(matchId: string) {
       role_id: role.id,
       person_id: null,
       confirmed: false,
+      confirmation_status: "pending",
+      confirmation_token: null,
+      confirmation_responded_at: null,
       notes: null,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
@@ -418,7 +472,7 @@ export async function getMatchDetailData(matchId: string) {
   });
 
   const match = {
-    ...(matchResult.data as MatchDetail),
+    ...((matchResult.data as unknown) as MatchDetail),
     assignments: normalizedAssignments,
   };
 
@@ -434,7 +488,7 @@ export async function getMatchDetailData(matchId: string) {
       "id" | "full_name" | "phone" | "email" | "active"
     >[],
     roles,
-    history: (historyResult.data ?? []) as AuditEntry[],
+    history: (historyResult.data ?? []) as unknown as AuditEntry[],
     conflicts,
   };
 }
@@ -469,7 +523,7 @@ async function getAssignmentConflicts(params: {
     getMatchEndIso(params.match.kickoff_at, params.match.duration_minutes),
   );
 
-  const overlappingAssignments = (result.data ?? []) as Array<{
+  const overlappingAssignments = (result.data ?? []) as unknown as Array<{
     person_id: string | null;
     role: { name: string } | null;
     person: { full_name: string | null } | null;
@@ -501,7 +555,7 @@ async function getAssignmentConflicts(params: {
       personName: assignment.person?.full_name ?? "Sin asignar",
       roleName: assignment.role?.name ?? "Rol",
       otherMatchId: assignment.match.id,
-      otherMatchLabel: `${assignment.match.home_team} vs ${assignment.match.away_team}`,
+      otherMatchLabel: `${getTeamDisplayName(assignment.match.home_team)} vs ${getTeamDisplayName(assignment.match.away_team)}`,
       otherKickoffAt: assignment.match.kickoff_at,
     }));
 }
@@ -530,7 +584,7 @@ export async function getPeopleData(): Promise<PersonListItem[]> {
   }
 
   const now = new Date();
-  const assignmentRows = (assignmentsResult.data ?? []) as PersonAssignmentSummary[];
+  const assignmentRows = (assignmentsResult.data ?? []) as unknown as PersonAssignmentSummary[];
   const assignmentsByPerson = new Map<
     string,
     Array<{

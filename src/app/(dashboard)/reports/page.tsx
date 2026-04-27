@@ -2,8 +2,9 @@ import {
   ReportsWorkspace,
   type ReportsWorkspaceView,
 } from "@/components/reports/reports-workspace";
-import { INCIDENT_DIRECTORY } from "@/lib/incidents";
-import { REPORT_ACTIVITY_LOG, REPORT_DIRECTORY } from "@/lib/reports";
+import { getUserContext } from "@/lib/auth";
+import { hasFullDashboardAccessRole } from "@/lib/constants";
+import { getReportingWorkspaceData } from "@/lib/data/reporting";
 import { getSettingsSnapshot } from "@/lib/settings";
 
 type PageProps = {
@@ -28,16 +29,21 @@ function resolveInitialView(
 
 export default async function ReportsPage({ searchParams }: PageProps) {
   const resolvedSearchParams = await searchParams;
-  const settings = await getSettingsSnapshot();
+  const [settings, reportingData, user] = await Promise.all([
+    getSettingsSnapshot(),
+    getReportingWorkspaceData(),
+    getUserContext(),
+  ]);
   const initialView = resolveInitialView(resolvedSearchParams.view);
 
   return (
     <ReportsWorkspace
-      reports={REPORT_DIRECTORY}
-      activities={REPORT_ACTIVITY_LOG}
-      incidents={INCIDENT_DIRECTORY}
+      reports={reportingData.reports}
+      activities={reportingData.activities}
+      incidents={reportingData.incidents}
       hasGeminiKey={settings.hasGeminiKey}
       initialView={initialView}
+      canManageEvidence={hasFullDashboardAccessRole(user.role)}
     />
   );
 }

@@ -5,7 +5,7 @@ import { CalendarDays, Clock3 } from "lucide-react";
 
 import { badgeBaseClassName } from "@/components/ui/badge";
 import { ClientTeamLogoMark } from "@/components/team-logo-mark-client";
-import { getTeamLeagueColorSet } from "@/lib/team-directory";
+import { getTeamDisplayName, getTeamLeagueColorSet } from "@/lib/team-directory";
 import { cn } from "@/lib/utils";
 
 function splitMatchLabel(matchLabel: string) {
@@ -44,6 +44,8 @@ export function MatchSummaryCell({
   compact?: boolean;
 }) {
   const teams = splitMatchLabel(matchLabel);
+  const homeTeamLabel = getTeamDisplayName(teams.homeTeam, competition);
+  const awayTeamLabel = getTeamDisplayName(teams.awayTeam, competition);
   const hasMetaRow = Boolean(metaDate || metaTime);
 
   return (
@@ -98,7 +100,7 @@ export function MatchSummaryCell({
               compact && "text-[12px]",
             )}
           >
-            {teams.homeTeam}
+            {homeTeamLabel}
           </p>
           <div className={cn("flex min-w-0 items-start", compact ? "gap-1.5" : "gap-2")}>
             <p className="shrink-0 pt-0.5 text-[11px] font-black uppercase tracking-[0.18em] text-[var(--accent)]">
@@ -110,7 +112,7 @@ export function MatchSummaryCell({
                 compact && "text-[12px]",
               )}
             >
-              {teams.awayTeam}
+              {awayTeamLabel}
             </p>
           </div>
         </div>

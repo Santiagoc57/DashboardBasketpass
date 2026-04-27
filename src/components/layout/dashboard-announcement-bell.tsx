@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { Bell, Megaphone, X } from "lucide-react";
 
 import type { AnnouncementSummary } from "@/lib/data/announcements";
@@ -13,6 +14,14 @@ function formatAnnouncementDate(value: string) {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(new Date(value));
+}
+
+function getAnnouncementEyebrowLabel(announcement: AnnouncementSummary) {
+  return announcement.eyebrow_label?.trim() || "Comunicado general";
+}
+
+function getAnnouncementDismissLabel(announcement: AnnouncementSummary) {
+  return announcement.dismiss_label?.trim() || "Entendido";
 }
 
 export function DashboardAnnouncementBell({
@@ -112,69 +121,77 @@ export function DashboardAnnouncementBell({
         ) : null}
       </button>
 
-      {isOpen && announcement ? (
-        <div
-          className="fixed inset-0 z-[90] flex items-center justify-center bg-[#101828]/60 p-4 backdrop-blur-sm"
-          onClick={() => setIsOpen(false)}
-        >
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="dashboard-announcement-title"
-            className="panel-surface relative w-full max-w-xl border border-[var(--border)] bg-[var(--surface)] shadow-[0_24px_64px_rgba(15,23,42,0.22)]"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="flex items-start justify-between gap-4 border-b border-[var(--border)] px-6 py-5">
-              <div className="min-w-0">
-                <div className="flex items-center gap-3">
-                  <span className="inline-flex size-11 items-center justify-center rounded-2xl bg-[var(--accent-soft)] text-[var(--accent)]">
-                    <Megaphone className="size-5" />
-                  </span>
-                  <div>
-                    <p className="text-[11px] font-black uppercase tracking-[0.24em] text-[var(--accent)]">
-                      Comunicado general
-                    </p>
-                    <p className="mt-1 text-xs font-semibold text-[#94a3b8]">
-                      {formatAnnouncementDate(announcement.updated_at)}
-                    </p>
+      {typeof document !== "undefined" && isOpen && announcement
+        ? createPortal(
+            <div
+              className="fixed inset-0 z-[200] flex items-start justify-center overflow-y-auto bg-[#101828]/60 p-4 backdrop-blur-sm sm:items-center"
+              style={{
+                paddingTop: "max(1rem, calc(env(safe-area-inset-top) + 1rem))",
+                paddingBottom: "max(1rem, calc(env(safe-area-inset-bottom) + 1rem))",
+              }}
+              onClick={() => setIsOpen(false)}
+            >
+              <div
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="dashboard-announcement-title"
+                className="panel-surface relative my-auto flex w-full max-w-xl flex-col overflow-hidden border border-[var(--border)] bg-[var(--surface)] shadow-[0_24px_64px_rgba(15,23,42,0.22)]"
+                style={{ maxHeight: "calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 2rem)" }}
+                onClick={(event) => event.stopPropagation()}
+              >
+                <div className="flex items-start justify-between gap-4 border-b border-[var(--border)] px-6 py-5">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-3">
+                      <span className="inline-flex size-11 items-center justify-center rounded-2xl bg-[var(--accent-soft)] text-[var(--accent)]">
+                        <Megaphone className="size-5" />
+                      </span>
+                      <div>
+                        <p className="text-[11px] font-black uppercase tracking-[0.24em] text-[var(--accent)]">
+                          {getAnnouncementEyebrowLabel(announcement)}
+                        </p>
+                        <p className="mt-1 text-xs font-semibold text-[#94a3b8]">
+                          {formatAnnouncementDate(announcement.updated_at)}
+                        </p>
+                      </div>
+                    </div>
+                    <h3
+                      id="dashboard-announcement-title"
+                      className="mt-4 text-2xl font-extrabold tracking-[-0.03em] text-[var(--foreground)]"
+                    >
+                      {announcement.title}
+                    </h3>
                   </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setIsOpen(false)}
+                    className="inline-flex size-10 shrink-0 items-center justify-center rounded-full bg-[var(--background-soft)] text-[#94a3b8] transition hover:bg-[#eef2f6] hover:text-[#52627a]"
+                    aria-label="Cerrar comunicado"
+                  >
+                    <X className="size-4" />
+                  </button>
                 </div>
-                <h3
-                  id="dashboard-announcement-title"
-                  className="mt-4 text-2xl font-extrabold tracking-[-0.03em] text-[var(--foreground)]"
-                >
-                  {announcement.title}
-                </h3>
+
+                <div className="space-y-4 overflow-y-auto px-6 py-5">
+                  <p className="whitespace-pre-line text-sm leading-7 text-[#5f6c80]">
+                    {announcement.body}
+                  </p>
+                </div>
+
+                <div className="flex justify-end border-t border-[var(--border)] px-6 py-4">
+                  <button
+                    type="button"
+                    onClick={() => setIsOpen(false)}
+                    className="inline-flex h-11 items-center justify-center rounded-xl bg-[var(--accent)] px-5 text-sm font-bold text-white transition hover:bg-[var(--accent-strong)]"
+                  >
+                    {getAnnouncementDismissLabel(announcement)}
+                  </button>
+                </div>
               </div>
-
-              <button
-                type="button"
-                onClick={() => setIsOpen(false)}
-                className="inline-flex size-10 shrink-0 items-center justify-center rounded-full bg-[var(--background-soft)] text-[#94a3b8] transition hover:bg-[#eef2f6] hover:text-[#52627a]"
-                aria-label="Cerrar comunicado"
-              >
-                <X className="size-4" />
-              </button>
-            </div>
-
-            <div className="space-y-4 px-6 py-5">
-              <p className="whitespace-pre-line text-sm leading-7 text-[#5f6c80]">
-                {announcement.body}
-              </p>
-            </div>
-
-            <div className="flex justify-end border-t border-[var(--border)] px-6 py-4">
-              <button
-                type="button"
-                onClick={() => setIsOpen(false)}
-                className="inline-flex h-11 items-center justify-center rounded-xl bg-[var(--accent)] px-5 text-sm font-bold text-white transition hover:bg-[var(--accent-strong)]"
-              >
-                Entendido
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
+            </div>,
+            document.body,
+          )
+        : null}
     </>
   );
 }

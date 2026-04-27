@@ -1,15 +1,8 @@
 import Link from "next/link";
 import {
-  Camera,
-  Download,
   LayoutGrid,
-  Mic2,
-  PencilLine,
   Rows3,
   ShieldCheck,
-  UserRoundX,
-  Users,
-  Video,
   X,
 } from "lucide-react";
 
@@ -18,10 +11,11 @@ import { SectionAiAssistant } from "@/components/ai/section-ai-assistant";
 import { SectionPageHeader } from "@/components/layout/section-page-header";
 import { SetupPanel } from "@/components/layout/setup-panel";
 import { PeopleDirectoryView } from "@/components/people/people-directory-view";
-import { PeopleAdminWarningModal } from "@/components/people/people-admin-warning-modal";
 import { CreatePersonModal } from "@/components/people/create-person-modal";
+import { PeopleExportButton } from "@/components/people/people-export-button";
 import { PersonDeleteButton } from "@/components/people/person-delete-button";
 import { PersonRevokeAccessButton } from "@/components/people/person-revoke-access-button";
+import { TeamCoverageField } from "@/components/people/team-coverage-field";
 import { PeopleTable } from "@/components/people/people-table";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -30,9 +24,7 @@ import { PageMessage } from "@/components/ui/page-message";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Select } from "@/components/ui/select";
 import { SectionTableCard } from "@/components/ui/section-table-card";
-import { StatCard } from "@/components/ui/stat-card";
 import { Textarea } from "@/components/ui/textarea";
-import { getToolbarIconButtonClassName } from "@/components/ui/toolbar-icon-button";
 import { ToolbarSearchField } from "@/components/ui/toolbar-search-field";
 import { requireUserContext } from "@/lib/auth";
 import { SECTION_COPY } from "@/lib/copy";
@@ -42,7 +34,7 @@ import type { AppRole } from "@/lib/database.types";
 import { getAssignmentStateDisplayName, getRoleDisplayName } from "@/lib/display";
 import { isSupabaseConfigured } from "@/lib/env";
 import type { PeopleAiContextItem } from "@/lib/people-ai";
-import { parsePersonNotesMeta } from "@/lib/people-notes";
+import { getPersonRoleValues, parsePersonNotesMeta } from "@/lib/people-notes";
 import { parseNotice } from "@/lib/search-params";
 import { getSettingsSnapshot } from "@/lib/settings";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
@@ -54,59 +46,32 @@ type PageProps = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 };
 
-function toCsvHref(people: PersonListItem[]) {
-  const rows = [
-    [
-      "Nombre",
-      "Rol principal",
-      "Ciudad",
-      "Responsable de equipos",
-      "Teléfono",
-      "Email",
-      "Estado",
-      "Notas",
-    ],
-    ...people.map((person) => {
-      const meta = parsePersonNotesMeta(person.notes);
-
-      return [
-        person.full_name,
-        meta.role || person.primary_role || "",
-        meta.city || "",
-        meta.coverage || "",
-        person.phone ?? "",
-        person.email ?? "",
-        person.assignment_state,
-        meta.notes ?? "",
-      ];
-    }),
-  ];
-
-  const csv = rows
-    .map((row) =>
-      row
-        .map((value) => `"${String(value).replaceAll('"', '""')}"`)
-        .join(","),
-    )
-    .join("\n");
-
-  return `data:text/csv;charset=utf-8,${encodeURIComponent(csv)}`;
-}
-
 const ROLE_OPTIONS = Array.from(
   new Map(ROLE_SEED.map((role) => [role.name, role])).values(),
 ).map((role) => role.name);
 const TEAM_OPTIONS = Array.from(
-  new Set(TEAM_DIRECTORY.map((team) => team.official_name)),
-).sort((left, right) => left.localeCompare(right, "es"));
+  TEAM_DIRECTORY.reduce((map, team) => {
+    if (!map.has(team.official_name)) {
+      map.set(team.official_name, {
+        name: team.official_name,
+        stadium: team.stadium,
+        competition: team.competition,
+      });
+    }
+
+    return map;
+  }, new Map<string, { name: string; stadium: string | null; competition: string }>())
+    .values(),
+).sort((left, right) => left.name.localeCompare(right.name, "es"));
 
 function toPeopleAiContext(people: PersonListItem[]): PeopleAiContextItem[] {
   return people.map((person) => {
     const meta = parsePersonNotesMeta(person.notes);
+    const roles = getPersonRoleValues(meta, person.primary_role);
 
     return {
       fullName: person.full_name,
-      role: meta.role || person.primary_role || "",
+      role: roles.map((role) => getRoleDisplayName(role)).join(", "),
       city: meta.city || "",
       coverage: meta.coverage || "",
       phone: person.phone ?? "",
@@ -115,11 +80,6 @@ function toPeopleAiContext(people: PersonListItem[]): PeopleAiContextItem[] {
       notes: meta.notes ?? "",
     };
   });
-}
-
-function getPersonRole(person: PersonListItem) {
-  const meta = parsePersonNotesMeta(person.notes);
-  return meta.role || person.primary_role || "";
 }
 
 function buildPeopleHref(
@@ -155,7 +115,7 @@ export default async function PeoplePage({ searchParams }: PageProps) {
       ? resolvedSearchParams.q.trim()
       : "";
   const viewMode =
-    resolvedSearchParams.view === "directory" ? "directory" : "table";
+    resolvedSearchParams.view === "table" ? "table" : "directory";
   const editPersonId =
     typeof resolvedSearchParams.edit === "string"
       ? resolvedSearchParams.edit
@@ -173,9 +133,11 @@ export default async function PeoplePage({ searchParams }: PageProps) {
     }
 
     const meta = parsePersonNotesMeta(person.notes);
+    const roles = getPersonRoleValues(meta, person.primary_role);
     const haystack = [
       person.full_name,
-      meta.role || person.primary_role || "",
+      ...roles,
+      ...roles.map((role) => getRoleDisplayName(role)),
       meta.city || "",
       meta.coverage || "",
       person.phone ?? "",
@@ -192,16 +154,6 @@ export default async function PeoplePage({ searchParams }: PageProps) {
   const activePeople = people.filter((person) => person.active);
   const activeCount = activePeople.length;
   const inactiveCount = people.length - activeCount;
-  const relatorCount = activePeople.filter(
-    (person) => getPersonRole(person) === "Relator",
-  ).length;
-  const producerCount = activePeople.filter(
-    (person) => getPersonRole(person) === "Productor",
-  ).length;
-  const cameraCount = activePeople.filter((person) =>
-    getPersonRole(person).startsWith("Camara"),
-  ).length;
-  const exportHref = toCsvHref(people);
   const aiContext = toPeopleAiContext(people);
   const selectedPerson =
     allPeople.find((person) => person.id === editPersonId) ?? null;
@@ -254,7 +206,7 @@ export default async function PeoplePage({ searchParams }: PageProps) {
   const selectedPeopleHref = selectedPerson
     ? buildPeopleHref(resolvedSearchParams, {
         edit: selectedPerson.id,
-        view: viewMode === "directory" ? "directory" : undefined,
+        view: viewMode === "table" ? "table" : undefined,
       })
     : null;
 
@@ -274,21 +226,11 @@ export default async function PeoplePage({ searchParams }: PageProps) {
               defaultValue={query}
               placeholder="Buscar nombre, rol, responsable o ciudad..."
             >
-              {viewMode === "directory" ? (
-                <input type="hidden" name="view" value="directory" />
-              ) : null}
+              <input type="hidden" name="view" value={viewMode} />
             </ToolbarSearchField>
             {people.length ? (
               <>
-                <a
-                  href={exportHref}
-                  download="basket-production-personal.csv"
-                  aria-label="Descargar lista de personal"
-                  title="Descargar lista de personal"
-                  className={getToolbarIconButtonClassName({ tone: "violet" })}
-                >
-                  <Download className="size-4" />
-                </a>
+                <PeopleExportButton people={people} />
                 <SectionAiAssistant
                   section="Personal"
                   title="Consulta el personal visible"
@@ -322,100 +264,58 @@ export default async function PeoplePage({ searchParams }: PageProps) {
 
       <PageMessage intent={intent} message={notice} />
 
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
-        <StatCard
-          label="Personal activo"
-          value={activeCount}
-          icon={Users}
-          tone="accent"
-        />
-        <StatCard
-          label="Personal inactivo"
-          value={inactiveCount}
-          icon={UserRoundX}
-          tone="danger"
-        />
-        <StatCard
-          label="Relatores activos"
-          value={relatorCount}
-          icon={Mic2}
-          tone="info"
-        />
-        <StatCard
-          label="Productores activos"
-          value={producerCount}
-          icon={Video}
-          tone="neutral"
-        />
-        <StatCard
-          label="Cámaras activas"
-          value={cameraCount}
-          icon={Camera}
-          tone="neutral"
-        />
-      </div>
-
       <SectionTableCard
-        title={
-          viewMode === "directory"
-            ? SECTION_COPY.people.directoryTitle
-            : SECTION_COPY.people.tableTitle
-        }
+        title=""
+        titleClassName="hidden"
+        headerClassName="justify-between"
         badge={
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-[#d8dee8] bg-[#f6f8fb] px-3 py-1 text-xs font-bold text-[#596980]">
-              <span className="size-1.5 rounded-full bg-[#8ea0b7]" />
-              {activeCount} Activos
-            </span>
-            <SegmentedControl
-              size="sm"
-              items={[
-                {
-                  key: "table",
-                  href: buildPeopleHref(resolvedSearchParams, { view: undefined }),
-                  active: viewMode === "table",
-                  label: (
-                    <span className="inline-flex items-center gap-2">
-                      <Rows3 className="size-3.5" />
-                      Tabla
-                    </span>
-                  ),
-                },
-                {
-                  key: "directory",
-                  href: buildPeopleHref(resolvedSearchParams, { view: "directory" }),
-                  active: viewMode === "directory",
-                  label: (
-                    <span className="inline-flex items-center gap-2">
-                      <LayoutGrid className="size-3.5" />
-                      Directorio
-                    </span>
-                  ),
-                },
-              ]}
-            />
-            {user.canEdit ? (
-              <>
-                {selectedPerson ? (
-                  <Link
-                    href={selectedPeopleHref ?? currentPeopleHref}
-                    className="inline-flex size-9 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--surface)] text-[#7b8798] transition hover:border-[#f0d9de] hover:bg-[#fff7f8] hover:text-[var(--accent)]"
-                    title={`Editar ${selectedPerson.full_name}`}
-                  >
-                    <PencilLine className="size-4" />
-                  </Link>
-                ) : (
-                  <PeopleAdminWarningModal />
-                )}
-                {selectedPerson ? (
-                  <PersonDeleteButton
-                    personId={selectedPerson.id}
-                    fullName={selectedPerson.full_name}
-                    redirectTo={currentPeopleHref}
-                  />
-                ) : null}
-              </>
-            ) : null}
+          <div className="flex w-full flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-[#d8dee8] bg-[#f6f8fb] px-3 py-1 text-xs font-bold text-[#596980]">
+                <span className="size-1.5 rounded-full bg-[#8ea0b7]" />
+                {activeCount} Activos
+              </span>
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-[#d8dee8] bg-[#f6f8fb] px-3 py-1 text-xs font-bold text-[#596980]">
+                <span className="size-1.5 rounded-full bg-[#c1cad7]" />
+                {inactiveCount} Inactivos
+              </span>
+            </div>
+            <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
+              <SegmentedControl
+                size="sm"
+                items={[
+                  {
+                    key: "table",
+                    href: buildPeopleHref(resolvedSearchParams, { view: "table" }),
+                    active: viewMode === "table",
+                    label: (
+                      <span className="inline-flex items-center gap-2">
+                        <Rows3 className="size-3.5" />
+                        Tabla
+                      </span>
+                    ),
+                  },
+                  {
+                    key: "directory",
+                    href: buildPeopleHref(resolvedSearchParams, { view: undefined }),
+                    active: viewMode === "directory",
+                    label: (
+                      <span className="inline-flex items-center gap-2">
+                        <LayoutGrid className="size-3.5" />
+                        Directorio
+                      </span>
+                    ),
+                  },
+                ]}
+              />
+              {user.canEdit && selectedPerson ? (
+                <PersonDeleteButton
+                  personId={selectedPerson.id}
+                  fullName={selectedPerson.full_name}
+                  redirectTo={currentPeopleHref}
+                />
+              ) : null}
+            </div>
           </div>
         }
       >
@@ -517,21 +417,49 @@ export default async function PeoplePage({ searchParams }: PageProps) {
                         </label>
                         <label className="space-y-2">
                           <span className="text-sm font-semibold text-[#334155]">
-                            Rol principal
+                            Roles
                           </span>
-                          <Select
-                            name="roleName"
-                            defaultValue={selectedMeta?.role ?? ""}
-                            disabled={!user.canEdit}
-                            className="h-12 rounded-[var(--panel-radius)] border-[#e5e7eb] bg-[#f9f9f9] text-[15px] font-medium text-[#1f2937] shadow-[inset_0_2px_4px_rgba(15,23,42,0.04)] focus:border-[var(--accent)] focus:bg-white focus:ring-[3px] focus:ring-[rgba(230,18,56,0.08)]"
-                          >
-                            <option value="">Seleccionar rol...</option>
-                            {ROLE_OPTIONS.map((roleName) => (
-                              <option key={roleName} value={roleName}>
-                                {getRoleDisplayName(roleName)}
-                              </option>
-                            ))}
-                          </Select>
+                          <div className="grid gap-3 md:grid-cols-3">
+                            <Select
+                              name="roleName"
+                              defaultValue={selectedMeta?.roles?.[0] ?? selectedMeta?.role ?? ""}
+                              disabled={!user.canEdit}
+                              className="h-12 rounded-[var(--panel-radius)] border-[#e5e7eb] bg-[#f9f9f9] text-[15px] font-medium text-[#1f2937] shadow-[inset_0_2px_4px_rgba(15,23,42,0.04)] focus:border-[var(--accent)] focus:bg-white focus:ring-[3px] focus:ring-[rgba(230,18,56,0.08)]"
+                            >
+                              <option value="">Rol principal...</option>
+                              {ROLE_OPTIONS.map((roleName) => (
+                                <option key={roleName} value={roleName}>
+                                  {getRoleDisplayName(roleName)}
+                                </option>
+                              ))}
+                            </Select>
+                            <Select
+                              name="roleName2"
+                              defaultValue={selectedMeta?.roles?.[1] ?? ""}
+                              disabled={!user.canEdit}
+                              className="h-12 rounded-[var(--panel-radius)] border-[#e5e7eb] bg-[#f9f9f9] text-[15px] font-medium text-[#1f2937] shadow-[inset_0_2px_4px_rgba(15,23,42,0.04)] focus:border-[var(--accent)] focus:bg-white focus:ring-[3px] focus:ring-[rgba(230,18,56,0.08)]"
+                            >
+                              <option value="">Rol adicional 1...</option>
+                              {ROLE_OPTIONS.map((roleName) => (
+                                <option key={roleName} value={roleName}>
+                                  {getRoleDisplayName(roleName)}
+                                </option>
+                              ))}
+                            </Select>
+                            <Select
+                              name="roleName3"
+                              defaultValue={selectedMeta?.roles?.[2] ?? ""}
+                              disabled={!user.canEdit}
+                              className="h-12 rounded-[var(--panel-radius)] border-[#e5e7eb] bg-[#f9f9f9] text-[15px] font-medium text-[#1f2937] shadow-[inset_0_2px_4px_rgba(15,23,42,0.04)] focus:border-[var(--accent)] focus:bg-white focus:ring-[3px] focus:ring-[rgba(230,18,56,0.08)]"
+                            >
+                              <option value="">Rol adicional 2...</option>
+                              {ROLE_OPTIONS.map((roleName) => (
+                                <option key={roleName} value={roleName}>
+                                  {getRoleDisplayName(roleName)}
+                                </option>
+                              ))}
+                            </Select>
+                          </div>
                         </label>
                         <label className="flex items-center gap-3 rounded-[var(--panel-radius)] border border-[#e5e7eb] bg-[#f9f9f9] px-4 py-3 text-sm font-semibold text-[#1f2937] shadow-[inset_0_2px_4px_rgba(15,23,42,0.04)]">
                           <input
@@ -546,23 +474,16 @@ export default async function PeoplePage({ searchParams }: PageProps) {
                         </label>
                         <label className="space-y-2 md:col-span-2">
                           <span className="text-sm font-semibold text-[#334155]">
-                            Responsable
+                            Responsable de equipo
                           </span>
-                          <>
-                            <Input
-                              name="coverageTeams"
-                              list="people-team-options-edit"
-                              defaultValue={selectedMeta?.coverage ?? ""}
-                              placeholder="Escribe o pega equipos y el sistema te sugerirá coincidencias"
-                              disabled={!user.canEdit}
-                              className="h-12 rounded-[var(--panel-radius)] border-[#e5e7eb] bg-[#f9f9f9] text-[15px] font-medium text-[#1f2937] placeholder:text-[#98a2b3] shadow-[inset_0_2px_4px_rgba(15,23,42,0.04)] focus:border-[var(--accent)] focus:bg-white focus:ring-[3px] focus:ring-[rgba(230,18,56,0.08)]"
-                            />
-                            <datalist id="people-team-options-edit">
-                              {TEAM_OPTIONS.map((teamName) => (
-                                <option key={teamName} value={teamName} />
-                              ))}
-                            </datalist>
-                          </>
+                          <TeamCoverageField
+                            name="coverageTeams"
+                            defaultValue={selectedMeta?.coverage ?? ""}
+                            options={TEAM_OPTIONS}
+                            placeholder="Escribe uno o varios equipos y el sistema te sugerirá coincidencias"
+                            disabled={!user.canEdit}
+                            className="h-12 rounded-[var(--panel-radius)] border-[#e5e7eb] bg-[#f9f9f9] text-[15px] font-medium text-[#1f2937] placeholder:text-[#98a2b3] shadow-[inset_0_2px_4px_rgba(15,23,42,0.04)] focus:border-[var(--accent)] focus:bg-white focus:ring-[3px] focus:ring-[rgba(230,18,56,0.08)]"
+                          />
                         </label>
                       </div>
                     </div>
@@ -577,73 +498,71 @@ export default async function PeoplePage({ searchParams }: PageProps) {
                         disabled={!user.canEdit}
                         className="min-h-[260px] rounded-[var(--panel-radius)] border-[#e5e7eb] bg-[#f9f9f9] text-[15px] font-medium text-[#1f2937] placeholder:text-[#98a2b3] shadow-[inset_0_2px_4px_rgba(15,23,42,0.04)] focus:border-[var(--accent)] focus:bg-white focus:ring-[3px] focus:ring-[rgba(230,18,56,0.08)]"
                       />
+
+                      {user.role === "admin" ? (
+                        <div className="rounded-[var(--panel-radius)] border-2 border-[rgba(211,49,49,0.10)] bg-white p-6 shadow-sm">
+                          <div className="flex flex-col gap-5">
+                            <div className="flex gap-4">
+                              <div className="inline-flex size-12 items-center justify-center rounded-2xl bg-[rgba(211,49,49,0.1)] text-[var(--accent)]">
+                                <ShieldCheck className="size-6" />
+                              </div>
+
+                              <div className="space-y-1">
+                                <h4 className="font-bold text-[#111827]">
+                                  Acceso a la plataforma
+                                </h4>
+                                <p className="text-sm text-[#667085]">
+                                  {selectedPerson.email
+                                    ? selectedPersonHasPlatformAccess
+                                      ? "Este colaborador puede iniciar sesión y entrar directo a Mi jornada."
+                                      : "Este colaborador no tiene acceso activo a la plataforma en este momento."
+                                    : "Primero debes guardar un correo electrónico para poder gestionar acceso."}
+                                </p>
+                              </div>
+                            </div>
+
+                            <div className="flex flex-col items-start gap-2">
+                              <span
+                                className={cn(
+                                  "relative inline-flex h-7 w-14 items-center rounded-full transition",
+                                  selectedPersonHasPlatformAccess
+                                    ? "bg-[var(--accent)]"
+                                    : "bg-[#d8dee8]",
+                                )}
+                                aria-hidden="true"
+                              >
+                                <span
+                                  className={cn(
+                                    "inline-block size-6 rounded-full border border-white bg-white transition",
+                                    selectedPersonHasPlatformAccess
+                                      ? "translate-x-7"
+                                      : "translate-x-0.5",
+                                  )}
+                                />
+                              </span>
+
+                              <span className="text-[10px] font-black uppercase tracking-[0.18em] text-[var(--accent)]">
+                                {selectedPersonHasPlatformAccess
+                                  ? "Acceso habilitado"
+                                  : "Acceso desactivado"}
+                              </span>
+                            </div>
+
+                            {selectedPersonHasPlatformAccess ? (
+                              <div className="flex justify-end">
+                                <PersonRevokeAccessButton
+                                  personId={selectedPerson.id}
+                                  redirectTo={selectedPeopleHref ?? currentPeopleHref}
+                                />
+                              </div>
+                            ) : null}
+                          </div>
+                        </div>
+                      ) : null}
                     </div>
                   </div>
                 </section>
               </form>
-
-              {user.role === "admin" ? (
-                <section className="border-t border-[#f1f3f5] bg-[#faf7f7] px-8 py-8">
-                  <div className="rounded-[var(--panel-radius)] border-2 border-[rgba(211,49,49,0.10)] bg-white p-6 shadow-sm">
-                    <div className="flex flex-col gap-5 2xl:flex-row 2xl:items-start 2xl:justify-between">
-                      <div className="flex gap-4">
-                        <div className="inline-flex size-12 items-center justify-center rounded-2xl bg-[rgba(211,49,49,0.1)] text-[var(--accent)]">
-                          <ShieldCheck className="size-6" />
-                        </div>
-
-                        <div className="space-y-1">
-                          <h4 className="font-bold text-[#111827]">
-                            Acceso a la plataforma
-                          </h4>
-                          <p className="max-w-xl text-sm text-[#667085]">
-                            {selectedPerson.email
-                              ? selectedPersonHasPlatformAccess
-                                ? "Este colaborador puede iniciar sesión y entrar directo a Mi jornada."
-                                : "Este colaborador no tiene acceso activo a la plataforma en este momento."
-                              : "Primero debes guardar un correo electrónico para poder gestionar acceso."}
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="flex flex-col items-start gap-2 lg:items-end">
-                        <span
-                          className={cn(
-                            "relative inline-flex h-7 w-14 items-center rounded-full transition",
-                            selectedPersonHasPlatformAccess
-                              ? "bg-[var(--accent)]"
-                              : "bg-[#d8dee8]",
-                          )}
-                          aria-hidden="true"
-                        >
-                          <span
-                            className={cn(
-                              "inline-block size-6 rounded-full border border-white bg-white transition",
-                              selectedPersonHasPlatformAccess
-                                ? "translate-x-7"
-                                : "translate-x-0.5",
-                            )}
-                          />
-                        </span>
-
-                        <span className="text-[10px] font-black uppercase tracking-[0.18em] text-[var(--accent)]">
-                          {selectedPersonHasPlatformAccess
-                            ? "Acceso habilitado"
-                            : "Acceso desactivado"}
-                        </span>
-                      </div>
-                    </div>
-
-                    {selectedPersonHasPlatformAccess ? (
-                      <div className="mt-4 flex justify-end">
-                        <PersonRevokeAccessButton
-                          personId={selectedPerson.id}
-                          redirectTo={selectedPeopleHref ?? currentPeopleHref}
-                        />
-                      </div>
-                    ) : null}
-                  </div>
-                </section>
-              ) : null}
             </div>
 
             <div className="flex items-center justify-between gap-4 border-t border-[#f1f3f5] bg-white px-8 py-5">

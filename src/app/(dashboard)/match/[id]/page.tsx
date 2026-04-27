@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import {
   CalendarDays,
   Camera,
@@ -7,7 +7,9 @@ import {
   ChevronDown,
   ChevronRight,
   CircleAlert,
+  CircleHelp,
   Clock3,
+  Copy,
   Home,
   MapPin,
   Megaphone,
@@ -17,6 +19,7 @@ import {
   Repeat2,
   ShieldAlert,
   UsersRound,
+  XCircle,
 } from "lucide-react";
 
 import {
@@ -24,6 +27,7 @@ import {
   updateMatchAction,
   upsertAssignmentAction,
 } from "@/app/actions/matches";
+import { CreateMatchModal } from "@/components/grid/create-match-modal";
 import { GroupActions } from "@/components/match/group-actions";
 import { HistoryTimeline } from "@/components/match/history-timeline";
 import { TeamLogoMark } from "@/components/team-logo-mark";
@@ -36,6 +40,7 @@ import { Select } from "@/components/ui/select";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { Textarea } from "@/components/ui/textarea";
 import { requireUserContext } from "@/lib/auth";
+import { getAssignmentConfirmationPresentation } from "@/lib/assignment-confirmation";
 import { ALL_CLUB_OPTIONS, CLUB_COMPETITIONS } from "@/lib/club-catalog";
 import {
   getProductionModeLabel,
@@ -54,6 +59,7 @@ import {
   buildGroupName,
   getWhatsAppRoster,
 } from "@/lib/integrations";
+import { getTeamDisplayName } from "@/lib/team-directory";
 import { parseNotice } from "@/lib/search-params";
 import type { AssignmentDetail } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -108,6 +114,27 @@ function getConflictForAssignment(
         conflict.roleName === assignment.role.name,
     ) ?? null
   );
+}
+
+function AssignmentConfirmationIcon({
+  assignment,
+}: {
+  assignment: AssignmentDetail;
+}) {
+  const presentation = getAssignmentConfirmationPresentation(
+    assignment.confirmation_status,
+    assignment.confirmed,
+  );
+
+  if (presentation.status === "accepted") {
+    return <CheckCircle2 className="size-4 text-[#24a267]" aria-label={presentation.label} />;
+  }
+
+  if (presentation.status === "declined") {
+    return <XCircle className="size-4 text-[var(--accent)]" aria-label={presentation.label} />;
+  }
+
+  return <CircleHelp className="size-4 text-[var(--muted)]" aria-label={presentation.label} />;
 }
 
 function AssignmentControls({
@@ -259,11 +286,7 @@ function PrincipalAssignmentCard({
           ) : null}
         </div>
         <div className="flex items-center gap-3">
-          {assignment.confirmed ? (
-            <CheckCircle2 className="size-4 text-[#24a267]" />
-          ) : (
-            <Repeat2 className="size-4 text-[var(--muted)]" />
-          )}
+          <AssignmentConfirmationIcon assignment={assignment} />
           <ChevronDown className="size-4 text-[var(--muted)] transition group-open:rotate-180" />
         </div>
       </summary>
@@ -317,7 +340,7 @@ function CameraAssignmentCard({
           {conflict ? (
             <CircleAlert className="size-4 text-[var(--accent)]" />
           ) : assignment.person ? (
-            <CheckCircle2 className="size-4 text-[#24a267]" />
+            <AssignmentConfirmationIcon assignment={assignment} />
           ) : (
             <Repeat2 className="size-4 text-[#c39a1d]" />
           )}
@@ -333,7 +356,11 @@ function CameraAssignmentCard({
           {assignment.person?.full_name ?? "Pendiente asignar"}
         </p>
         <p className="mt-1 text-xs text-[var(--muted)]">
-          {assignment.notes ?? (assignment.confirmed ? "Confirmado" : "Sin confirmación")}
+          {assignment.notes ??
+            getAssignmentConfirmationPresentation(
+              assignment.confirmation_status,
+              assignment.confirmed,
+            ).label}
         </p>
         <div className="mt-3 flex items-center justify-end gap-2 text-xs font-semibold text-[var(--muted)]">
           Editar
@@ -369,7 +396,13 @@ function TransmissionAssignmentRow({
 }) {
   const stateClass = assignment.confirmed
     ? "bg-[#effaf4] text-[#17654d]"
-    : "bg-[var(--background-soft)] text-[var(--muted)]";
+    : assignment.confirmation_status === "declined"
+      ? "bg-[#fff3f6] text-[var(--accent)]"
+      : "bg-[var(--background-soft)] text-[var(--muted)]";
+  const presentation = getAssignmentConfirmationPresentation(
+    assignment.confirmation_status,
+    assignment.confirmed,
+  );
 
   return (
     <details className="panel-surface group border border-[var(--border)] bg-[var(--surface)]">
@@ -389,7 +422,7 @@ function TransmissionAssignmentRow({
           </div>
           <div className="flex items-center gap-3">
             <span className={cn("rounded-full px-3 py-1 text-xs font-semibold", stateClass)}>
-              {assignment.confirmed ? "Confirmado" : "Pendiente"}
+              {presentation.label}
             </span>
             <ChevronDown className="size-4 text-[var(--muted)] transition group-open:rotate-180" />
           </div>
@@ -417,6 +450,8 @@ export default async function MatchDetailPage({
   const resolvedSearchParams = await searchParams;
   const { intent, notice } = parseNotice(resolvedSearchParams);
 
+  redirect("/grid");
+
   if (!isSupabaseConfigured) {
     return <SetupPanel />;
   }
@@ -435,6 +470,8 @@ export default async function MatchDetailPage({
   const groupMessage = buildGroupMessage(match);
   const roster = getWhatsAppRoster(match.assignments);
   const peopleMap = new Map(people.map((person) => [person.id, person.full_name]));
+  const homeTeamLabel = getTeamDisplayName(match.home_team, match.competition);
+  const awayTeamLabel = getTeamDisplayName(match.away_team, match.competition);
 
   const principalAssignments = sortAssignments(
     match.assignments.filter((assignment) => primaryCategories.has(assignment.role.category)),
@@ -490,7 +527,7 @@ export default async function MatchDetailPage({
                 initialsClassName="text-sm"
               />
               <h1 className="text-3xl font-black tracking-[-0.03em] text-[var(--foreground)] sm:text-4xl">
-                {match.home_team} vs {match.away_team}
+                {homeTeamLabel} vs {awayTeamLabel}
               </h1>
               <TeamLogoMark
                 teamName={match.away_team}
@@ -540,6 +577,16 @@ export default async function MatchDetailPage({
               <Megaphone className="size-4" />
               Notificar
             </Link>
+            <CreateMatchModal
+              people={people}
+              redirectTo={redirectTo}
+              canEdit={user.canEdit}
+              initialDate={formatMatchDate(match.kickoff_at, match.timezone, "yyyy-MM-dd")}
+              prefillMatch={match}
+              triggerLabel="Duplicar"
+              triggerIcon={<Copy className="size-4" />}
+              triggerClassName="h-10 border border-[var(--border)] bg-[var(--surface)] px-4 text-[var(--foreground)] shadow-none hover:bg-[var(--background-soft)]"
+            />
             <a
               href="#operativa"
               className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-[var(--accent)] px-5 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(230,18,56,0.18)] transition hover:bg-[var(--accent-strong)]"

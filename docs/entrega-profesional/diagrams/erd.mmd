@@ -1,0 +1,13 @@
+erDiagram
+  PROFILES ||--o{ MATCHES : owns
+  PROFILES ||--o{ ASSIGNMENTS : performs
+  ROLES ||--o{ ASSIGNMENTS : defines
+  MATCHES ||--o{ ASSIGNMENTS : includes
+  MATCHES ||--o{ AUDIT_LOG : records
+  PROFILES ||--o{ AUDIT_LOG : actor
+  MATCHES ||--o{ COLLABORATOR_REPORTS : has
+  MATCHES ||--o{ ANNOUNCEMENTS : has
+  APP_SETTINGS {
+    uuid id
+  }
+

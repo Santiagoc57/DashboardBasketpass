@@ -16,6 +16,7 @@ import {
   getCollaboratorDayData,
 } from "@/lib/data/collaborators";
 import { getDateInputValue, getMonthInputValue, isInDisplayedMonth } from "@/lib/date";
+import { toDateKey } from "@/lib/date";
 import { appEnv, isSupabaseConfigured } from "@/lib/env";
 import { getSettingsSnapshot } from "@/lib/settings";
 import { cn } from "@/lib/utils";
@@ -119,18 +120,19 @@ function DaySummaryCard({
         </p>
         <span
           className={cn(
-            "inline-flex size-10 shrink-0 items-center justify-center rounded-[var(--panel-radius)] border",
+            "inline-flex shrink-0 items-center justify-center rounded-[var(--panel-radius)] border px-3 py-2 text-lg font-black leading-none md:size-10 md:px-0 md:py-0",
             tone === "accent"
               ? "border-[#f4d4dc] bg-[#fff4f7] text-[var(--accent)]"
               : "border-[var(--border)] bg-[var(--surface)] text-[#94a3b8]",
           )}
         >
-          <Icon className="size-4" />
+          <span className="md:hidden">{value}</span>
+          <Icon className="hidden size-4 md:block" />
         </span>
       </div>
       <p
         className={cn(
-          "mt-4 text-[28px] font-black leading-none text-[var(--foreground)]",
+          "mt-4 hidden text-[28px] font-black leading-none text-[var(--foreground)] md:block",
           typeof value === "string" && value.length > 18 && "text-base leading-tight",
           tone === "accent" && "text-[var(--accent)]",
           valueClassName,
@@ -234,6 +236,30 @@ function buildDemoAssignment(params: {
   };
 }
 
+function getClosestAssignmentDate(
+  assignments: CollaboratorAssignmentItem[],
+  referenceDate: string,
+) {
+  const referenceTime = parseISO(`${referenceDate}T00:00:00`).getTime();
+
+  return (
+    assignments
+      .map((assignment) => {
+        const dateKey = toDateKey(assignment.kickoffAt, assignment.timezone);
+        const distance = Math.abs(
+          parseISO(`${dateKey}T00:00:00`).getTime() - referenceTime,
+        );
+
+        return { assignment, dateKey, distance };
+      })
+      .sort(
+        (left, right) =>
+          left.distance - right.distance ||
+          left.assignment.kickoffAt.localeCompare(right.assignment.kickoffAt),
+      )[0] ?? null
+  );
+}
+
 export default async function CollaboratorDayPage({ searchParams }: PageProps) {
   if (!isSupabaseConfigured) {
     return <SetupPanel />;
@@ -297,8 +323,14 @@ export default async function CollaboratorDayPage({ searchParams }: PageProps) {
   );
   const rawPrimaryAssignments =
     periodView === "month" ? monthAssignments : data.todayAssignments;
-  const showDemoToday =
-    guestMode || !data.person || rawPrimaryAssignments.length === 0;
+  const hasAssignmentsOutsideSelection =
+    Boolean(data.person) &&
+    data.allAssignments.length > 0 &&
+    rawPrimaryAssignments.length === 0;
+  const closestAssignmentDate = hasAssignmentsOutsideSelection
+    ? getClosestAssignmentDate(data.allAssignments, panelSelectedDate)
+    : null;
+  const showDemoToday = guestMode || !data.person;
   const primaryAssignments = showDemoToday
     ? [
         buildDemoAssignment({
@@ -332,6 +364,15 @@ export default async function CollaboratorDayPage({ searchParams }: PageProps) {
     periodView === "month"
       ? "Tus partidos asignados dentro del mes seleccionado."
       : "Tus partidos asignados para la fecha seleccionada.";
+  const emptyStateActionHref = closestAssignmentDate
+    ? buildMyDayHref({
+        view: "day",
+        date: closestAssignmentDate.dateKey,
+      })
+    : undefined;
+  const emptyStateActionLabel = closestAssignmentDate
+    ? `Abrir ${formatSelectedDate(closestAssignmentDate.dateKey)}`
+    : undefined;
   const todayHref = buildMyDayHref({
     view: "day",
     date: getDateInputValue(parseISO(`${todayDateKey}T00:00:00`)),
@@ -419,6 +460,9 @@ export default async function CollaboratorDayPage({ searchParams }: PageProps) {
         primaryHeading={primaryHeading}
         primaryDescription={primaryDescription}
         showDemoToday={showDemoToday}
+        hasAssignmentsOutsideSelection={hasAssignmentsOutsideSelection}
+        emptyStateActionHref={emptyStateActionHref}
+        emptyStateActionLabel={emptyStateActionLabel}
         todayAssignments={primaryAssignments}
         upcomingAssignments={upcomingAssignments}
         topContent={

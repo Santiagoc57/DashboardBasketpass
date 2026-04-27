@@ -168,7 +168,7 @@ export function DashboardShell(props: {
             {children}
           </main>
 
-          <footer className="border-t border-[var(--border)] bg-[var(--page-footer-bg)] pr-[var(--dashboard-shell-padding)] pl-[calc(var(--dashboard-shell-padding)+var(--dashboard-content-leading-space))] py-5 backdrop-blur-sm sm:py-6">
+          <footer className="border-t border-[var(--border)] bg-[var(--page-footer-bg)] pr-[var(--dashboard-shell-padding)] pl-[calc(var(--dashboard-shell-padding)+var(--dashboard-content-leading-space))] py-3 backdrop-blur-sm sm:py-3.5">
             <DashboardFooterMeta userName={displayName} />
           </footer>
         </div>

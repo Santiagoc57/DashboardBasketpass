@@ -8,6 +8,11 @@ The format is based on Keep a Changelog, adapted to the current workflow of this
 
 ### Changed
 
+- Added a professional handoff package under `docs/entrega-profesional/` with architecture, data model, permissions, runbook, backup/restore, QA, changelog/ADRs, monitoring, and release guidance.
+- Added a minimal unit test harness for pure utilities using `node --test`, plus CI coverage for the new suite.
+- Expanded the handoff package with a concrete data dictionary, a real permission matrix, operational runbook guidance, backup/restore steps, monitoring thresholds, and release rollback flow.
+- Added access-helper tests for dashboard role gating and production-mode normalization.
+
 - Redesigned the dashboard shell to a light editorial system with Manrope typography, refined header/sidebar navigation, quick-create drawer, and a consistent surface/token palette across grid, login, people, roles, match detail, group actions, and history panels.
 - Reworked the login page into a two-column editorial access screen and added a production sheet documenting typography, colors, surfaces, and component rules.
 - Added a structured basketball club catalog and wired suggestions for competition, local team, and away team in match creation and editing flows.

@@ -1,6 +1,10 @@
 import { redirect } from "next/navigation";
 
-import { resolveDashboardAccessRole } from "@/lib/constants";
+import {
+  hasCollaboratorOperationalAccess,
+  hasFullDashboardAccessRole,
+  resolveDashboardAccessRole,
+} from "@/lib/constants";
 import type { AppRole, ProfileRow } from "@/lib/database.types";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -37,6 +41,7 @@ export async function getUserContext() {
       profile: null,
       role: "viewer" as AppRole,
       canEdit: false,
+      canCollaboratorOperate: false,
     };
   }
 
@@ -61,6 +66,7 @@ export async function getUserContext() {
       profile: fallbackProfile,
       role: resolvedRole,
       canEdit: false,
+      canCollaboratorOperate: hasCollaboratorOperationalAccess(resolvedRole),
     };
   }
 
@@ -96,11 +102,8 @@ export async function getUserContext() {
     email: user.email ?? null,
     profile,
     role: resolvedRole,
-    canEdit:
-      resolvedRole === "admin" ||
-      resolvedRole === "editor" ||
-      resolvedRole === "coordinator" ||
-      resolvedRole === "collaborator",
+    canEdit: hasFullDashboardAccessRole(resolvedRole),
+    canCollaboratorOperate: hasCollaboratorOperationalAccess(resolvedRole),
   };
 }
 

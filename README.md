@@ -10,6 +10,7 @@ Dashboard operativo para programación deportiva con Next.js, Tailwind y Supabas
 - ABM de personas y roles
 - Auditoría automática en `audit_log`
 - RLS para `admin`, `editor`, `coordinator`, `collaborator` y `viewer`
+- Bandeja admin de reportes de equipos en `Settings`
 - Link dinámico a Google Calendar y panel `GRUPO` con copiar / abrir WhatsApp
 - Importador CSV en `tools/import`
 - Primera pantalla móvil `Mi jornada` para colaboradores vinculados por correo o nombre a `Personal`
@@ -27,6 +28,8 @@ Dashboard operativo para programación deportiva con Next.js, Tailwind y Supabas
 - `docs/production-sheet.md`: hoja de produccion visual con tipografia, colores y reglas del sistema
 - `docs/roadmap.md`: hoja de ruta funcional y técnica para `Producción`, `Reportes`, `Incidencias`, `Equipos`, `Personal` e IA
 - `docs/colaboradores.md`: propuesta de portal móvil para colaboradores, permisos, flujos y modelo de datos sugerido
+- `docs/entrega-profesional/README.md`: paquete de entrega profesional con arquitectura, permisos, runbook, QA y operacion
+- `docs/entrega-profesional/12-backup-restore-operacional.md`: comandos de backup, restore y verificacion operacional
 - `.github/workflows/ci.yml`: verificación automática en push y PR
 - `.github/pull_request_template.md`: checklist mínima para cambios reales
 
@@ -35,8 +38,24 @@ Comandos de verificación:
 ```bash
 npm run lint
 npm run typecheck
+npm run test:unit
 npm run check
 ```
+
+`npm run check` ejecuta lint, typecheck, pruebas unitarias y build.
+
+Comandos operativos:
+
+```bash
+npm run ops:db-backup
+npm run ops:db-backup:plain
+npm run ops:db-backups -- --latest
+npm run ops:db-apply -- --file supabase/migrations/0014_harden_collaborator_rls.sql
+npm run ops:db-restore:dry-run -- --file backups/db/archivo.dump
+npm run ops:recovery-smoke
+```
+
+La documentación operativa clave vive en `docs/entrega-profesional/`.
 
 ## Setup
 
@@ -59,19 +78,26 @@ NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
 NEXT_PUBLIC_APP_TIMEZONE=America/Bogota
 NEXT_PUBLIC_APP_URL=http://localhost:3000
+NEXT_PUBLIC_SUPPORT_EMAIL=soporte@basketproduction.pro
 ```
 
 Variables opcionales:
 
 ```bash
 SUPABASE_SERVICE_ROLE_KEY=
+SUPABASE_DB_URL=
 ALLOW_GUEST_MI_JORNADA=false
 PORTAL_GEMINI_API_KEY=
 PORTAL_GEMINI_MODEL=gemini-2.5-flash
 MATCH_LOOKUP_API_URL=
+TELEGRAM_BOT_TOKEN=
+TELEGRAM_CHAT_ID=
+OPERATION_ALERT_WEBHOOK_URL=
 ```
 
 `SUPABASE_SERVICE_ROLE_KEY` es necesaria para el importador CSV. Las demás se usan para funciones opcionales.
+`SUPABASE_DB_URL` se usa para backup, restore y verificación operacional.
+`TELEGRAM_BOT_TOKEN` y `TELEGRAM_CHAT_ID` activan alertas operativas por Telegram. Si están vacíos, el sistema usa `OPERATION_ALERT_WEBHOOK_URL` si existe; si no, solo registra el evento en consola.
 
 4. En Supabase ejecuta, en orden, todos los archivos de `supabase/migrations/` y luego `supabase/seed.sql`.
 
@@ -85,6 +111,12 @@ Migraciones actuales:
 - `supabase/migrations/0006_add_announcements.sql`
 - `supabase/migrations/0007_add_collaborator_reports.sql`
 - `supabase/migrations/0008_add_app_settings.sql`
+- `supabase/migrations/0009_fix_audit_log_match_delete_fk.sql`
+- `supabase/migrations/0010_add_announcement_scheduling_and_customization.sql`
+- `supabase/migrations/0011_add_announcement_audience_targeting.sql`
+- `supabase/migrations/0012_add_collaborator_report_evidence_storage.sql`
+- `supabase/migrations/0013_add_team_issue_reports.sql`
+- `supabase/migrations/0014_harden_collaborator_rls.sql`
 - `supabase/seed.sql`
 
 5. Crea o invita un usuario en Supabase Auth y luego promuévelo a admin:

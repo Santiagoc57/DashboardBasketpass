@@ -17,6 +17,7 @@ import type { AppRole } from "@/lib/database.types";
 import { appEnv } from "@/lib/env";
 import { buildPersonNotesMeta } from "@/lib/people-notes";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { emitOperationalAlert } from "@/lib/monitoring";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { ensureErrorMessage, maybeNull } from "@/lib/utils";
 
@@ -95,6 +96,21 @@ async function revokeCollaboratorAccessByEmail(email: string) {
   return true;
 }
 
+async function reportPeopleFailure(
+  error: unknown,
+  action: string,
+  severity: "warning" | "critical" = "critical",
+  details: Record<string, unknown> = {},
+) {
+  await emitOperationalAlert({
+    area: "people",
+    severity,
+    message: "Falló una operación de personal.",
+    error: ensureErrorMessage(error),
+    details: { action, ...details },
+  });
+}
+
 export async function upsertPersonAction(formData: FormData) {
   const redirectTo = getRedirectTarget(formData, "/people");
   await requireEditor();
@@ -103,13 +119,18 @@ export async function upsertPersonAction(formData: FormData) {
     String(formData.get("createPlatformAccess") ?? "off") === "on";
   const accessRole = String(formData.get("accessRole") ?? "collaborator").trim();
   const temporaryPassword = String(formData.get("temporaryPassword") ?? "").trim();
+  const personId = String(formData.get("personId") ?? "");
 
   const payload = {
     full_name: String(formData.get("fullName") ?? "").trim(),
     phone: maybeNull(String(formData.get("phone") ?? "")),
     email: maybeNull(String(formData.get("email") ?? "")),
     notes: buildPersonNotesMeta({
-      role: maybeNull(String(formData.get("roleName") ?? "")),
+      roles: [
+        maybeNull(String(formData.get("roleName") ?? "")),
+        maybeNull(String(formData.get("roleName2") ?? "")),
+        maybeNull(String(formData.get("roleName3") ?? "")),
+      ],
       city: maybeNull(String(formData.get("city") ?? "")),
       coverage: maybeNull(String(formData.get("coverageTeams") ?? "")),
       notes: maybeNull(String(formData.get("notes") ?? "")),
@@ -139,7 +160,6 @@ export async function upsertPersonAction(formData: FormData) {
     }
 
     const supabase = await createSupabaseServerClient();
-    const personId = String(formData.get("personId") ?? "");
     const result = personId
       ? await supabase.from("people").update(payload).eq("id", personId)
       : await supabase.from("people").insert(payload);
@@ -245,6 +265,10 @@ export async function upsertPersonAction(formData: FormData) {
         accessEmailSent = true;
       } catch (error) {
         console.error("[people] failed to create platform access", error);
+        await reportPeopleFailure(error, "create-platform-access", "warning", {
+          email: payload.email,
+          personId: personId || null,
+        });
         accessNotice = ensureErrorMessage(error);
       }
     }
@@ -272,6 +296,10 @@ export async function upsertPersonAction(formData: FormData) {
   } catch (error) {
     console.error("[people] upsert failed", error);
     rethrowNavigationError(error);
+    await reportPeopleFailure(error, "upsert", "critical", {
+      personId: String(formData.get("personId") ?? "").trim() || null,
+      createPlatformAccess,
+    });
     redirectWithNotice({
       redirectTo,
       intent: "error",
@@ -324,6 +352,9 @@ export async function deletePersonAction(formData: FormData) {
     });
   } catch (error) {
     rethrowNavigationError(error);
+    await reportPeopleFailure(error, "delete", "critical", {
+      personId,
+    });
     redirectWithNotice({
       redirectTo,
       intent: "error",
@@ -374,6 +405,9 @@ export async function revokePersonAccessAction(formData: FormData) {
     });
   } catch (error) {
     rethrowNavigationError(error);
+    await reportPeopleFailure(error, "revoke-access", "critical", {
+      personId,
+    });
     redirectWithNotice({
       redirectTo,
       intent: "error",
@@ -403,6 +437,10 @@ export async function togglePersonActiveAction(formData: FormData) {
   } catch (error) {
     rethrowNavigationError(error);
     const redirectTo = getRedirectTarget(formData, "/people");
+    await reportPeopleFailure(error, "toggle-active", "critical", {
+      personId,
+      active: nextActive,
+    });
     redirectWithNotice({
       redirectTo,
       intent: "error",

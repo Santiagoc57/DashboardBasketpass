@@ -1,0 +1,10 @@
+flowchart LR
+  U[Usuario] --> N[Next.js App Router]
+  N --> P[Pages y Server Actions]
+  N --> D[Libs de dominio]
+  P --> S[Supabase Auth / Postgres / Storage]
+  D --> S
+  S --> R[RLS / Triggers / audit_log]
+  S --> B[Backups y restore]
+  N --> O[Monitoreo / Logs / Alertas]
+

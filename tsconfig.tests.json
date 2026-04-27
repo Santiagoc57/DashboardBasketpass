@@ -1,0 +1,35 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "outDir": ".codex-temp/test-dist",
+    "rootDir": "src",
+    "target": "ES2022",
+    "lib": ["dom", "dom.iterable", "es2022"],
+    "types": ["node"],
+    "declaration": false,
+    "declarationMap": false,
+    "sourceMap": false
+  },
+  "include": [
+    "src/lib/copy.ts",
+    "src/lib/constants.ts",
+    "src/lib/monitoring.ts",
+    "src/lib/utils.ts",
+    "src/lib/assignment-confirmation.ts",
+    "src/lib/integrations.ts",
+    "src/lib/date.ts",
+    "src/lib/club-catalog.ts",
+    "src/lib/logo-library-index.ts",
+    "src/lib/team-metadata-overrides.ts",
+    "src/lib/team-excel-metadata-overrides.ts",
+    "src/lib/display.ts",
+    "src/lib/env.ts",
+    "src/lib/team-directory.ts",
+    "src/lib/robomotion.ts",
+    "src/lib/people-notes.ts",
+    "src/lib/profile-avatar.ts"
+  ]
+}

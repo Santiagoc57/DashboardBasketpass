@@ -129,6 +129,10 @@ export function resolveDashboardAccessRole({
 }) {
   const metadataRole = getRoleFromAppMetadata(appMetadata);
 
+  if (hasFullDashboardAccessRole(profileRole)) {
+    return profileRole ?? "viewer";
+  }
+
   if (metadataRole === "collaborator") {
     return metadataRole;
   }
@@ -138,6 +142,10 @@ export function resolveDashboardAccessRole({
 
 export function hasFullDashboardAccessRole(role?: AppRole | null) {
   return role === "admin" || role === "editor" || role === "coordinator";
+}
+
+export function hasCollaboratorOperationalAccess(role?: AppRole | null) {
+  return role === "collaborator" || hasFullDashboardAccessRole(role);
 }
 
 export function isCollaboratorLimitedRole(role?: AppRole | null) {

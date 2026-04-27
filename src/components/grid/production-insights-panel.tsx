@@ -353,9 +353,9 @@ export function ProductionInsightsPanel({
   const startWindowLabel = formatOperationalHourLabel(startWindow);
   const endWindowLabel = formatOperationalHourLabel(endWindow);
   return (
-    <Card className="p-6">
-      <section className="space-y-5">
-        <div className="flex items-start gap-3">
+    <Card className="flex h-full flex-col overflow-hidden p-0 sm:p-0 2xl:p-0">
+      <section className="shrink-0 space-y-3 px-6 py-6">
+        <div className="flex items-start gap-3 pr-24">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2.5">
               <h3 className="text-2xl font-extrabold tracking-tight text-[var(--foreground)]">
@@ -383,10 +383,12 @@ export function ProductionInsightsPanel({
             </p>
           </div>
         </div>
+      </section>
 
-        <div className="grid grid-cols-3 gap-3">
-          <div className="flex min-h-[10.5rem] flex-col items-center justify-center rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--background-soft)] px-3 py-5 text-center">
-            <div className="grid h-full w-full max-w-[8.5rem] place-content-center justify-items-center gap-4">
+      <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-6">
+        <div className="grid grid-cols-3 gap-2">
+          <div className="flex min-h-[9rem] flex-col items-center justify-center rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--background-soft)] px-4 py-3 text-center">
+            <div className="grid h-full w-full max-w-[8.5rem] place-content-center justify-items-center gap-3">
               <p className="text-[11px] font-bold uppercase leading-[1.45] tracking-[0.24em] text-[var(--muted)]">
                 Partidos de hoy
               </p>
@@ -395,8 +397,8 @@ export function ProductionInsightsPanel({
               </p>
             </div>
           </div>
-          <div className="flex min-h-[10.5rem] flex-col items-center justify-center rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--background-soft)] px-3 py-5 text-center">
-            <div className="grid h-full w-full max-w-[8.5rem] place-content-center justify-items-center gap-4">
+          <div className="flex min-h-[9rem] flex-col items-center justify-center rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--background-soft)] px-4 py-3 text-center">
+            <div className="grid h-full w-full max-w-[8.5rem] place-content-center justify-items-center gap-3">
               <p className="text-[11px] font-bold uppercase leading-[1.45] tracking-[0.24em] text-[var(--muted)]">
                 Ligas activas
               </p>
@@ -405,8 +407,8 @@ export function ProductionInsightsPanel({
               </p>
             </div>
           </div>
-          <div className="flex min-h-[10.5rem] flex-col items-center justify-center rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--background-soft)] px-3 py-5 text-center">
-            <div className="flex w-full max-w-[8.5rem] flex-col items-center justify-center gap-3">
+          <div className="flex min-h-[9rem] flex-col items-center justify-center rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--background-soft)] px-4 py-3 text-center">
+            <div className="flex w-full max-w-[8.5rem] flex-col items-center justify-center gap-2.5">
               <p className="text-[11px] font-bold uppercase leading-[1.45] tracking-[0.24em] text-[var(--muted)]">
                 Presión operativa
               </p>
@@ -421,27 +423,26 @@ export function ProductionInsightsPanel({
             </div>
           </div>
         </div>
-      </section>
 
-      <section className="mt-6 space-y-4">
-        <div className="flex items-center justify-between gap-3 border-b border-[var(--border)] pb-4">
+      <section className="mt-4 space-y-3">
+        <div className="flex items-center justify-between gap-3 border-b border-[var(--border)] pb-3">
           <h4 className="text-[11px] font-extrabold uppercase tracking-[0.28em] text-[var(--foreground)]">
-            Asignaciones por personal
+            Asignaciones
           </h4>
           {assignedPeopleCount > 0 ? (
             <span className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#8da0bb]">
-              {assignedPeopleCount} en línea
+              {assignedPeopleCount}
             </span>
           ) : null}
         </div>
-        <div className="space-y-4">
+        <div className="space-y-3">
           {visibleTopPeople.map((person, index) => {
               const tone = getAssignmentLoadTone(person.totalMatches);
 
               return (
                 <div
                   key={person.id}
-                  className={index === visibleTopPeople.length - 1 ? "flex items-center justify-between gap-3" : "flex items-center justify-between gap-3 border-b border-[var(--border)] pb-4"}
+                  className={index === visibleTopPeople.length - 1 ? "flex items-center justify-between gap-3" : "flex items-center justify-between gap-3 border-b border-[var(--border)] pb-3"}
                 >
                   <div className="flex min-w-0 items-center gap-3">
                     <div
@@ -462,7 +463,7 @@ export function ProductionInsightsPanel({
                     </div>
                   </div>
                   <div
-                    className={`shrink-0 rounded-full border px-3 py-1 text-xs font-extrabold uppercase tracking-[0.18em] ${tone.badgeClassName}`}
+                    className={`shrink-0 rounded-full border px-6 py-1 text-xs font-extrabold uppercase tracking-[0.18em] ${tone.badgeClassName}`}
                   >
                     {person.totalMatches}
                   </div>
@@ -483,13 +484,13 @@ export function ProductionInsightsPanel({
         </div>
       </section>
 
-      <section className="mt-6 space-y-4">
-        <div className="flex items-center justify-between gap-3 border-b border-[var(--border)] pb-4">
+      <section className="mt-4 space-y-3">
+        <div className="flex items-center justify-between gap-3 border-b border-[var(--border)] pb-3">
           <h4 className="text-[11px] font-extrabold uppercase tracking-[0.28em] text-[var(--foreground)]">
             Focos de atención
           </h4>
         </div>
-        <div className="space-y-4">
+        <div className="space-y-3">
           {missingHighlights.map((item, index) => {
             const Icon = item.icon;
             const tone = getAttentionTone(item.emphasis, item.value);
@@ -500,7 +501,7 @@ export function ProductionInsightsPanel({
                 className={
                   index === missingHighlights.length - 1
                     ? "flex items-center justify-between gap-3"
-                    : "flex items-center justify-between gap-3 border-b border-[var(--border)] pb-4"
+                    : "flex items-center justify-between gap-3 border-b border-[var(--border)] pb-3"
                 }
               >
                 <div className="flex min-w-0 items-center gap-3">
@@ -516,7 +517,7 @@ export function ProductionInsightsPanel({
                   </div>
                 </div>
                 <div
-                  className={`shrink-0 rounded-full border px-3 py-1 text-xs font-extrabold uppercase tracking-[0.18em] ${tone.badgeClassName}`}
+                  className={`shrink-0 rounded-full border px-6 py-1 text-xs font-extrabold uppercase tracking-[0.18em] ${tone.badgeClassName}`}
                 >
                   {item.value}
                 </div>
@@ -526,7 +527,7 @@ export function ProductionInsightsPanel({
         </div>
       </section>
 
-      <section className="mt-8 space-y-4 border-t border-[var(--border)] pt-6">
+      <section className="mt-5 space-y-3 border-t border-[var(--border)] pt-4">
         <div>
           <h4 className="text-lg font-extrabold text-[var(--foreground)]">
             Insights rápidos
@@ -536,7 +537,7 @@ export function ProductionInsightsPanel({
           </p>
         </div>
         <div className="grid gap-3">
-          <div className="rounded-[16px] border border-[var(--border)] bg-[var(--background-soft)] px-4 py-3">
+          <div className="rounded-[16px] border border-[var(--border)] bg-[var(--background-soft)] px-8 py-3">
             <p className="text-[11px] font-bold uppercase tracking-[0.24em] text-[var(--muted)]">
               Códigos completos
             </p>
@@ -544,7 +545,7 @@ export function ProductionInsightsPanel({
               {matches.filter((match) => match.production_code?.trim()).length}
             </p>
           </div>
-          <div className="rounded-[16px] border border-[var(--border)] bg-[var(--background-soft)] px-4 py-3">
+          <div className="rounded-[16px] border border-[var(--border)] bg-[var(--background-soft)] px-8 py-3">
             <p className="text-[11px] font-bold uppercase tracking-[0.24em] text-[var(--muted)]">
               IDs externos listos
             </p>
@@ -552,7 +553,7 @@ export function ProductionInsightsPanel({
               {matches.filter((match) => match.external_match_id?.trim()).length}
             </p>
           </div>
-          <div className="rounded-[16px] border border-[var(--border)] bg-[var(--background-soft)] px-4 py-3">
+          <div className="rounded-[16px] border border-[var(--border)] bg-[var(--background-soft)] px-8 py-3">
             <p className="text-[11px] font-bold uppercase tracking-[0.24em] text-[var(--muted)]">
               Sedes confirmadas
             </p>
@@ -562,6 +563,7 @@ export function ProductionInsightsPanel({
           </div>
         </div>
       </section>
+      </div>
     </Card>
   );
 }

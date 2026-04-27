@@ -1,7 +1,10 @@
 import {
   CalendarDays,
+  CheckCircle2,
+  CircleHelp,
   Clock3,
   Hash,
+  MessageCircleMore,
   PencilLine,
   type LucideIcon,
   MapPin,
@@ -9,6 +12,7 @@ import {
   ShieldUser,
   SlidersHorizontal,
   Video,
+  XCircle,
 } from "lucide-react";
 
 import { MatchCardActions } from "@/components/grid/match-card-actions";
@@ -16,17 +20,17 @@ import { TeamLogoMark } from "@/components/team-logo-mark";
 import { LeagueLogoMarkClient } from "@/components/league-logo-mark-client";
 import { QuickMatchFieldEditor } from "@/components/grid/quick-match-field-editor";
 import { badgeBaseClassName } from "@/components/ui/badge";
-import { HoverAvatarBadge } from "@/components/ui/hover-avatar-badge";
+import { getAssignmentConfirmationPresentation } from "@/lib/assignment-confirmation";
 import {
   getProductionModeLabel,
   PRODUCTION_SHORT_LABEL,
   RESPONSIBLE_DISPLAY_LABEL,
 } from "@/lib/constants";
 import { formatMatchTime } from "@/lib/date";
-import { getRoleDisplayName } from "@/lib/display";
-import { getTeamLeagueLabel } from "@/lib/team-directory";
+import { getCompactRoleDisplayName, getRoleDisplayName } from "@/lib/display";
+import { getTeamDisplayName, getTeamLeagueLabel } from "@/lib/team-directory";
 import type { MatchListItem } from "@/lib/types";
-import { cn } from "@/lib/utils";
+import { buildWhatsAppUrl, cn } from "@/lib/utils";
 
 type SectionRow = {
   label: string;
@@ -34,6 +38,10 @@ type SectionRow = {
   muted?: boolean;
   compactValue?: boolean;
   multiline?: boolean;
+  href?: string;
+  phone?: string | null;
+  confirmed?: boolean;
+  confirmationStatus?: string | null;
 };
 
 function formatGridDate(kickoffAt: string, timezone: string) {
@@ -54,11 +62,6 @@ function formatGridDate(kickoffAt: string, timezone: string) {
     .toUpperCase();
 }
 
-function buildProductionId(id: string) {
-  const compact = id.replaceAll("-", "").toUpperCase();
-  return `PRD-${compact.slice(0, 4)}-${compact.slice(4, 8)}`;
-}
-
 function getAssignmentValue(
   match: MatchListItem,
   roleName: string,
@@ -70,6 +73,9 @@ function getAssignmentValue(
   return {
     value,
     muted: !assignment?.person?.full_name && !fallback,
+    phone: assignment?.person?.phone ?? null,
+    confirmed: assignment?.confirmed ?? false,
+    confirmationStatus: assignment?.confirmation_status ?? null,
   };
 }
 
@@ -89,24 +95,36 @@ function buildProductionRows(match: MatchListItem): SectionRow[] {
       value: responsible.value,
       muted: responsible.muted,
       compactValue: true,
+      phone: responsible.phone ?? match.owner?.phone ?? null,
+      confirmed: responsible.confirmed,
+      confirmationStatus: responsible.confirmationStatus,
     },
     {
       label: "Realizador",
       value: director.value,
       muted: director.muted,
       compactValue: true,
+      phone: director.phone,
+      confirmed: director.confirmed,
+      confirmationStatus: director.confirmationStatus,
     },
     {
       label: "Operador de Control",
       value: control.value,
       muted: control.muted,
       compactValue: true,
+      phone: control.phone,
+      confirmed: control.confirmed,
+      confirmationStatus: control.confirmationStatus,
     },
     {
       label: "Soporte tecnico",
       value: support.value,
       muted: support.muted,
       compactValue: true,
+      phone: support.phone,
+      confirmed: support.confirmed,
+      confirmationStatus: support.confirmationStatus,
     },
   ];
 }
@@ -125,6 +143,9 @@ function buildCategoryRows(
       value: assignment.person?.full_name ?? "TBD",
       muted: !assignment.person?.full_name,
       compactValue: true,
+      phone: assignment.person?.phone ?? null,
+      confirmed: assignment.confirmed,
+      confirmationStatus: assignment.confirmation_status,
     }));
 }
 
@@ -140,6 +161,9 @@ function buildNamedRows(
       value: item.value,
       muted: item.muted,
       compactValue: true,
+      phone: item.phone,
+      confirmed: item.confirmed,
+      confirmationStatus: item.confirmationStatus,
     };
   });
 }
@@ -147,6 +171,7 @@ function buildNamedRows(
 function buildObservationRows(match: MatchListItem): SectionRow[] {
   const transport = match.transport?.trim() ?? "";
   const notes = match.notes?.trim() ?? "";
+  const matchLabel = `${getTeamDisplayName(match.home_team, match.competition)} vs ${getTeamDisplayName(match.away_team, match.competition)}`;
 
   return [
     {
@@ -154,6 +179,11 @@ function buildObservationRows(match: MatchListItem): SectionRow[] {
       value: transport || "Sin datos",
       muted: !transport,
       multiline: true,
+    },
+    {
+      label: "Incidencias",
+      value: "Ver incidencias",
+      href: `/incidents?q=${encodeURIComponent(matchLabel)}`,
     },
     {
       label: "Observaciones",
@@ -186,6 +216,16 @@ function getCompactPersonName(name: string) {
   return `${parts[0]?.[0]?.toUpperCase() ?? ""}. ${surnameCandidate}`;
 }
 
+function formatTeamDisplayName(name: string) {
+  const parts = name.split(/\s+/).filter(Boolean);
+
+  if (parts.length === 2) {
+    return `${parts[0]}\n${parts[1]}`;
+  }
+
+  return name;
+}
+
 function formatProductionModeLabel(mode: string | null | undefined) {
   return getProductionModeLabel(mode);
 }
@@ -197,6 +237,137 @@ function isUnassignedLeagueLabel(value: string) {
       .replace(/[\u0300-\u036f]/g, "")
       .toLowerCase()
       .trim() === "sin liga"
+  );
+}
+
+function AssignmentContactActions({
+  phone,
+  muted,
+  confirmed,
+  confirmationStatus,
+  personName,
+}: {
+  phone?: string | null;
+  muted?: boolean;
+  confirmed?: boolean;
+  confirmationStatus?: string | null;
+  personName: string;
+}) {
+  if (muted) {
+    return null;
+  }
+
+  const whatsappHref = buildWhatsAppUrl(phone);
+  const presentation = getAssignmentConfirmationPresentation(
+    confirmationStatus,
+    confirmed,
+  );
+  const confirmationClassName =
+    presentation.tone === "success"
+      ? "text-[#24a267]"
+      : presentation.tone === "danger"
+        ? "text-[var(--accent)]"
+        : "text-[#96a3b6]";
+
+  return (
+    <span className="ml-2 inline-flex h-5 shrink-0 items-center gap-2 border-l border-[var(--border)] pl-2">
+      {whatsappHref ? (
+        <a
+          href={whatsappHref}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex size-4 items-center justify-center text-[#1b8b56] transition hover:text-[#17784b]"
+          aria-label={`Escribir por WhatsApp a ${personName}`}
+          title={`WhatsApp de ${personName}`}
+        >
+          <MessageCircleMore className="size-3" />
+        </a>
+      ) : null}
+      <span
+        className={cn(
+          "inline-flex size-4 items-center justify-center",
+          confirmationClassName,
+        )}
+        title={presentation.label}
+        aria-label={presentation.label}
+      >
+        {presentation.status === "accepted" ? (
+          <span className="inline-flex size-[14px] items-center justify-center rounded-full bg-[#24a267] text-white">
+            <CheckCircle2 className="size-[10px]" strokeWidth={4} />
+          </span>
+        ) : presentation.status === "declined" ? (
+          <XCircle className="size-3" />
+        ) : (
+          <CircleHelp className="size-3" />
+        )}
+      </span>
+    </span>
+  );
+}
+
+function InlinePersonRoleStack({
+  label,
+  value,
+  initials,
+  muted,
+  phone,
+  confirmed,
+  confirmationStatus,
+  labelClassName,
+  valueClassName,
+}: {
+  label: string;
+  value: string;
+  initials: string;
+  muted?: boolean;
+  phone?: string | null;
+  confirmed?: boolean;
+  confirmationStatus?: string | null;
+  labelClassName?: string;
+  valueClassName?: string;
+}) {
+  return (
+    <div className="flex min-w-0 items-center gap-2.5">
+      <span
+        className={cn(
+          "inline-flex size-9 shrink-0 items-center justify-center rounded-full border font-black shadow-sm text-[11px]",
+          muted
+            ? "border-[var(--border)] bg-[#eef2f6] text-[#64748b]"
+            : "border-[#cde8d6] bg-[#edf9f1] text-[#3c8a5f]",
+        )}
+      >
+        {initials}
+      </span>
+      <div className="min-w-0">
+        <p
+          className={cn(
+            "font-black uppercase tracking-[0.18em] text-[#8ea0bb] text-[9px]",
+            labelClassName,
+          )}
+        >
+          {label}
+        </p>
+        <div className="mt-1 flex min-w-0 items-center">
+          <p
+            className={cn(
+              "truncate leading-tight text-[13px] font-black text-[var(--foreground)]",
+              muted && "font-semibold italic text-[var(--muted)]",
+              valueClassName,
+            )}
+            title={value}
+          >
+            {value}
+          </p>
+          <AssignmentContactActions
+            phone={phone}
+            muted={muted}
+            confirmed={confirmed}
+            confirmationStatus={confirmationStatus}
+            personName={value}
+          />
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -224,15 +395,36 @@ function Section({
             row.compactValue && !row.muted
               ? getCompactPersonName(row.value)
               : row.value;
+          const displayLabel = row.compactValue
+            ? getCompactRoleDisplayName(row.label)
+            : getRoleDisplayName(row.label);
 
-          return (
+          if (row.compactValue && !row.multiline) {
+            return (
+              <InlinePersonRoleStack
+                key={row.label}
+                label={displayLabel}
+                value={displayValue}
+                initials={getInitials(row.value)}
+                muted={row.muted}
+                phone={row.phone}
+                confirmed={row.confirmed}
+                confirmationStatus={row.confirmationStatus}
+                labelClassName="text-[10px] tracking-[0.16em] text-[#8ea0bb]"
+                valueClassName="text-sm"
+              />
+            );
+          }
+
+          const content = (
             <div key={row.label} className="space-y-1">
               <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#a08f91]">
-                {getRoleDisplayName(row.label)}
+                {displayLabel}
               </p>
-              <p
+              <span
                 className={cn(
-                  "text-sm text-[var(--foreground)]",
+                  "block text-sm text-[var(--foreground)]",
+                  row.href && "font-bold text-[var(--accent)] underline-offset-4 hover:underline",
                   row.multiline ? "leading-6 font-medium whitespace-pre-line" : "font-bold",
                   row.muted &&
                     (row.multiline
@@ -241,9 +433,19 @@ function Section({
                 )}
               >
                 {displayValue}
-              </p>
+              </span>
             </div>
           );
+
+          if (row.href) {
+            return (
+              <a key={row.label} href={row.href}>
+                {content}
+              </a>
+            );
+          }
+
+          return content;
         })}
       </div>
     </div>
@@ -289,7 +491,21 @@ export function MatchCard({
   const venueLabel = match.venue ?? "Sede sin definir";
   const statusAccentClass =
     match.status === "Realizado" ? "bg-[#26b36a]" : "bg-[#d7dde7]";
+  const matchCardColumnsStyle = {
+    gridTemplateColumns:
+      "minmax(80px,0.702fr) minmax(230px,1.72fr) minmax(160px,1.305fr) minmax(160px,1.305fr) minmax(114px,0.904fr) minmax(114px,0.904fr) 4.25rem",
+  } as const;
+  const teamLogoStyle = {
+    width: "clamp(2.55rem, 3.83vw, 4.35rem)",
+    height: "clamp(2.55rem, 3.83vw, 4.35rem)",
+  } as const;
+  const teamLogoClassName =
+    "rounded-none border-0 bg-transparent shadow-none";
+  const teamLogoImageClassName =
+    "p-0.5 xl:origin-center xl:p-0 xl:scale-100 2xl:p-2.5";
   const detailsId = `match-card-${match.id}`;
+  const homeTeamLabel = getTeamDisplayName(match.home_team, match.competition);
+  const awayTeamLabel = getTeamDisplayName(match.away_team, match.competition);
 
   return (
     <details
@@ -307,7 +523,10 @@ export function MatchCard({
           )}
         />
         <div className="relative z-10 overflow-visible rounded-t-[10px] rounded-b-[10px]">
-          <div className="overflow-hidden rounded-t-[10px] rounded-b-[10px] flex flex-col xl:grid xl:grid-cols-[5.25rem_minmax(13rem,1.35fr)_minmax(9.75rem,1fr)_minmax(9.75rem,1fr)_185px_185px_4.25rem] xl:items-stretch 2xl:grid-cols-[7rem_minmax(16.5rem,24rem)_minmax(10.25rem,1fr)_minmax(10.25rem,1fr)_185px_185px_4.75rem]">
+          <div
+            className="overflow-hidden rounded-t-[10px] rounded-b-[10px] flex flex-col xl:grid xl:items-stretch 2xl:grid-cols-[7rem_minmax(16.5rem,24rem)_minmax(10.25rem,1fr)_minmax(10.25rem,1fr)_185px_185px_4.75rem]"
+            style={matchCardColumnsStyle}
+          >
           <div className="relative z-10 flex flex-col items-center justify-center gap-3 border-b border-[var(--border)] bg-[var(--surface)] px-4 py-4 text-center xl:border-b-0 xl:border-r xl:px-3 xl:py-5 2xl:px-4">
             <LeagueLogoMarkClient
               league={leagueLabel}
@@ -327,8 +546,8 @@ export function MatchCard({
           </div>
 
           <div className="flex min-w-0 items-center border-b border-[var(--border)] px-4 py-4 xl:items-stretch xl:border-b-0 xl:border-r xl:px-4 xl:py-5 2xl:px-6">
-            <div className="mx-auto w-full max-w-[16rem] xl:flex xl:h-full xl:max-w-[14rem] xl:flex-col 2xl:max-w-[20.5rem]">
-              <div className="hidden items-center justify-center gap-2 text-center text-[12px] font-semibold text-[#94a3b8] xl:flex">
+            <div className="mx-auto w-full max-w-[17rem] xl:flex xl:h-full xl:max-w-[17rem] xl:flex-col 2xl:max-w-[20.5rem]">
+              <div className="hidden translate-y-1 items-center justify-center gap-2 text-center text-[12px] font-semibold text-[#94a3b8] xl:flex">
                 <MapPin className="size-3.5 shrink-0" />
                 <span className="truncate" title={venueLabel}>
                   {venueLabel}
@@ -336,7 +555,7 @@ export function MatchCard({
               </div>
 
               <div className="xl:flex xl:flex-1 xl:items-center">
-                <div className="grid items-center justify-center gap-2 sm:grid-cols-[minmax(0,1fr)_1.75rem_minmax(0,1fr)] sm:gap-3 xl:w-full xl:gap-2 xl:sm:grid-cols-[6.2rem_1.4rem_6.2rem] 2xl:gap-4 2xl:sm:grid-cols-[8.5rem_2.25rem_8.5rem]">
+                <div className="grid items-center justify-center gap-1.5 sm:grid-cols-[minmax(0,1fr)_1.75rem_minmax(0,1fr)] sm:gap-3 xl:w-full xl:gap-1 xl:sm:grid-cols-[5.9rem_1.25rem_5.9rem] 2xl:gap-4 2xl:sm:grid-cols-[8.5rem_2.25rem_8.5rem]">
                   <div className="flex min-w-0 flex-col items-center text-center">
                     {canEdit ? (
                       <QuickMatchFieldEditor
@@ -351,23 +570,25 @@ export function MatchCard({
                         <TeamLogoMark
                           teamName={match.home_team}
                           competition={match.competition}
-                          className="size-14 rounded-none border-0 bg-transparent shadow-none xl:size-14 2xl:size-[4.5rem]"
-                          imageClassName="p-2 xl:p-2 2xl:p-2.5"
+                          className={teamLogoClassName}
+                          imageClassName={teamLogoImageClassName}
+                          style={teamLogoStyle}
                         />
                       </QuickMatchFieldEditor>
                     ) : (
                       <TeamLogoMark
                         teamName={match.home_team}
                         competition={match.competition}
-                        className="size-14 rounded-none border-0 bg-transparent shadow-none xl:size-14 2xl:size-[4.5rem]"
-                        imageClassName="p-2 xl:p-2 2xl:p-2.5"
+                        className={teamLogoClassName}
+                        imageClassName={teamLogoImageClassName}
+                        style={teamLogoStyle}
                       />
                     )}
                     <p
                       title={match.home_team}
-                      className="mt-2 min-h-[2.1em] text-center text-[0.84rem] font-black leading-[1.04] tracking-[-0.03em] text-[var(--foreground)] [display:-webkit-box] overflow-hidden text-ellipsis [-webkit-box-orient:vertical] [-webkit-line-clamp:2] xl:mt-2.5 xl:min-h-[2.08em] xl:text-[0.88rem] 2xl:mt-3 2xl:min-h-[2.16em] 2xl:text-[0.98rem]"
+                      className="mt-2 min-h-[2.1em] whitespace-pre-line text-center text-[0.84rem] font-black leading-[1.04] tracking-[-0.03em] text-[var(--foreground)] [display:-webkit-box] overflow-hidden text-ellipsis [-webkit-box-orient:vertical] [-webkit-line-clamp:2] xl:mt-2.5 xl:min-h-[2.08em] xl:text-[0.88rem] 2xl:mt-3 2xl:min-h-[2.16em] 2xl:text-[0.98rem]"
                     >
-                      {match.home_team}
+                      {formatTeamDisplayName(homeTeamLabel)}
                     </p>
                   </div>
 
@@ -389,29 +610,31 @@ export function MatchCard({
                         <TeamLogoMark
                           teamName={match.away_team}
                           competition={match.competition}
-                          className="size-14 rounded-none border-0 bg-transparent shadow-none xl:size-14 2xl:size-[4.5rem]"
-                          imageClassName="p-2 xl:p-2 2xl:p-2.5"
+                          className={teamLogoClassName}
+                          imageClassName={teamLogoImageClassName}
+                          style={teamLogoStyle}
                         />
                       </QuickMatchFieldEditor>
                     ) : (
                       <TeamLogoMark
                         teamName={match.away_team}
                         competition={match.competition}
-                        className="size-14 rounded-none border-0 bg-transparent shadow-none xl:size-14 2xl:size-[4.5rem]"
-                        imageClassName="p-2 xl:p-2 2xl:p-2.5"
+                        className={teamLogoClassName}
+                        imageClassName={teamLogoImageClassName}
+                        style={teamLogoStyle}
                       />
                     )}
                     <p
                       title={match.away_team}
-                      className="mt-2 min-h-[2.1em] text-center text-[0.84rem] font-black leading-[1.04] tracking-[-0.03em] text-[var(--foreground)] [display:-webkit-box] overflow-hidden text-ellipsis [-webkit-box-orient:vertical] [-webkit-line-clamp:2] xl:mt-2.5 xl:min-h-[2.08em] xl:text-[0.88rem] 2xl:mt-3 2xl:min-h-[2.16em] 2xl:text-[0.98rem]"
+                      className="mt-2 min-h-[2.1em] whitespace-pre-line text-center text-[0.84rem] font-black leading-[1.04] tracking-[-0.03em] text-[var(--foreground)] [display:-webkit-box] overflow-hidden text-ellipsis [-webkit-box-orient:vertical] [-webkit-line-clamp:2] xl:mt-2.5 xl:min-h-[2.08em] xl:text-[0.88rem] 2xl:mt-3 2xl:min-h-[2.16em] 2xl:text-[0.98rem]"
                     >
-                      {match.away_team}
+                      {formatTeamDisplayName(awayTeamLabel)}
                     </p>
                   </div>
                 </div>
               </div>
 
-              <div className="mt-4 flex items-center justify-center gap-2 text-center text-[12px] font-semibold text-[#94a3b8] xl:hidden">
+              <div className="mt-4 flex translate-y-1 items-center justify-center gap-2 text-center text-[12px] font-semibold text-[#94a3b8] xl:hidden">
                 <MapPin className="size-3.5 shrink-0" />
                 <span className="truncate" title={venueLabel}>
                   {venueLabel}
@@ -428,48 +651,26 @@ export function MatchCard({
               </p>
             </div>
             <div className="flex items-center gap-3">
-              <HoverAvatarBadge
+              <InlinePersonRoleStack
+                label={RESPONSIBLE_DISPLAY_LABEL}
+                value={getCompactPersonName(responsible.value)}
                 initials={getInitials(responsible.value)}
-                roleLabel={RESPONSIBLE_DISPLAY_LABEL}
-                showTooltip={false}
-                tone="neutral"
-                size="sm"
+                muted={responsible.muted}
+                phone={responsible.phone ?? match.owner?.phone ?? null}
+                confirmed={responsible.confirmed}
+                confirmationStatus={responsible.confirmationStatus}
               />
-              <div className="min-w-0">
-                <p
-                  className={cn(
-                    "truncate text-sm font-bold text-[var(--foreground)]",
-                    responsible.muted && "text-[var(--muted)] italic font-semibold",
-                  )}
-                >
-                  {getCompactPersonName(responsible.value)}
-                </p>
-                <p className="text-xs font-semibold text-[var(--muted)]">
-                  {RESPONSIBLE_DISPLAY_LABEL}
-                </p>
-              </div>
             </div>
             <div className="flex items-center gap-3">
-              <HoverAvatarBadge
+              <InlinePersonRoleStack
+                label="Realizador"
+                value={getCompactPersonName(director.value)}
                 initials={getInitials(director.value)}
-                roleLabel="Realizador integral"
-                showTooltip={false}
-                tone="neutral"
-                size="sm"
+                muted={director.muted}
+                phone={director.phone}
+                confirmed={director.confirmed}
+                confirmationStatus={director.confirmationStatus}
               />
-              <div className="min-w-0">
-                <p
-                  className={cn(
-                    "truncate text-sm font-bold text-[var(--foreground)]",
-                    director.muted && "text-[var(--muted)] italic font-semibold",
-                  )}
-                >
-                  {getCompactPersonName(director.value)}
-                </p>
-                <p className="text-xs font-semibold text-[var(--muted)]">
-                  Realizador Integral
-                </p>
-              </div>
             </div>
           </div>
 
@@ -481,43 +682,26 @@ export function MatchCard({
               </p>
             </div>
             <div className="flex items-center gap-3">
-              <HoverAvatarBadge
+              <InlinePersonRoleStack
+                label="Relatos"
+                value={getCompactPersonName(narrator.value)}
                 initials={getInitials(narrator.value)}
-                roleLabel="Relatos"
-                showTooltip={false}
-                tone="neutral"
-                size="sm"
+                muted={narrator.muted}
+                phone={narrator.phone}
+                confirmed={narrator.confirmed}
+                confirmationStatus={narrator.confirmationStatus}
               />
-              <div className="min-w-0">
-                <p className="mt-1 text-sm font-bold text-[var(--foreground)]">
-                  {getCompactPersonName(narrator.value)}
-                </p>
-                <p className="text-xs font-semibold italic text-[var(--muted)]">
-                  Relatos
-                </p>
-              </div>
             </div>
             <div className="flex items-center gap-3">
-              <HoverAvatarBadge
+              <InlinePersonRoleStack
+                label="Comentarios"
+                value={getCompactPersonName(commentator.value)}
                 initials={getInitials(commentator.value)}
-                roleLabel="Comentarios"
-                showTooltip={false}
-                tone="neutral"
-                size="sm"
+                muted={commentator.muted}
+                phone={commentator.phone}
+                confirmed={commentator.confirmed}
+                confirmationStatus={commentator.confirmationStatus}
               />
-              <div className="min-w-0">
-                <p
-                  className={cn(
-                    "truncate text-sm font-bold text-[var(--foreground)]",
-                    commentator.muted && "text-[var(--muted)] italic font-semibold",
-                  )}
-                >
-                  {getCompactPersonName(commentator.value)}
-                </p>
-                <p className="text-xs font-semibold italic text-[var(--muted)]">
-                  Comentarios
-                </p>
-              </div>
             </div>
           </div>
 
@@ -525,7 +709,7 @@ export function MatchCard({
             <div>
               <p className="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] text-[#a7b4c8]">
                 <Hash className="size-3.5 text-[#a7b4c8]" />
-                ID evento
+                ID
               </p>
               <div className="mt-2">
                 <span
@@ -534,7 +718,7 @@ export function MatchCard({
                     "border border-[#f3cfd8] bg-[#fff3f6] text-[var(--accent)]",
                   )}
                 >
-                  {buildProductionId(match.id)}
+                  {match.production_code?.trim() || "Sin ID"}
                 </span>
               </div>
             </div>
@@ -605,7 +789,7 @@ export function MatchCard({
             rows={talentRows}
           />
           <Section
-            title="Observaciones / Transporte"
+            title="Observaciones y Otros"
             icon={PencilLine}
             rows={observationRows}
           />

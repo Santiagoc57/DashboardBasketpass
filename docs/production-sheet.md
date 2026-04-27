@@ -137,7 +137,8 @@ Rules:
 
 - Club and competition source file: [src/lib/club-catalog.ts](/Users/santiagocordoba/GITHUBS/Dashboard produccion/src/lib/club-catalog.ts)
 - Current scope:
-  - Liga Nacional / Liga Próximo
+  - Liga Nacional
+  - Liga Próximo
   - Liga Argentina
   - Liga Federal
   - Liga Metropolitana

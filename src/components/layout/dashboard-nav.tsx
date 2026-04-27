@@ -5,7 +5,6 @@ import { usePathname } from "next/navigation";
 import {
   BriefcaseBusiness,
   CalendarDays,
-  CircleHelp,
   ClipboardList,
   Settings2,
   Shield,
@@ -23,7 +22,6 @@ const navItems = [
   { href: "/teams", label: "Equipos", icon: Shield },
   { href: "/people", label: "Personal", icon: Users },
   { href: "/settings", label: "Configuración", icon: Settings2 },
-  { href: "/support", label: "Soporte", icon: CircleHelp },
 ] as const;
 
 const mobileNavItems = navItems.filter((item) =>

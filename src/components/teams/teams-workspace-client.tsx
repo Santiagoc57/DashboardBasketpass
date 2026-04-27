@@ -8,10 +8,15 @@ import {
   buildTeamResponsibleLookup,
   getTeamResponsibleContact,
 } from "@/lib/team-responsibles";
-import type { TeamDirectoryItem } from "@/lib/team-directory";
+import {
+  getCanonicalTeamName,
+  getTeamDirectoryCanonicalKey,
+  type TeamDirectoryItem,
+} from "@/lib/team-directory";
 import type { PersonListItem } from "@/lib/types";
 import {
   CUSTOM_TEAMS_CHANGED_EVENT,
+  readHiddenTeamKeys,
   readCustomTeams,
 } from "@/lib/teams-local-storage";
 
@@ -33,6 +38,7 @@ function filterCustomTeams(
 
     return [
       team.official_name,
+      team.display_name,
       team.competition,
       team.stadium ?? "",
       team.manager ?? "",
@@ -57,9 +63,13 @@ export function TeamsWorkspaceClient({
   canManageTeams?: boolean;
 }) {
   const [customTeams, setCustomTeams] = useState<TeamDirectoryItem[]>([]);
+  const [hiddenTeamKeys, setHiddenTeamKeys] = useState<string[]>([]);
 
   useEffect(() => {
-    const syncTeams = () => setCustomTeams(readCustomTeams());
+    const syncTeams = () => {
+      setCustomTeams(readCustomTeams());
+      setHiddenTeamKeys(readHiddenTeamKeys());
+    };
 
     syncTeams();
     window.addEventListener("storage", syncTeams);
@@ -71,30 +81,84 @@ export function TeamsWorkspaceClient({
     };
   }, []);
 
+  const hiddenTeamKeySet = useMemo(() => new Set(hiddenTeamKeys), [hiddenTeamKeys]);
+
   const visibleCustomTeams = useMemo(
-    () => filterCustomTeams(customTeams, { query, league: activeLeague }),
-    [activeLeague, customTeams, query],
+    () =>
+      filterCustomTeams(customTeams, { query, league: activeLeague }).filter(
+        (team) =>
+          !hiddenTeamKeySet.has(
+            getTeamDirectoryCanonicalKey({
+              officialName: team.official_name,
+              displayName: team.display_name,
+              competition: team.competition,
+            }),
+          ),
+      ),
+    [activeLeague, customTeams, hiddenTeamKeySet, query],
   );
 
   const mergedTeams = useMemo(() => {
-    const customById = new Map(visibleCustomTeams.map((team) => [team.id, team]));
-    const nextTeams = initialTeams.map((team) => customById.get(team.id) ?? team);
-    const seenIds = new Set(nextTeams.map((team) => team.id));
+    const mergedByCanonicalKey = new Map<string, TeamDirectoryItem>();
 
-    visibleCustomTeams.forEach((team) => {
-      if (!seenIds.has(team.id)) {
-        nextTeams.push(team);
+    initialTeams.forEach((team) => {
+      const canonicalKey = getTeamDirectoryCanonicalKey({
+        officialName: team.official_name,
+        displayName: team.display_name,
+        competition: team.competition,
+      });
+
+      if (hiddenTeamKeySet.has(canonicalKey)) {
+        return;
+      }
+
+      if (!mergedByCanonicalKey.has(canonicalKey)) {
+        mergedByCanonicalKey.set(canonicalKey, team);
       }
     });
 
-    return nextTeams;
-  }, [initialTeams, visibleCustomTeams]);
+    visibleCustomTeams.forEach((team) => {
+      const canonicalKey = getTeamDirectoryCanonicalKey({
+        officialName: team.official_name,
+        displayName: team.display_name,
+        competition: team.competition,
+      });
+      const current = mergedByCanonicalKey.get(canonicalKey);
+
+      if (!current) {
+        mergedByCanonicalKey.set(canonicalKey, {
+          ...team,
+          official_name: getCanonicalTeamName(team.official_name),
+          display_name: getCanonicalTeamName(team.display_name),
+        });
+        return;
+      }
+
+      mergedByCanonicalKey.set(canonicalKey, {
+        ...current,
+        ...team,
+        id: current.id,
+        slug: current.slug,
+        official_name: getCanonicalTeamName(current.official_name),
+        display_name: getCanonicalTeamName(team.display_name || current.display_name),
+        competition: current.competition,
+        incident_count: Math.max(current.incident_count, team.incident_count),
+        stadium: team.stadium ?? current.stadium,
+        manager: team.manager ?? current.manager,
+        website: team.website ?? current.website,
+        instagram: team.instagram ?? current.instagram,
+        official_url: team.official_url ?? current.official_url,
+        logo_data_url: team.logo_data_url ?? current.logo_data_url,
+      });
+    });
+
+    return Array.from(mergedByCanonicalKey.values());
+  }, [hiddenTeamKeySet, initialTeams, visibleCustomTeams]);
 
   const responsibleLookup = useMemo(
     () => buildTeamResponsibleLookup(people),
     [people],
   );
-
   const registeredCount = mergedTeams.filter((team) => Boolean(team.manager)).length;
   const incidentCount = mergedTeams.reduce(
     (sum, team) => sum + team.incident_count,
@@ -112,7 +176,7 @@ export function TeamsWorkspaceClient({
 
   return (
     <>
-      <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-5 xl:grid-cols-3 2xl:grid-cols-4">
         {mergedTeams.map((team) => (
           <TeamCard
             key={team.id}
@@ -124,6 +188,7 @@ export function TeamsWorkspaceClient({
               responsibleLookup,
             )}
             canEdit={canManageTeams}
+            people={people}
           />
         ))}
       </div>

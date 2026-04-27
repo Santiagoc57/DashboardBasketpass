@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
+import type { CSSProperties } from "react";
 
 import { cn } from "@/lib/utils";
 
@@ -22,12 +23,14 @@ export function ClientTeamLogoMark({
   className,
   imageClassName,
   initialsClassName,
+  style,
 }: {
   teamName: string;
   competition?: string | null;
   className?: string;
   imageClassName?: string;
   initialsClassName?: string;
+  style?: CSSProperties;
 }) {
   const cacheKey = useMemo(
     () => `${teamName}::${competition ?? ""}`,
@@ -98,13 +101,13 @@ export function ClientTeamLogoMark({
         "relative grid shrink-0 place-items-center overflow-hidden border border-[var(--border)] bg-white shadow-sm transition-transform duration-200 delay-0 hover:z-10 hover:scale-[1.32] hover:delay-[900ms]",
         className,
       )}
+      style={style}
     >
       {logoSrc ? (
         <Image
           src={logoSrc}
           alt={`Escudo de ${teamName}`}
           fill
-          unoptimized
           sizes="48px"
           className={cn("object-contain p-1.5", imageClassName)}
         />

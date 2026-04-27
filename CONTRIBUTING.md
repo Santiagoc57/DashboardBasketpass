@@ -16,10 +16,12 @@ Before a change is considered ready:
 
 - Update `CHANGELOG.md` for any user-visible, operational, or architectural change.
 - Run `npm run check`.
+- If the change touches pure business logic, add or update a unit test under `tests/`.
 - If the database schema changes, add or update a file in `supabase/migrations`.
 - If setup or developer workflow changes, update `README.md` and this document if needed.
 - If a change introduces new environment variables, document them in `.env.example`.
 - If a change affects authorization, verify both allowed and denied paths.
+- If a change touches role helpers or route gating, add or update tests under `tests/`.
 
 ## Project conventions
 
@@ -76,4 +78,10 @@ Run the full verification suite:
 
 ```bash
 npm run check
+```
+
+Run unit tests directly:
+
+```bash
+npm run test:unit
 ```

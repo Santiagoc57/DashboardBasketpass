@@ -369,7 +369,7 @@ async function getMatchContextMap(matchIds: string[]) {
     throw result.error;
   }
 
-  const rows = (result.data ?? []) as MatchAssignmentContextRow[];
+  const rows = (result.data ?? []) as unknown as MatchAssignmentContextRow[];
   const contextMap = new Map<string, MatchAssignmentContextRow[]>();
 
   rows.forEach((row) => {
@@ -394,7 +394,7 @@ async function getAssignmentsForPerson(personId: string) {
     throw assignmentsResult.error;
   }
 
-  const assignments = ((assignmentsResult.data ?? []) as AssignmentRow[])
+  const assignments = ((assignmentsResult.data ?? []) as unknown as AssignmentRow[])
     .map(mapAssignmentRow)
     .filter((assignment): assignment is CollaboratorAssignmentItem => Boolean(assignment))
     .sort((left, right) => left.kickoffAt.localeCompare(right.kickoffAt));
@@ -533,7 +533,7 @@ async function getFallbackAssignmentForMatch(params: {
     return null;
   }
 
-  const match = matchResult.data as MatchContextMatchRow;
+  const match = matchResult.data as unknown as MatchContextMatchRow;
   const contextRows = (await getMatchContextMap([params.matchId])).get(params.matchId) ?? [];
   const responsibleContact =
     pickContextContact(contextRows, "Responsable") ??

@@ -15,6 +15,7 @@ import {
 import { buildKickoffAt } from "@/lib/date";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { requireEditor } from "@/lib/auth";
+import { emitOperationalAlert } from "@/lib/monitoring";
 import { ensureErrorMessage, maybeNull, pickFirstString } from "@/lib/utils";
 
 type MatchModalActionState = {
@@ -66,6 +67,19 @@ const OPTIONAL_MATCH_COLUMNS = new Set([
 
 type MatchInsert = Database["public"]["Tables"]["matches"]["Insert"];
 type MatchUpdate = Database["public"]["Tables"]["matches"]["Update"];
+
+async function reportMatchesFailure(
+  error: unknown,
+  details: Record<string, unknown>,
+) {
+  await emitOperationalAlert({
+    area: "matches",
+    severity: "critical",
+    message: "Falló una operación de partidos.",
+    error: ensureErrorMessage(error),
+    details,
+  });
+}
 
 function assertMatchStatus(value: string) {
   if (!MATCH_STATUS_OPTIONS.includes(value as (typeof MATCH_STATUS_OPTIONS)[number])) {
@@ -142,6 +156,8 @@ function buildStaffAssignments(params: {
       role_id: roleId,
       person_id: personId,
       confirmed: false,
+      confirmation_status: "pending",
+      confirmation_responded_at: null,
       notes: null,
     };
   });
@@ -157,6 +173,16 @@ function getMissingOptionalMatchColumn(error: unknown) {
   }
 
   return columnName;
+}
+
+function getDeleteMatchErrorNotice(error: unknown) {
+  const message = ensureErrorMessage(error);
+
+  if (message.includes("audit_log_match_id_fkey")) {
+    return "No se pudo borrar el partido porque falta aplicar la correccion SQL de auditoria. Ejecuta la migracion 0009_fix_audit_log_match_delete_fk.sql en Supabase y vuelve a intentar.";
+  }
+
+  return message;
 }
 
 async function insertMatchWithOptionalColumnFallback(
@@ -409,10 +435,11 @@ export async function createMatchAction(formData: FormData) {
     });
   } catch (error) {
     rethrowNavigationError(error);
+    await reportMatchesFailure(error, { action: "create" });
     redirectWithNotice({
       redirectTo,
       intent: "error",
-      notice: ensureErrorMessage(error),
+      notice: getDeleteMatchErrorNotice(error),
     });
   }
 }
@@ -429,6 +456,7 @@ export async function updateMatchAction(formData: FormData) {
     });
   } catch (error) {
     rethrowNavigationError(error);
+    await reportMatchesFailure(error, { action: "update" });
     redirectWithNotice({
       redirectTo,
       intent: "error",
@@ -452,6 +480,7 @@ export async function createMatchModalAction(
     };
   } catch (error) {
     rethrowNavigationError(error);
+    await reportMatchesFailure(error, { action: "create-modal" });
     return {
       status: "error",
       notice: ensureErrorMessage(error),
@@ -475,6 +504,7 @@ export async function updateMatchModalAction(
     };
   } catch (error) {
     rethrowNavigationError(error);
+    await reportMatchesFailure(error, { action: "update-modal" });
     return {
       status: "error",
       notice: ensureErrorMessage(error),
@@ -530,6 +560,7 @@ export async function quickUpdateMatchFieldAction(formData: FormData) {
     });
   } catch (error) {
     rethrowNavigationError(error);
+    await reportMatchesFailure(error, { action: "quick-update", field });
     redirectWithNotice({
       redirectTo,
       intent: "error",
@@ -559,6 +590,7 @@ export async function deleteMatchAction(formData: FormData) {
     });
   } catch (error) {
     rethrowNavigationError(error);
+    await reportMatchesFailure(error, { action: "delete" });
     redirectWithNotice({
       redirectTo,
       intent: "error",
@@ -579,6 +611,9 @@ export async function upsertAssignmentAction(formData: FormData) {
         role_id: String(formData.get("roleId") ?? ""),
         person_id: maybeNull(String(formData.get("personId") ?? "")),
         confirmed: String(formData.get("confirmed") ?? "") === "on",
+        confirmation_status:
+          String(formData.get("confirmed") ?? "") === "on" ? "accepted" : "pending",
+        confirmation_responded_at: null,
         notes: maybeNull(String(formData.get("notes") ?? "")),
       },
       {
@@ -598,6 +633,7 @@ export async function upsertAssignmentAction(formData: FormData) {
     });
   } catch (error) {
     rethrowNavigationError(error);
+    await reportMatchesFailure(error, { action: "upsert-assignment" });
     redirectWithNotice({
       redirectTo,
       intent: "error",

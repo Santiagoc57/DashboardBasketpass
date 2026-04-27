@@ -1,4 +1,5 @@
 import Image from "next/image";
+import type { CSSProperties } from "react";
 
 import { getTeamInitials, getTeamLogoPath } from "@/lib/team-logos";
 import { cn } from "@/lib/utils";
@@ -9,12 +10,14 @@ export function TeamLogoMark({
   className,
   imageClassName,
   initialsClassName,
+  style,
 }: {
   teamName: string;
   competition?: string | null;
   className?: string;
   imageClassName?: string;
   initialsClassName?: string;
+  style?: CSSProperties;
 }) {
   const logoSrc = getTeamLogoPath({ teamName, competition });
 
@@ -24,6 +27,7 @@ export function TeamLogoMark({
         "relative grid shrink-0 place-items-center overflow-hidden border border-[var(--border)] bg-white shadow-sm",
         className,
       )}
+      style={style}
     >
       {logoSrc ? (
         <Image

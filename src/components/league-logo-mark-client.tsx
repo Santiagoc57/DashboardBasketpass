@@ -11,19 +11,39 @@ const LEAGUE_LOGO_MAP: Record<string, string> = {
   euroliga: "Euroliga.png",
   euroleague: "Euroliga.png",
   "liga argentina": "Liga Argentina.png",
+  "liga 3x3": "Liga 3x3.png",
+  "la liga 3x3": "Liga 3x3.png",
+  "circuito 3x3": "Liga 3x3.png",
   "liga chery": "Liga Chery.png",
   "liga chery chile": "Liga Chery.png",
   "liga endesa": "Liga Endesa.png",
   "liga federal": "Liga Federal.png",
   "liga femenina": "Liga Femenina.png",
+  "liga metropolitana": "Liga Metro.png",
+  "liga metro": "Liga Metro.png",
+  "liga metropolitana fem": "Liga Femenina.png",
   "liga nacional": "Liga Nacional.png",
+  "liga nacional liga proximo": "Liga Nacional.png",
   "liga proximo": "Liga Proximo.png",
-  "lba serie a": "LBA SeriE A.png",
-  lba: "LBA SeriE A.png",
-  lbp: "LBP.png",
+  "liga dos": "Liga Dos.png",
+  "liga ecuador fem": "LBP Femenina.png",
+  "ecuador fem": "LBP Femenina.png",
+  "liga u22": "Liga U22.png",
+  "liga uno chery": "Liga Chery.png",
+  "lba serie a": "LBA Serie A.png",
+  "lba": "LBA Serie A.png",
+  lbp: "LBP Masculina.png",
+  "lbp femenina": "LBP Femenina.png",
+  "lbp masculina": "LBP Masculina.png",
   lda: "LDA.png",
+  "lnf chile": "LNF Chile.png",
+  "libo basquet": "Libo Basquet.png",
   lub: "LUB.png",
   "primera feb": "Primera FEB.png",
+  "metro 3x3": "Liga 3x3.png",
+  "super copa endesa": "Super Copa Endesa.png",
+  "supercopa": "Super Copa Endesa.png",
+  "tour 3x3": "Liga 3x3.png",
 };
 
 function normalizeLeague(value: string) {
@@ -37,10 +57,12 @@ function normalizeLeague(value: string) {
 }
 
 function getLeagueInitials(league: string) {
+  const parts = league.split(/\s+/).filter(Boolean);
+  const usableParts =
+    parts[0]?.toLowerCase() === "liga" && parts.length > 2 ? parts.slice(1) : parts;
+
   return (
-    league
-      .split(/\s+/)
-      .filter(Boolean)
+    usableParts
       .slice(0, 2)
       .map((part) => part[0]?.toUpperCase() ?? "")
       .join("") || "LG"
@@ -75,7 +97,6 @@ export function LeagueLogoMarkClient({
           src={src}
           alt={`Logo de ${league}`}
           fill
-          unoptimized
           sizes="80px"
           className="object-contain p-0.5"
         />

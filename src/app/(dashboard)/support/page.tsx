@@ -2,10 +2,11 @@ import Link from "next/link";
 import { CircleHelp, Clock3, LifeBuoy, Mail } from "lucide-react";
 
 import { Card } from "@/components/ui/card";
-
-const SUPPORT_EMAIL = "soporte@dashboardproduccion.local";
+import { appEnv } from "@/lib/env";
 
 export default function SupportPage() {
+  const supportEmail = appEnv.supportEmail;
+
   return (
     <div className="space-y-8">
       <section className="space-y-2">
@@ -40,7 +41,7 @@ export default function SupportPage() {
               Correo de soporte
             </div>
             <p className="mt-2 text-base font-extrabold text-[var(--foreground)]">
-              {SUPPORT_EMAIL}
+              {supportEmail}
             </p>
           </div>
 
@@ -58,7 +59,7 @@ export default function SupportPage() {
 
           <div className="flex flex-wrap gap-3">
             <Link
-              href={`mailto:${SUPPORT_EMAIL}?subject=Soporte%20Basket%20Production`}
+              href={`mailto:${supportEmail}?subject=Soporte%20Basket%20Production`}
               className="inline-flex h-[52px] items-center justify-center gap-2 rounded-[var(--panel-radius)] bg-[var(--accent)] px-5 text-sm font-extrabold text-white shadow-[0_14px_28px_rgba(230,18,56,0.18)] transition hover:bg-[var(--accent-strong)]"
             >
               <Mail className="size-4" />

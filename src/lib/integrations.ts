@@ -1,5 +1,7 @@
 import { APP_NAME, PRODUCTION_LABEL } from "@/lib/constants";
+import type { AssignmentConfirmationLinks } from "@/lib/assignment-confirmation";
 import { formatMatchDate, formatMatchTime, toCalendarDates } from "@/lib/date";
+import { getTeamDisplayName } from "@/lib/team-directory";
 import { appEnv } from "@/lib/env";
 import { getRoleDisplayName } from "@/lib/display";
 import type { AssignmentDetail, MatchDetail } from "@/lib/types";
@@ -16,12 +18,21 @@ type NotificationMatch = Pick<
   | "venue"
 >;
 
+function getMatchTeamLabels(match: NotificationMatch) {
+  return {
+    homeTeam: getTeamDisplayName(match.home_team, match.competition),
+    awayTeam: getTeamDisplayName(match.away_team, match.competition),
+  };
+}
+
 export function buildGroupName(match: MatchDetail) {
-  return `${match.home_team.toUpperCase()} VS ${match.away_team.toUpperCase()}`;
+  const { homeTeam, awayTeam } = getMatchTeamLabels(match);
+  return `${homeTeam.toUpperCase()} VS ${awayTeam.toUpperCase()}`;
 }
 
 export function buildGoogleCalendarLink(match: MatchDetail) {
-  const title = `${match.home_team} vs ${match.away_team}`;
+  const { homeTeam, awayTeam } = getMatchTeamLabels(match);
+  const title = `${homeTeam} vs ${awayTeam}`;
   const details = [
     `Competencia: ${match.competition ?? "Sin definir"}`,
     `${PRODUCTION_LABEL}: ${match.production_mode ?? "Sin definir"}`,
@@ -85,13 +96,15 @@ export function getWhatsAppRoster(assignments: AssignmentDetail[]) {
 }
 
 export function buildMatchNotificationSubject(match: NotificationMatch) {
-  return `Convocatoria · ${match.home_team} vs ${match.away_team}`;
+  const { homeTeam, awayTeam } = getMatchTeamLabels(match);
+  return `Convocatoria · ${homeTeam} vs ${awayTeam}`;
 }
 
 export function buildMatchNotificationMessage(params: {
   match: NotificationMatch;
   personName?: string | null;
   roleNames?: string[];
+  confirmationLinks?: AssignmentConfirmationLinks | null;
 }) {
   function buildRoleLines(roleNames?: string[]) {
     if (!roleNames?.length) {
@@ -114,12 +127,13 @@ export function buildMatchNotificationMessage(params: {
   ).replaceAll(".", "");
   const timeLabel = formatMatchTime(params.match.kickoff_at, params.match.timezone);
   const roleLines = buildRoleLines(params.roleNames);
+  const { homeTeam, awayTeam } = getMatchTeamLabels(params.match);
 
   return [
     `Hola ${recipientName} 👋`,
     "",
     "Has sido convocado para:",
-    `🏀 ${params.match.home_team} vs ${params.match.away_team}`,
+    `🏀 ${homeTeam} vs ${awayTeam}`,
     "",
     ...roleLines,
     ...(roleLines.length ? [""] : []),
@@ -129,8 +143,74 @@ export function buildMatchNotificationMessage(params: {
     `📍 Lugar: ${params.match.venue ?? "Sede por definir"}`,
     `🎥 ${PRODUCTION_LABEL}: ${params.match.production_mode ?? "Sin definir"}`,
     "",
-    "✅ Por favor confirma tu disponibilidad respondiendo este mensaje.",
+    params.confirmationLinks
+      ? "✅ Por favor confirma tu disponibilidad con uno de estos enlaces:"
+      : "✅ Por favor confirma tu disponibilidad respondiendo este mensaje.",
+    ...(params.confirmationLinks
+      ? [
+          `Confirmar SI: ${params.confirmationLinks.yes}`,
+          `No puedo asistir: ${params.confirmationLinks.no}`,
+        ]
+      : []),
     `🔗 Revisa tu asignación aquí: ${portalLink}`,
+    "",
+    `Equipo ${APP_NAME}`,
+  ].join("\n");
+}
+
+function buildMatchNotificationWhatsAppMessage(params: {
+  match: NotificationMatch;
+  personName?: string | null;
+  roleNames?: string[];
+  confirmationLinks?: AssignmentConfirmationLinks | null;
+}) {
+  function buildRoleLines(roleNames?: string[]) {
+    if (!roleNames?.length) {
+      return [];
+    }
+
+    if (roleNames.length === 1) {
+      return [`👤 Rol asignado: ${roleNames[0]}`];
+    }
+
+    return ["👤 Roles asignados:", ...roleNames.map((roleName) => `• ${roleName}`)];
+  }
+
+  const recipientName = params.personName?.trim() || "equipo";
+  const portalLink = `${appEnv.appUrl.replace(/\/$/, "")}/mi-jornada`;
+  const dateLabel = formatMatchDate(
+    params.match.kickoff_at,
+    params.match.timezone,
+    "EEEE, d 'de' MMM",
+  ).replaceAll(".", "");
+  const timeLabel = formatMatchTime(params.match.kickoff_at, params.match.timezone);
+  const roleLines = buildRoleLines(params.roleNames);
+  const { homeTeam, awayTeam } = getMatchTeamLabels(params.match);
+
+  return [
+    `Hola ${recipientName} 👋`,
+    "",
+    "Has sido convocado para:",
+    `🏀 ${homeTeam} vs ${awayTeam}`,
+    "",
+    ...roleLines,
+    ...(roleLines.length ? [""] : []),
+    `🏆 Liga: ${params.match.competition ?? "Sin liga"}`,
+    `📅 Fecha: ${dateLabel}`,
+    `🕖 Hora: ${timeLabel}`,
+    `📍 Lugar: ${params.match.venue ?? "Sede por definir"}`,
+    `🎥 ${PRODUCTION_LABEL}: ${params.match.production_mode ?? "Sin definir"}`,
+    "",
+    params.confirmationLinks
+      ? "✅ Por favor confirma tu disponibilidad con uno de estos enlaces:"
+      : "✅ Por favor confirma tu disponibilidad respondiendo este mensaje.",
+    ...(params.confirmationLinks
+      ? [
+          `Confirmar SI: ${params.confirmationLinks.yes}`,
+          `No puedo asistir: ${params.confirmationLinks.no}`,
+        ]
+      : []),
+    `🔗 Revisa tu asignacion aqui: ${portalLink}`,
     "",
     `Equipo ${APP_NAME}`,
   ].join("\n");
@@ -141,6 +221,7 @@ export function buildMatchNotificationMailtoHref(params: {
   match: NotificationMatch;
   personName?: string | null;
   roleNames?: string[];
+  confirmationLinks?: AssignmentConfirmationLinks | null;
 }) {
   const email = params.email?.trim();
 
@@ -148,18 +229,17 @@ export function buildMatchNotificationMailtoHref(params: {
     return "";
   }
 
-  const url = new URL(`mailto:${email}`);
-  url.searchParams.set("subject", buildMatchNotificationSubject(params.match));
-  url.searchParams.set(
-    "body",
+  const subject = encodeURIComponent(buildMatchNotificationSubject(params.match));
+  const body = encodeURIComponent(
     buildMatchNotificationMessage({
       match: params.match,
       personName: params.personName,
       roleNames: params.roleNames,
+      confirmationLinks: params.confirmationLinks,
     }),
   );
 
-  return url.toString();
+  return `mailto:${email}?subject=${subject}&body=${body}`;
 }
 
 export function buildMatchNotificationWhatsAppHref(params: {
@@ -167,6 +247,7 @@ export function buildMatchNotificationWhatsAppHref(params: {
   match: NotificationMatch;
   personName?: string | null;
   roleNames?: string[];
+  confirmationLinks?: AssignmentConfirmationLinks | null;
 }) {
   const baseUrl = buildWhatsAppUrl(params.phone);
 
@@ -177,10 +258,11 @@ export function buildMatchNotificationWhatsAppHref(params: {
   const url = new URL(baseUrl);
   url.searchParams.set(
     "text",
-    buildMatchNotificationMessage({
+    buildMatchNotificationWhatsAppMessage({
       match: params.match,
       personName: params.personName,
       roleNames: params.roleNames,
+      confirmationLinks: params.confirmationLinks,
     }),
   );
 
@@ -197,13 +279,9 @@ export function buildBulkMatchNotificationMailtoHref(params: {
     return "";
   }
 
-  const url = new URL("mailto:");
-  url.searchParams.set("bcc", recipients.join(","));
-  url.searchParams.set("subject", buildMatchNotificationSubject(params.match));
-  url.searchParams.set(
-    "body",
-    buildMatchNotificationMessage({ match: params.match }),
-  );
+  const to = encodeURIComponent(recipients.join(","));
+  const subject = encodeURIComponent(buildMatchNotificationSubject(params.match));
+  const body = encodeURIComponent(buildMatchNotificationMessage({ match: params.match }));
 
-  return url.toString();
+  return `https://mail.google.com/mail/?view=cm&fs=1&tf=1&to=${to}&su=${subject}&body=${body}`;
 }

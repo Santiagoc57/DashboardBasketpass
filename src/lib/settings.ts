@@ -5,7 +5,6 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export const GEMINI_API_KEY_COOKIE = "bp_gemini_api_key";
 export const GEMINI_MODEL_COOKIE = "bp_gemini_model";
-export const UI_DENSITY_COOKIE = "bp_ui_density";
 export const GEMINI_GLOBAL_SETTING_KEY = "gemini";
 
 export const GEMINI_MODEL_OPTIONS = [
@@ -13,9 +12,6 @@ export const GEMINI_MODEL_OPTIONS = [
   "gemini-2.5-pro",
 ] as const;
 
-export const UI_DENSITY_OPTIONS = ["comoda", "compacta"] as const;
-
-export type UiDensity = (typeof UI_DENSITY_OPTIONS)[number];
 export type GeminiModel = (typeof GEMINI_MODEL_OPTIONS)[number];
 
 export function isGeminiModel(value: string): value is GeminiModel {
@@ -146,10 +142,7 @@ export async function getGeminiRuntimeConfig(): Promise<GeminiRuntimeConfig> {
 }
 
 export async function getSettingsSnapshot() {
-  const store = await cookies();
   const gemini = await getGeminiRuntimeConfig();
-  const uiDensity =
-    (store.get(UI_DENSITY_COOKIE)?.value as UiDensity | undefined) ?? "comoda";
 
   return {
     hasGeminiKey: gemini.hasGeminiKey,
@@ -158,7 +151,6 @@ export async function getSettingsSnapshot() {
     hasPersonalGeminiKey: gemini.hasPersonalGeminiKey,
     hasPortalGeminiKey: gemini.hasPortalGeminiKey,
     hasEnvGeminiKey: gemini.hasEnvGeminiKey,
-    uiDensity,
   };
 }
 

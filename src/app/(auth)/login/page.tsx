@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import {
@@ -6,7 +7,6 @@ import {
   Mail,
   Radio,
   UsersRound,
-  Video,
 } from "lucide-react";
 
 import { loginAction } from "@/app/actions/auth";
@@ -15,7 +15,7 @@ import { PageMessage } from "@/components/ui/page-message";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { PRODUCT_COPY } from "@/lib/copy";
 import { getDefaultDashboardHrefForRole, APP_NAME } from "@/lib/constants";
-import { isSupabaseConfigured } from "@/lib/env";
+import { appEnv, isSupabaseConfigured } from "@/lib/env";
 import { parseNotice } from "@/lib/search-params";
 import { getUserContext } from "@/lib/auth";
 
@@ -26,7 +26,7 @@ type PageProps = {
 export default async function LoginPage({ searchParams }: PageProps) {
   const resolvedSearchParams = await searchParams;
   const { intent, notice } = parseNotice(resolvedSearchParams);
-  const supportEmail = "soporte@dashboardproduccion.local";
+  const supportEmail = appEnv.supportEmail;
   const supportWhatsAppHref: string | null = null;
   const supportContactHref = supportWhatsAppHref ?? `mailto:${supportEmail}`;
 
@@ -36,8 +36,15 @@ export default async function LoginPage({ searchParams }: PageProps) {
         <div className="grid min-h-screen lg:grid-cols-[1.1fr_0.9fr]">
           <section className="hidden border-r border-[var(--border)] bg-[linear-gradient(180deg,#fffdfd_0%,#faf8f5_100%)] lg:flex lg:flex-col lg:justify-between lg:p-10 xl:p-12 2xl:p-16">
             <div className="flex items-center gap-3">
-              <div className="flex size-10 items-center justify-center rounded-xl bg-[var(--foreground)] text-white">
-                <Video className="size-5" />
+              <div className="flex size-10 items-center justify-center overflow-hidden rounded-xl bg-[var(--accent)] shadow-[0_10px_24px_rgba(230,18,56,0.22)]">
+                <Image
+                  src="/Logos/Logos Ligas/LogoBasquetpass.webp"
+                  alt={`Logo de ${APP_NAME}`}
+                  width={28}
+                  height={28}
+                  className="h-7 w-7 object-contain"
+                  priority
+                />
               </div>
               <p className="text-xl font-extrabold tracking-tight text-[var(--foreground)]">
                 {APP_NAME}
@@ -63,8 +70,15 @@ export default async function LoginPage({ searchParams }: PageProps) {
           <section className="flex min-h-screen items-center justify-center px-6 py-8 sm:px-8 lg:px-10 xl:px-12">
             <div className="w-full max-w-[500px]">
               <div className="mb-8 flex items-center gap-3 lg:hidden">
-                <div className="flex size-10 items-center justify-center rounded-xl bg-[var(--foreground)] text-white">
-                  <Video className="size-5" />
+                <div className="flex size-10 items-center justify-center overflow-hidden rounded-xl bg-[var(--accent)] shadow-[0_10px_24px_rgba(230,18,56,0.22)]">
+                  <Image
+                    src="/Logos/Logos Ligas/LogoBasquetpass.webp"
+                    alt={`Logo de ${APP_NAME}`}
+                    width={28}
+                    height={28}
+                    className="h-7 w-7 object-contain"
+                    priority
+                  />
                 </div>
                 <p className="text-xl font-extrabold tracking-tight text-[var(--foreground)]">
                   {APP_NAME}
@@ -96,8 +110,15 @@ export default async function LoginPage({ searchParams }: PageProps) {
           <div className="absolute inset-0 opacity-[0.045] [background-image:radial-gradient(circle_at_top_left,rgba(230,18,56,0.42),transparent_26%),linear-gradient(rgba(28,13,16,0.08)_1px,transparent_1px),linear-gradient(90deg,rgba(28,13,16,0.08)_1px,transparent_1px)] [background-size:auto,42px_42px,42px_42px]" />
 
             <div className="relative z-10 flex items-center gap-3">
-              <div className="flex size-10 items-center justify-center rounded-xl bg-[var(--foreground)] text-white">
-                <Video className="size-5" />
+              <div className="flex size-10 items-center justify-center overflow-hidden rounded-xl bg-[var(--accent)] shadow-[0_10px_24px_rgba(230,18,56,0.22)]">
+                <Image
+                  src="/Logos/Logos Ligas/LogoBasquetpass.webp"
+                  alt={`Logo de ${APP_NAME}`}
+                  width={28}
+                  height={28}
+                  className="h-7 w-7 object-contain"
+                  priority
+                />
               </div>
               <p className="text-xl font-extrabold tracking-tight text-[var(--foreground)]">
                 {APP_NAME}
@@ -160,8 +181,15 @@ export default async function LoginPage({ searchParams }: PageProps) {
         <section className="flex min-h-screen items-center justify-center px-6 py-8 sm:px-8 lg:px-10 xl:px-12">
           <div className="w-full max-w-[400px] xl:max-w-[420px]">
             <div className="mb-8 flex items-center justify-center gap-3 text-center lg:hidden">
-              <div className="flex size-10 items-center justify-center rounded-xl bg-[var(--foreground)] text-white">
-                <Video className="size-5" />
+              <div className="flex size-10 items-center justify-center overflow-hidden rounded-xl bg-[var(--accent)] shadow-[0_10px_24px_rgba(230,18,56,0.22)]">
+                <Image
+                  src="/Logos/Logos Ligas/LogoBasquetpass.webp"
+                  alt={`Logo de ${APP_NAME}`}
+                  width={28}
+                  height={28}
+                  className="h-7 w-7 object-contain"
+                  priority
+                />
               </div>
               <p className="text-xl font-extrabold tracking-tight text-[var(--foreground)]">
                 {APP_NAME}

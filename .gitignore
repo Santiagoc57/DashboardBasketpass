@@ -24,6 +24,8 @@
 .DS_Store
 *.pem
 .codex_tmp_*
+.codex-temp/
+outputs/
 
 # debug
 npm-debug.log*
@@ -111,3 +113,6 @@ tsconfig.tsbuildinfo
 # Local tooling and editor state
 .playwright-cli/
 .vscode/
+
+# Operational dumps and manifests
+backups/

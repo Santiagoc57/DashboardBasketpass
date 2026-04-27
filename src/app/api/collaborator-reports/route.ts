@@ -3,12 +3,23 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { getUserContext } from "@/lib/auth";
+import { technicalCaptureKindSchema } from "@/lib/ai/metric-capture";
 import {
   getCollaboratorMatchData,
   isUuidLike,
 } from "@/lib/data/collaborators";
+import { emitOperationalAlert } from "@/lib/monitoring";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { ensureErrorMessage } from "@/lib/utils";
+
+const attachmentSchema = z.object({
+  kind: technicalCaptureKindSchema,
+  path: z.string().trim().min(1),
+  fileName: z.string().trim().min(1),
+  sizeBytes: z.number().int().nonnegative(),
+  mimeType: z.string().trim().min(1),
+  uploadedAt: z.string().trim().min(1),
+});
 
 const reportDraftSchema = z.object({
   incidentLevel: z.enum(["sin", "baja", "alta", "critica"]),
@@ -36,9 +47,9 @@ const reportDraftSchema = z.object({
   otherObservation: z.string(),
   stObservation: z.string(),
   clubObservation: z.string(),
-  speedtestAttachmentName: z.string().nullable(),
-  pingAttachmentName: z.string().nullable(),
-  gpuAttachmentName: z.string().nullable(),
+  speedtestAttachment: attachmentSchema.nullable(),
+  pingAttachment: attachmentSchema.nullable(),
+  gpuAttachment: attachmentSchema.nullable(),
   updatedAt: z.string().optional(),
 });
 
@@ -54,8 +65,24 @@ function hasEnabledProblems(
   return Object.values(value).some(Boolean);
 }
 
+async function reportCollaboratorReportsFailure(
+  error: unknown,
+  action: string,
+  severity: "warning" | "critical" = "critical",
+  details: Record<string, unknown> = {},
+) {
+  await emitOperationalAlert({
+    area: "collaborator-reports",
+    severity,
+    message: "Falló una operación de reportes de colaborador.",
+    error: ensureErrorMessage(error),
+    details: { action, ...details },
+  });
+}
+
 export async function POST(request: Request) {
   let payload: unknown;
+  let userId: string | null = null;
 
   try {
     payload = await request.json();
@@ -86,6 +113,7 @@ export async function POST(request: Request) {
 
   try {
     const user = await getUserContext();
+    userId = user.userId;
 
     if (!user.userId) {
       return NextResponse.json(
@@ -93,6 +121,7 @@ export async function POST(request: Request) {
         { status: 401 },
       );
     }
+    const reporterProfileId = user.userId;
 
     const access = await getCollaboratorMatchData({
       email: user.email,
@@ -120,7 +149,7 @@ export async function POST(request: Request) {
         {
           assignment_id: assignmentId,
           match_id: matchId,
-          reporter_profile_id: user.userId,
+          reporter_profile_id: reporterProfileId,
           incident_level: draft.incidentLevel,
           paid: draft.paid === "si",
           feed_detected: draft.feedDetected === "si",
@@ -147,9 +176,9 @@ export async function POST(request: Request) {
             hasAny: hasEnabledProblems(draft.problems),
           },
           attachments: {
-            speedtest: draft.speedtestAttachmentName,
-            ping: draft.pingAttachmentName,
-            gpu: draft.gpuAttachmentName,
+            speedtest: draft.speedtestAttachment,
+            ping: draft.pingAttachment,
+            gpu: draft.gpuAttachment,
           },
           submitted_at: new Date().toISOString(),
         },
@@ -160,6 +189,12 @@ export async function POST(request: Request) {
 
     if (reportResult.error) {
       if (reportResult.error.code === "42P01") {
+        await reportCollaboratorReportsFailure(
+          reportResult.error,
+          "save-report",
+          "warning",
+          { reason: "missing-collaborator-reports-table" },
+        );
         return NextResponse.json(
           {
             error:
@@ -172,10 +207,12 @@ export async function POST(request: Request) {
       throw reportResult.error;
     }
 
-    const assignmentResult = await supabase
-      .from("assignments")
-      .update({ confirmed: true })
-      .eq("id", assignmentId);
+    const assignmentResult = await supabase.rpc(
+      "confirm_collaborator_assignment",
+      {
+        target_assignment_id: assignmentId,
+      },
+    );
 
     if (assignmentResult.error) {
       throw assignmentResult.error;
@@ -194,6 +231,11 @@ export async function POST(request: Request) {
       message: "Reporte enviado. Marcamos este partido como reportado.",
     });
   } catch (error) {
+    await reportCollaboratorReportsFailure(error, "save-report", "critical", {
+      assignmentId,
+      matchId,
+      userId,
+    });
     return NextResponse.json(
       { error: ensureErrorMessage(error) },
       { status: 500 },

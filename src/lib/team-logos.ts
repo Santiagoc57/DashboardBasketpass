@@ -3,6 +3,8 @@ import "server-only";
 import { readdirSync } from "node:fs";
 import path from "node:path";
 
+import { LOGO_LIBRARY_INDEX } from "@/lib/logo-library-index";
+
 type LogoEntry = {
   src: string;
   folder: string;
@@ -45,12 +47,12 @@ const STOPWORDS = new Set([
   "ca",
 ]);
 
-const COMPETITION_FOLDER_HINTS: Array<{
+const COMPETITION_FOLDER_HINTS_BASE: Array<{
   match: string[];
   folders: string[];
 }> = [
   {
-    match: ["liga nacional", "liga proximo", "liga nacional / liga proximo"],
+    match: ["liga nacional", "liga proximo"],
     folders: ["logos liga nacional 500 x 500"],
   },
   {
@@ -60,6 +62,34 @@ const COMPETITION_FOLDER_HINTS: Array<{
   {
     match: ["liga federal"],
     folders: ["logos liga federal"],
+  },
+  {
+    match: ["euroliga", "euroleague"],
+    folders: ["logos euroliga 500 x 500"],
+  },
+  {
+    match: ["liga endesa", "acb"],
+    folders: ["logos liga endesa 500 x 500"],
+  },
+  {
+    match: ["lba serie a", "lba"],
+    folders: ["logos liga italia 500 x 500"],
+  },
+  {
+    match: ["liga chery", "liga uno chery", "liga chery chile"],
+    folders: ["logos liga chery chile 500 x 500"],
+  },
+  {
+    match: ["liga dos"],
+    folders: ["logos liga dos chile 500 x 500"],
+  },
+  {
+    match: ["lda"],
+    folders: ["logos liga ecuador 500 x 500"],
+  },
+  {
+    match: ["liga ecuador fem"],
+    folders: ["logos liga ecuador fem 500 x 500"],
   },
   {
     match: ["liga metropolitana"],
@@ -72,6 +102,30 @@ const COMPETITION_FOLDER_HINTS: Array<{
     match: ["liga femenina", "liga metropolitana fem"],
     folders: ["logos liga femenina 500 x 500"],
   },
+  {
+    match: ["lub"],
+    folders: ["logos liga uruguay 500 x 500"],
+  },
+  {
+    match: ["libo basquet"],
+    folders: ["logos liga bolivia 500 x 500"],
+  },
+  {
+    match: ["primera feb"],
+    folders: ["logos primera feb 500 x500"],
+  },
+  {
+    match: ["liga u22"],
+    folders: ["logos u22 espana"],
+  },
+];
+
+const COMPETITION_FOLDER_HINTS = [
+  ...COMPETITION_FOLDER_HINTS_BASE,
+  ...LOGO_LIBRARY_INDEX.map(({ competition, folder, aliases }) => ({
+    match: [competition.toLowerCase(), ...aliases.map((alias) => alias.toLowerCase())],
+    folders: [folder],
+  })),
 ];
 
 const TEAM_QUERY_ALIASES: Record<string, string[]> = {
@@ -91,6 +145,7 @@ const TEAM_QUERY_ALIASES: Record<string, string[]> = {
   "central entrerriano": ["central entriano", "central enterriano"],
   "club atletico estudiantes de tucuman": ["estudiantes tuc", "estudiantes tucuman"],
   "fusion riojana": ["fusion riojana"],
+  "importadora alvarado": ["dragonas importadora alvarado"],
   "gimnasia y esgrima de la plata": [
     "gimnasia esgrima de la plata",
     "club gimnasia y esgrima la plata",

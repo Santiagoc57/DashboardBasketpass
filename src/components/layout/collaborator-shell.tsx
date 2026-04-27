@@ -116,7 +116,7 @@ export function CollaboratorShell({
         {children}
       </main>
 
-      <footer className="hidden border-t border-[var(--border)] bg-[var(--page-footer-bg)] px-[var(--dashboard-shell-padding)] py-6 backdrop-blur-sm lg:block">
+      <footer className="hidden border-t border-[var(--border)] bg-[var(--page-footer-bg)] px-[var(--dashboard-shell-padding)] py-3.5 backdrop-blur-sm lg:block">
         <DashboardFooterMeta userName={displayName} />
       </footer>
 

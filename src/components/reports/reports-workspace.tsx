@@ -1,29 +1,40 @@
 "use client";
 
-import { type DragEvent, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import {
+  type ChangeEvent,
+  type DragEvent,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+} from "react";
 import {
   AlertTriangle,
   ArrowUpDown,
   BarChart3,
-  Bot,
   CalendarDays,
   Circle,
   CircleCheckBig,
   CircleX,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   ChevronUp,
   Clock3,
+  Cpu,
   Download,
   Eye,
   FileText,
   Filter,
   Gauge,
-  GripVertical,
   History,
   MapPin,
   Pencil,
   ShieldAlert,
-  Sparkles,
+  Upload,
+  Wifi,
   X,
 } from "lucide-react";
 
@@ -35,8 +46,8 @@ import { SectionPageHeader } from "@/components/layout/section-page-header";
 import { MatchSummaryCell } from "@/components/shared/match-summary-cell";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ExpandDivider } from "@/components/ui/expand-divider";
-import { HoverAvatarBadge } from "@/components/ui/hover-avatar-badge";
 import { InsightBarRow } from "@/components/ui/insight-bar-row";
+import { PersonRoleStack } from "@/components/ui/person-role-stack";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { SeverityBadge } from "@/components/ui/severity-badge";
 import { SectionTableCard } from "@/components/ui/section-table-card";
@@ -44,10 +55,15 @@ import { UnderlineTabs } from "@/components/ui/underline-tabs";
 import { ToolbarIconButton } from "@/components/ui/toolbar-icon-button";
 import { ToolbarSearchField } from "@/components/ui/toolbar-search-field";
 import type {
+  ReportAttachment,
   ReportActivity,
   ReportRecord,
   ReportSeverity,
 } from "@/lib/reports";
+import type {
+  CollaboratorReportAttachment,
+  TechnicalCaptureKind,
+} from "@/lib/collaborator-report-attachments";
 import type { IncidentRecord } from "@/lib/incidents";
 import { getTeamLeagueColorSet } from "@/lib/team-directory";
 import { cn } from "@/lib/utils";
@@ -68,6 +84,20 @@ type ReportView = "summary" | "control" | "incidents";
 export type ReportsWorkspaceView = ReportView;
 type ReportDrawerTab = "details" | "activity";
 type IncidentChartMetric = "count" | "rate";
+type SummaryInsightDetail = "league" | "severity" | "venue" | "evolution";
+type SummaryInsightDisplayMode = "table" | "chart";
+type ReportEvidenceState = {
+  speedtestAttachment?: ReportAttachment | null;
+  pingAttachment?: ReportAttachment | null;
+  gpuAttachment?: ReportAttachment | null;
+  speedtest?: string;
+  ping?: string;
+  gpuLoad?: string;
+};
+type EvidenceUploadState = {
+  state: "idle" | "loading" | "error" | "done";
+  message: string;
+};
 type ReportControlColumn =
   | "league"
   | "id"
@@ -81,14 +111,32 @@ type ReportControlColumn =
   | "action";
 type ReportRankingColumn =
   | "responsible"
-  | "role"
-  | "assignments"
-  | "reports";
+  | "matches"
+  | "with_incident"
+  | "incident_rate"
+  | "incidents_per_100_matches"
+  | "critical"
+  | "high"
+  | "medium";
 
 const REPORT_CONTROL_COLUMNS_STORAGE_KEY =
   "basket-production.reports.control-columns";
 const REPORT_RANKING_COLUMNS_STORAGE_KEY =
   "basket-production.reports.ranking-columns";
+const REPORT_SUMMARY_AI_GUIDANCE = [
+  "Si el usuario pide un análisis, informe, resumen ejecutivo, diagnóstico o recomendaciones, responde SIEMPRE con esta estructura y en este orden:",
+  "1. Resumen ejecutivo.",
+  "2. Distribución por gravedad.",
+  "3. Incidencias por liga.",
+  "4. Evolución del periodo.",
+  "5. Rendimiento por responsable.",
+  "6. Incidencias por sede.",
+  "7. Tabla cruzada liga x gravedad.",
+  "8. Conclusiones y recomendaciones.",
+  "En cada bloque usa solo cifras del contexto, destaca top 3, porcentajes y hallazgos accionables.",
+  "Si falta información, conserva el bloque y aclara 'sin datos visibles'.",
+  "Si la pregunta no pide informe completo, responde puntual.",
+].join(" ");
 const DEFAULT_REPORT_CONTROL_COLUMNS: ReportControlColumn[] = [
   "league",
   "id",
@@ -99,13 +147,16 @@ const DEFAULT_REPORT_CONTROL_COLUMNS: ReportControlColumn[] = [
   "paid",
   "feed",
   "severity",
-  "action",
 ];
 const DEFAULT_REPORT_RANKING_COLUMNS: ReportRankingColumn[] = [
   "responsible",
-  "role",
-  "assignments",
-  "reports",
+  "matches",
+  "with_incident",
+  "incident_rate",
+  "incidents_per_100_matches",
+  "critical",
+  "high",
+  "medium",
 ];
 const REPORT_CONTROL_COLUMN_SORT_KEY: Partial<
   Record<ReportControlColumn, ReportSortKey>
@@ -121,16 +172,16 @@ const REPORT_CONTROL_COLUMN_SORT_KEY: Partial<
   severity: "severity",
 };
 const REPORT_CONTROL_COLUMN_WIDTH_WEIGHT: Record<ReportControlColumn, number> = {
-  league: 1,
-  id: 1.2,
-  idBp: 1.3,
-  date: 1,
-  match: 2.8,
-  responsible: 1.8,
-  paid: 0.9,
-  feed: 0.9,
-  severity: 1.2,
-  action: 0.5,
+  league: 0.75,
+  id: 1.1,
+  idBp: 0.75,
+  date: 0.85,
+  match: 2.6,
+  responsible: 1.55,
+  paid: 0.35,
+  feed: 0.35,
+  severity: 1.05,
+  action: 0.4,
 };
 const REPORT_CONTROL_COMPACT_COLUMN_WIDTH_WEIGHT: Record<
   ReportControlColumn,
@@ -142,18 +193,11 @@ const REPORT_CONTROL_COMPACT_COLUMN_WIDTH_WEIGHT: Record<
   date: 0.9,
   match: 2.8,
   responsible: 1.1,
-  paid: 0.8,
-  feed: 0.8,
+  paid: 0.4,
+  feed: 0.4,
   severity: 1,
   action: 0.45,
 };
-const REPORT_CONTROL_LAPTOP_HIDDEN_COLUMNS = new Set<ReportControlColumn>([
-  "idBp",
-  "paid",
-  "feed",
-  "action",
-]);
-
 const REPORT_EXPORT_COLUMNS = [
   {
     label: "ID FEED",
@@ -196,6 +240,28 @@ const REPORT_EXPORT_COLUMNS = [
     value: (report: ReportRecord) => (report.paid ? "Sí" : "No"),
   },
 ] as const;
+
+function formatBytes(bytes: number) {
+  if (bytes < 1024) {
+    return `${bytes} B`;
+  }
+
+  if (bytes < 1024 * 1024) {
+    return `${(bytes / 1024).toFixed(1)} KB`;
+  }
+
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function toReportAttachment(
+  attachment: CollaboratorReportAttachment & { signedUrl?: string },
+): ReportAttachment {
+  return {
+    fileName: attachment.fileName,
+    fileSizeLabel: formatBytes(attachment.sizeBytes),
+    previewUrl: attachment.signedUrl,
+  };
+}
 
 function normalizeReportControlColumns(
   value: unknown,
@@ -317,6 +383,38 @@ function getShortDayLabel(date: Date) {
   return `${String(date.getDate()).padStart(2, "0")} ${MONTHS_ABBR_ES[date.getMonth()]} ${String(
     date.getFullYear(),
   ).slice(-2)}`;
+}
+
+function getPeriodBucketInfo(
+  periodMode: ReportPeriodMode,
+  reportDate: Date,
+  eventTime: string,
+) {
+  if (periodMode === "day") {
+    const hour = Number(eventTime.split(":")[0] ?? "0");
+
+    return {
+      key: `h-${String(hour).padStart(2, "0")}`,
+      label: `${String(hour).padStart(2, "0")}:00`,
+      sort: hour,
+    };
+  }
+
+  if (periodMode === "week") {
+    return {
+      key: getDateKey(reportDate),
+      label: `${String(reportDate.getDate()).padStart(2, "0")} ${MONTHS_ABBR_ES[reportDate.getMonth()]}`,
+      sort: reportDate.getTime(),
+    };
+  }
+
+  const weekIndex = getWeekIndexInMonth(reportDate);
+
+  return {
+    key: `${getMonthKey(reportDate)}-w${weekIndex}`,
+    label: `SEM ${weekIndex}`,
+    sort: weekIndex,
+  };
 }
 
 function getReportLeagueCanvasTone(league: string) {
@@ -579,6 +677,42 @@ function formatCompactReportDate(value: string) {
   return `${day} ${month}`;
 }
 
+function formatSummaryPercentage(value: number, total: number) {
+  const percentage = total ? Math.round((value / total) * 1000) / 10 : 0;
+
+  return Number.isInteger(percentage)
+    ? `${percentage}%`
+    : `${percentage.toFixed(1)}%`;
+}
+
+function getPerformanceMetricTone(value: number) {
+  if (value >= 50) {
+    return {
+      badge: "bg-[#fff1f1] text-[#c73737]",
+      text: "text-[#c73737]",
+    };
+  }
+
+  if (value >= 35) {
+    return {
+      badge: "bg-[#fff5e9] text-[#9b5d00]",
+      text: "text-[#9b5d00]",
+    };
+  }
+
+  if (value >= 30) {
+    return {
+      badge: "bg-[#edf5ff] text-[#1d64d8]",
+      text: "text-[#1d64d8]",
+    };
+  }
+
+  return {
+    badge: "bg-[#eef9ef] text-[#3e7b2f]",
+    text: "text-[#3e7b2f]",
+  };
+}
+
 function getReportRowTone(severity: ReportSeverity) {
   switch (severity) {
     case "Crítica":
@@ -644,6 +778,47 @@ function getSeverityDistributionMeta(severity: ReportSeverity) {
   }
 }
 
+function getSeverityColor(severity: ReportSeverity) {
+  switch (severity) {
+    case "Crítica":
+      return "#a12ad6";
+    case "Alta":
+      return "#e44b68";
+    case "Media":
+      return "#e7c247";
+    case "Baja":
+      return "#d8e2ef";
+    default:
+      return "#10b981";
+  }
+}
+
+function getLeagueLegendLabel(league: string) {
+  const trimmedLeague = league.trim();
+
+  if (!trimmedLeague) {
+    return league;
+  }
+
+  if (/^[A-Z0-9]{2,4}$/.test(trimmedLeague)) {
+    return trimmedLeague;
+  }
+
+  const tokens = trimmedLeague
+    .replace(/([a-záéíóúñ])([A-ZÁÉÍÓÚÑ])/g, "$1 $2")
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter(Boolean);
+
+  if (tokens.length >= 2) {
+    return tokens
+      .map((token) => token[0]?.toUpperCase() ?? "")
+      .join("")
+      .slice(0, 3);
+  }
+
+  return tokens[0]?.slice(0, 2).toUpperCase() ?? trimmedLeague;
+}
+
 function SortHeader({
   label,
   active,
@@ -655,7 +830,7 @@ function SortHeader({
   active: boolean;
   direction: SortDirection;
   onClick: () => void;
-  align?: "left" | "right";
+  align?: "left" | "center" | "right";
 }) {
   return (
     <button
@@ -663,6 +838,7 @@ function SortHeader({
       onClick={onClick}
       className={cn(
         "inline-flex items-center gap-1.5 uppercase transition hover:text-[#617187]",
+        align === "center" && "mx-auto",
         align === "right" && "ml-auto",
       )}
     >
@@ -715,6 +891,14 @@ function getInitials(name: string) {
   return parts.join("") || "BP";
 }
 
+function openReportAttachmentPreview(url: string | undefined) {
+  if (!url) {
+    return;
+  }
+
+  window.open(url, "_blank", "noopener,noreferrer");
+}
+
 function MetricCard({
   title,
   value,
@@ -744,38 +928,40 @@ function MetricCard({
   return (
     <article
       className={cn(
-        "panel-surface min-w-0 overflow-hidden border p-5 xl:p-6",
+        "panel-surface !h-[120px] !min-h-[120px] flex min-w-0 flex-col overflow-hidden border p-4",
         highlight
-          ? "border-[#f2c7d0] bg-[#fff5f7] ring-1 ring-[#f2c7d0]"
+          ? "border-[#f2c7d0] bg-[var(--surface)]"
           : "border-[var(--border)] bg-[var(--surface)]",
       )}
     >
-      <p
-        className={cn(
-          "text-[11px] font-black uppercase tracking-[0.18em]",
-          highlight ? "text-[var(--accent)]" : "text-[#70819b]",
-        )}
-      >
-        {title}
-      </p>
-      <p
-        className={cn(
-          "mt-3 text-[2.35rem] font-black tracking-[-0.04em] xl:text-4xl",
-          highlight ? "text-[var(--accent)]" : "text-[var(--foreground)]",
-        )}
-      >
-        {value}
-      </p>
-      <div className="mt-5 min-w-0 space-y-3">
+      <div className="flex min-w-0 items-start justify-between gap-3">
+        <p
+          className={cn(
+            "min-w-0 pt-1 text-[11px] font-black uppercase tracking-[0.18em]",
+            highlight ? "text-[var(--accent)]" : "text-[#70819b]",
+          )}
+        >
+          {title}
+        </p>
+        <p
+          className={cn(
+            "shrink-0 text-4xl font-black leading-none tracking-[-0.04em]",
+            highlight ? "text-[var(--accent)]" : "text-[var(--foreground)]",
+          )}
+        >
+          {value}
+        </p>
+      </div>
+      <div className="mt-auto flex min-w-0 items-center gap-3">
         <span
           className={cn(
-            "inline-flex min-w-0 items-center rounded-xl px-2.5 py-1 text-[11px] font-bold whitespace-nowrap",
+            "inline-flex min-w-0 shrink-0 items-center rounded-xl px-2.5 py-1 text-[11px] font-bold whitespace-nowrap",
             chipClassName,
           )}
         >
           {chip}
         </span>
-        <div className="h-1.5 w-full overflow-hidden rounded-full bg-[#e7edf5]">
+        <div className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-[#e7edf5]">
           <div
             className={cn("h-full rounded-full", barClassName)}
             style={{ width: `${Math.max(8, Math.min(barWidth, 100))}%` }}
@@ -824,13 +1010,18 @@ export function ReportsWorkspace({
   incidents,
   hasGeminiKey,
   initialView = "summary",
+  canManageEvidence = false,
 }: {
   reports: ReportRecord[];
   activities: ReportActivity[];
   incidents: IncidentRecord[];
   hasGeminiKey: boolean;
   initialView?: ReportView;
+  canManageEvidence?: boolean;
 }) {
+  const router = useRouter();
+  const desktopEvidenceInputRef = useRef<HTMLInputElement | null>(null);
+  const [isRefreshingEvidence, startRefreshingEvidence] = useTransition();
   const [activeView, setActiveView] = useState<ReportView>(initialView);
   const [incidentsHeaderActionsPortalTarget, setIncidentsHeaderActionsPortalTarget] =
     useState<HTMLDivElement | null>(null);
@@ -838,6 +1029,16 @@ export function ReportsWorkspace({
     useState<HTMLDivElement | null>(null);
   const [selectedEmbeddedIncidentId, setSelectedEmbeddedIncidentId] =
     useState<string | null>(null);
+  const [reportEvidenceById, setReportEvidenceById] = useState<
+    Record<string, ReportEvidenceState>
+  >({});
+  const [desktopUploadTarget, setDesktopUploadTarget] = useState<{
+    reportId: string;
+    kind: TechnicalCaptureKind;
+  } | null>(null);
+  const [uploadStateByReport, setUploadStateByReport] = useState<
+    Record<string, Partial<Record<TechnicalCaptureKind, EvidenceUploadState>>>
+  >({});
   const [query, setQuery] = useState("");
   const [leagueFilter, setLeagueFilter] = useState("Todas las ligas");
   const latestReportDate = useMemo(() => {
@@ -846,7 +1047,7 @@ export function ReportsWorkspace({
       return reportDate > latest ? reportDate : latest;
     }, parseSpanishShortDate(reports[0]?.event_date ?? "1 enero 2026"));
   }, [reports]);
-  const [periodMode, setPeriodMode] = useState<ReportPeriodMode>("day");
+  const [periodMode, setPeriodMode] = useState<ReportPeriodMode>("month");
   const [selectedDayKey, setSelectedDayKey] = useState(() =>
     getDateKey(latestReportDate),
   );
@@ -858,13 +1059,23 @@ export function ReportsWorkspace({
   );
   const [incidentChartMetric, setIncidentChartMetric] =
     useState<IncidentChartMetric>("count");
-  const [incidentChartLimit, setIncidentChartLimit] = useState<5 | 10>(5);
+  const [chartTimeOffset, setChartTimeOffset] = useState(0);
+  const incidentChartLimit = 5;
+  const [selectedSummaryInsight, setSelectedSummaryInsight] =
+    useState<SummaryInsightDetail>("evolution");
+  const [summaryInsightDisplayMode, setSummaryInsightDisplayMode] = useState<
+    Record<Exclude<SummaryInsightDetail, "evolution">, SummaryInsightDisplayMode>
+  >({
+    league: "table",
+    severity: "table",
+    venue: "table",
+  });
   const [sortBy, setSortBy] = useState<ReportSortKey>("severity");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [rankingSortBy, setRankingSortBy] =
-    useState<ReportRankingColumn>("reports");
+    useState<ReportRankingColumn>("incident_rate");
   const [rankingSortDirection, setRankingSortDirection] =
-    useState<SortDirection>("desc");
+    useState<SortDirection>("asc");
   const [columnOrder, setColumnOrder] = useState<ReportControlColumn[]>(() => {
     if (typeof window === "undefined") {
       return DEFAULT_REPORT_CONTROL_COLUMNS;
@@ -916,18 +1127,63 @@ export function ReportsWorkspace({
   const [dragOverRankingColumn, setDragOverRankingColumn] =
     useState<ReportRankingColumn | null>(null);
   const [selectedReportId, setSelectedReportId] = useState<string | null>(null);
+  const [editingReportId, setEditingReportId] = useState<string | null>(null);
   const [reportDrawerTab, setReportDrawerTab] =
     useState<ReportDrawerTab>("details");
   const [isExporting, setIsExporting] = useState(false);
+  const [exportMenuOpen, setExportMenuOpen] = useState<"summary" | "incidents" | null>(null);
+  const exportMenuRef = useRef<HTMLDivElement | null>(null);
   const [showAllLeagueDistribution, setShowAllLeagueDistribution] = useState(false);
   const [showAllSeverityDistribution, setShowAllSeverityDistribution] =
     useState(false);
   const [showAllVenueRecurrence, setShowAllVenueRecurrence] = useState(false);
+  const summarySidebarRef = useRef<HTMLElement | null>(null);
+  const [summarySidebarHeight, setSummarySidebarHeight] = useState<number | null>(
+    null,
+  );
 
   useEffect(() => {
     if (activeView !== "incidents") {
       setSelectedEmbeddedIncidentId(null);
     }
+  }, [activeView]);
+
+  useEffect(() => {
+    const sidebar = summarySidebarRef.current;
+
+    if (!sidebar || typeof window === "undefined") {
+      return;
+    }
+
+    let frameId = 0;
+    const updateSidebarHeight = () => {
+      if (window.innerWidth < 1280) {
+        setSummarySidebarHeight(null);
+        return;
+      }
+
+      setSummarySidebarHeight(sidebar.getBoundingClientRect().height);
+    };
+
+    const scheduleUpdate = () => {
+      window.cancelAnimationFrame(frameId);
+      frameId = window.requestAnimationFrame(updateSidebarHeight);
+    };
+
+    scheduleUpdate();
+
+    const observer = new ResizeObserver(() => {
+      scheduleUpdate();
+    });
+
+    observer.observe(sidebar);
+    window.addEventListener("resize", scheduleUpdate);
+
+    return () => {
+      window.cancelAnimationFrame(frameId);
+      observer.disconnect();
+      window.removeEventListener("resize", scheduleUpdate);
+    };
   }, [activeView]);
 
   function handleSort(nextSortBy: ReportSortKey) {
@@ -950,10 +1206,29 @@ export function ReportsWorkspace({
 
     setRankingSortBy(nextSortBy);
     setRankingSortDirection(
-      nextSortBy === "reports" || nextSortBy === "assignments"
-        ? "desc"
-        : "asc",
+      nextSortBy === "responsible" ||
+        nextSortBy === "incident_rate" ||
+        nextSortBy === "incidents_per_100_matches"
+        ? "asc"
+        : "desc",
     );
+  }
+
+  function toggleSummaryInsight(
+    nextInsight: Exclude<SummaryInsightDetail, "evolution">,
+  ) {
+    setSelectedSummaryInsight((current) =>
+      current === nextInsight ? "evolution" : nextInsight,
+    );
+  }
+
+  function toggleSummaryInsightDisplayMode(
+    nextInsight: Exclude<SummaryInsightDetail, "evolution">,
+  ) {
+    setSummaryInsightDisplayMode((current) => ({
+      ...current,
+      [nextInsight]: current[nextInsight] === "table" ? "chart" : "table",
+    }));
   }
 
   function handleColumnDragStart(column: ReportControlColumn) {
@@ -1043,11 +1318,21 @@ export function ReportsWorkspace({
   }
 
   useEffect(() => {
+    if (columnOrder.includes("action")) {
+      setColumnOrder(columnOrder.filter((column) => column !== "action"));
+    }
+  }, [columnOrder]);
+
+  useEffect(() => {
     window.localStorage.setItem(
       REPORT_CONTROL_COLUMNS_STORAGE_KEY,
       JSON.stringify(columnOrder),
     );
   }, [columnOrder]);
+
+  useEffect(() => {
+    setEditingReportId(null);
+  }, [selectedReportId]);
 
   useEffect(() => {
     window.localStorage.setItem(
@@ -1154,8 +1439,8 @@ export function ReportsWorkspace({
     const withIncident = baseFilteredReports.filter(
       (report) => report.severity !== "Sin incidencia",
     ).length;
-    const criticalCount = baseFilteredReports.filter(
-      (report) => report.severity === "Crítica",
+    const criticalAndHighCount = baseFilteredReports.filter(
+      (report) => report.severity === "Crítica" || report.severity === "Alta",
     ).length;
     const unpaidCount = baseFilteredReports.filter((report) => !report.paid).length;
     const noIncidentCount = baseFilteredReports.filter(
@@ -1180,7 +1465,7 @@ export function ReportsWorkspace({
       completedReports,
       pendingReports,
       withIncident,
-      criticalCount,
+      criticalAndHighCount,
       unpaidCount,
       feedDetectedCount,
       paidCount,
@@ -1189,6 +1474,9 @@ export function ReportsWorkspace({
         : 0,
       noIncidentPercent: totalReports
         ? Math.round((noIncidentCount / totalReports) * 1000) / 10
+        : 0,
+      criticalAndHighPercent: totalReports
+        ? Math.round((criticalAndHighCount / totalReports) * 1000) / 10
         : 0,
       feedPercent: totalReports
         ? Math.round((feedDetectedCount / totalReports) * 1000) / 10
@@ -1234,7 +1522,24 @@ export function ReportsWorkspace({
     };
   }, [queryFilteredReports]);
 
-  const aiContext = useMemo(
+  const activePeriodValue =
+    periodMode === "day"
+      ? selectedDayKey
+      : periodMode === "week"
+        ? selectedWeekKey
+        : selectedMonthKey;
+
+  const activePeriodOptions =
+    periodMode === "day"
+      ? dayOptions
+      : periodMode === "week"
+        ? weekOptions.map(({ value, label }) => ({ value, label }))
+        : monthOptions;
+  const activePeriodLabel =
+    activePeriodOptions.find((option) => option.value === activePeriodValue)?.label ??
+    activePeriodValue;
+
+  const visibleReportsAiContext = useMemo(
     () =>
       queryFilteredReports.map((report) => ({
         id_feed: report.id_feed,
@@ -1262,38 +1567,12 @@ export function ReportsWorkspace({
       }
     >();
 
-    const getBucketInfo = (report: ReportRecord) => {
-      const date = parseSpanishShortDate(report.event_date);
-
-      if (periodMode === "day") {
-        const hour = Number(report.event_time.split(":")[0] ?? "0");
-
-        return {
-          key: `h-${String(hour).padStart(2, "0")}`,
-          label: `${String(hour).padStart(2, "0")}:00`,
-          sort: hour,
-        };
-      }
-
-      if (periodMode === "week") {
-        return {
-          key: getDateKey(date),
-          label: `${String(date.getDate()).padStart(2, "0")} ${MONTHS_ABBR_ES[date.getMonth()]}`,
-          sort: date.getTime(),
-        };
-      }
-
-      const weekIndex = getWeekIndexInMonth(date);
-
-      return {
-        key: `${getMonthKey(date)}-w${weekIndex}`,
-        label: `SEM ${weekIndex}`,
-        sort: weekIndex,
-      };
-    };
-
     baseFilteredReports.forEach((report) => {
-      const bucketInfo = getBucketInfo(report);
+      const bucketInfo = getPeriodBucketInfo(
+        periodMode,
+        parseSpanishShortDate(report.event_date),
+        report.event_time,
+      );
       const bucket = buckets.get(bucketInfo.key) ?? {
         label: bucketInfo.label,
         sort: bucketInfo.sort,
@@ -1370,14 +1649,114 @@ export function ReportsWorkspace({
     };
   }, [baseFilteredReports, incidentChartLimit, incidentChartMetric, periodMode]);
 
+  // TEMP: datos falsos según periodMode
+  const incidentLeagueChartDebug = (() => {
+    if (periodMode === "day") {
+      const hours = ["06h","08h","10h","12h","14h","16h","18h","20h","22h"];
+      return {
+        labels: hours,
+        dayLabels: [] as string[],
+        maxValue: 5,
+        series: [
+          { league: "QP", color: "#e5366a", strokeWidth: 4,
+            points: hours.map((h, i) => ({ label: h, value: [1,0,2,3,1,5,4,2,3][i] })) },
+          { league: "Liga 1", color: "#3b82f6", strokeWidth: 2.5,
+            points: hours.map((h, i) => ({ label: h, value: [0,1,1,2,3,2,1,0,2][i] })) },
+        ],
+      };
+    }
+    if (periodMode === "month") {
+      const weeks = ["S1 ABR","S2 ABR","S3 ABR","S4 ABR","S1 MAY","S2 MAY","S3 MAY","S4 MAY"];
+      return {
+        labels: weeks,
+        dayLabels: [] as string[],
+        maxValue: 5,
+        series: [
+          { league: "QP", color: "#e5366a", strokeWidth: 4,
+            points: weeks.map((w, i) => ({ label: w, value: [2,4,3,5,1,3,2,4][i] })) },
+          { league: "Liga 1", color: "#3b82f6", strokeWidth: 2.5,
+            points: weeks.map((w, i) => ({ label: w, value: [1,2,4,2,3,1,2,3][i] })) },
+        ],
+      };
+    }
+    // week (default)
+    return {
+      labels: ["27 ABR","28 ABR","29 ABR","30 ABR","1 MAY","2 MAY","3 MAY"],
+      dayLabels: ["LUN","MAR","MIÉ","JUE","VIE","SÁB","DOM"],
+      maxValue: 5,
+      series: [
+        { league: "QP", color: "#e5366a", strokeWidth: 4,
+          points: ["27 ABR","28 ABR","29 ABR","30 ABR","1 MAY","2 MAY","3 MAY"]
+            .map((l, i) => ({ label: l, value: [1,3,2,5,4,2,3][i] })) },
+        { league: "Liga 1", color: "#3b82f6", strokeWidth: 2.5,
+          points: ["27 ABR","28 ABR","29 ABR","30 ABR","1 MAY","2 MAY","3 MAY"]
+            .map((l, i) => ({ label: l, value: [2,1,4,2,3,1,2][i] })) },
+      ],
+    };
+  })();
+  const incidentLeagueChartView = incidentLeagueChartDebug;
+
+  const periodEvolutionRows = useMemo(() => {
+    const aggregate = new Map<
+      string,
+      {
+        label: string;
+        sort: number;
+        total: number;
+        critical: number;
+        high: number;
+        medium: number;
+        low: number;
+        noIncident: number;
+      }
+    >();
+
+    baseFilteredReports.forEach((report) => {
+      const bucketInfo = getPeriodBucketInfo(
+        periodMode,
+        parseSpanishShortDate(report.event_date),
+        report.event_time,
+      );
+      const current = aggregate.get(bucketInfo.key) ?? {
+        label: bucketInfo.label,
+        sort: bucketInfo.sort,
+        total: 0,
+        critical: 0,
+        high: 0,
+        medium: 0,
+        low: 0,
+        noIncident: 0,
+      };
+
+      current.total += 1;
+
+      if (report.severity === "Crítica") {
+        current.critical += 1;
+      } else if (report.severity === "Alta") {
+        current.high += 1;
+      } else if (report.severity === "Media") {
+        current.medium += 1;
+      } else if (report.severity === "Baja") {
+        current.low += 1;
+      } else {
+        current.noIncident += 1;
+      }
+
+      aggregate.set(bucketInfo.key, current);
+    });
+
+    return Array.from(aggregate.values()).sort((left, right) => left.sort - right.sort);
+  }, [baseFilteredReports, periodMode]);
+
   const incidentChartFrame = {
     width: 960,
-    height: 390,
-    marginTop: 8,
-    marginRight: 4,
-    marginBottom: 32,
-    marginLeft: 22,
+    height: 628,
+    marginTop: 12,
+    marginRight: 0,
+    marginBottom: 52,
+    marginLeft: 0,
   } as const;
+  const incidentChartMax = Math.max(5, Math.ceil(incidentLeagueChartView.maxValue));
   const incidentChartPlotWidth =
     incidentChartFrame.width -
     incidentChartFrame.marginLeft -
@@ -1397,6 +1776,41 @@ export function ReportsWorkspace({
     return Array.from(leagueMap.entries())
       .map(([league, count]) => ({ league, count }))
       .sort((left, right) => right.count - left.count);
+  }, [baseFilteredReports]);
+
+  const leagueIncidentDetailRows = useMemo(() => {
+    const totalReports = Math.max(baseFilteredReports.length, 1);
+    const aggregate = new Map<
+      string,
+      {
+        league: string;
+        total: number;
+        incidents: number;
+      }
+    >();
+
+    baseFilteredReports.forEach((report) => {
+      const current = aggregate.get(report.league) ?? {
+        league: report.league,
+        total: 0,
+        incidents: 0,
+      };
+
+      current.total += 1;
+      if (report.severity !== "Sin incidencia") {
+        current.incidents += 1;
+      }
+
+      aggregate.set(report.league, current);
+    });
+
+    return Array.from(aggregate.values())
+      .sort((left, right) => right.total - left.total)
+      .map((item) => ({
+        ...item,
+        incidentPercent: item.total ? Math.round((item.incidents / item.total) * 1000) / 10 : 0,
+        sharePercent: Math.round((item.total / totalReports) * 1000) / 10,
+      }));
   }, [baseFilteredReports]);
 
   const severityDistribution = useMemo(() => {
@@ -1421,6 +1835,77 @@ export function ReportsWorkspace({
       };
     });
   }, [baseFilteredReports]);
+
+  const severityCrossTableRows = useMemo(() => {
+    const aggregate = new Map<
+      string,
+      {
+        league: string;
+        critical: number;
+        high: number;
+        medium: number;
+        low: number;
+        noIncident: number;
+        total: number;
+      }
+    >();
+
+    baseFilteredReports.forEach((report) => {
+      const current = aggregate.get(report.league) ?? {
+        league: report.league,
+        critical: 0,
+        high: 0,
+        medium: 0,
+        low: 0,
+        noIncident: 0,
+        total: 0,
+      };
+
+      current.total += 1;
+
+      if (report.severity === "Crítica") {
+        current.critical += 1;
+      } else if (report.severity === "Alta") {
+        current.high += 1;
+      } else if (report.severity === "Media") {
+        current.medium += 1;
+      } else if (report.severity === "Baja") {
+        current.low += 1;
+      } else {
+        current.noIncident += 1;
+      }
+
+      aggregate.set(report.league, current);
+    });
+
+    return Array.from(aggregate.values()).sort((left, right) => right.total - left.total);
+  }, [baseFilteredReports]);
+
+  const leagueSeverityTotalRow = useMemo(
+    () =>
+      severityCrossTableRows.reduce(
+        (totals, row) => ({
+          critical: totals.critical + row.critical,
+          high: totals.high + row.high,
+          medium: totals.medium + row.medium,
+          low: totals.low + row.low,
+          noIncident: totals.noIncident + row.noIncident,
+          total: totals.total + row.total,
+        }),
+        {
+          critical: 0,
+          high: 0,
+          medium: 0,
+          low: 0,
+          noIncident: 0,
+          total: 0,
+        },
+      ),
+    [severityCrossTableRows],
+  );
+
+  const leagueDetailRows = severityCrossTableRows;
+  const leagueDetailTotalRow = leagueSeverityTotalRow;
 
   const venueRecurrence = useMemo(() => {
     const severityKeys: ReportSeverity[] = ["Crítica", "Alta", "Media", "Baja"];
@@ -1474,6 +1959,17 @@ export function ReportsWorkspace({
       });
   }, [baseFilteredReports]);
 
+  const venueDetailRows = useMemo(() => {
+    return venueRecurrence.map((item) => ({
+      venue: item.venue,
+      total: item.total,
+      critical: item.severities["Crítica"],
+      high: item.severities.Alta,
+      medium: item.severities.Media,
+      low: item.severities.Baja,
+    }));
+  }, [venueRecurrence]);
+
   const visibleLeagueDistribution = showAllLeagueDistribution
     ? leagueDistribution.slice(0, 10)
     : leagueDistribution.slice(0, 3);
@@ -1486,94 +1982,256 @@ export function ReportsWorkspace({
   const canExpandLeagueDistribution = leagueDistribution.length > 3;
   const canExpandSeverityDistribution = severityDistribution.length > 3;
   const canExpandVenueRecurrence = venueRecurrence.length > 3;
+  const severityDetailRows = severityDistribution.filter((item) => item.count > 0);
+  const severityChartGradient = useMemo(() => {
+    if (!severityDetailRows.length) {
+      return null;
+    }
 
-  const responsibleRanking = useMemo(() => {
+    let currentOffset = 0;
+
+    return `conic-gradient(${severityDetailRows
+      .map((item) => {
+        const color = getSeverityColor(item.severity);
+        const start = currentOffset;
+        currentOffset += item.percentage;
+        return `${color} ${start}% ${currentOffset}%`;
+      })
+      .join(", ")})`;
+  }, [severityDetailRows]);
+
+  const responsiblePerformanceRows = useMemo(() => {
     const aggregate = new Map<
       string,
       {
         responsible: string;
-        role: string;
-        reports: number;
-        assignmentIds: Set<string>;
+        matches: number;
+        withIncident: number;
+        critical: number;
+        high: number;
+        medium: number;
       }
     >();
 
     baseFilteredReports.forEach((report) => {
       const current = aggregate.get(report.responsible_name) ?? {
         responsible: report.responsible_name,
-        role: "Responsable",
-        reports: 0,
-        assignmentIds: new Set<string>(),
+        matches: 0,
+        withIncident: 0,
+        critical: 0,
+        high: 0,
+        medium: 0,
       };
 
-      current.reports += 1;
-      current.assignmentIds.add(report.id_bp);
+      current.matches += 1;
+
+      if (report.severity !== "Sin incidencia") {
+        current.withIncident += 1;
+      }
+
+      if (report.severity === "Crítica") {
+        current.critical += 1;
+      } else if (report.severity === "Alta") {
+        current.high += 1;
+      } else if (report.severity === "Media") {
+        current.medium += 1;
+      }
+
       aggregate.set(report.responsible_name, current);
     });
 
     return Array.from(aggregate.values())
       .map((item) => ({
-        ...item,
-        assignments: item.assignmentIds.size,
+        responsable: item.responsible,
+        partidos: item.matches,
+        con_inc: item.withIncident,
+        inc_percent: item.matches
+          ? Math.round((item.withIncident / item.matches) * 1000) / 10
+          : 0,
+        inc_por_100_partidos: item.matches
+          ? Math.round((item.withIncident / item.matches) * 10000) / 100
+          : 0,
+        criticas: item.critical,
+        altas: item.high,
+        medias: item.medium,
       }))
       .sort((left, right) => {
-        const directionFactor = rankingSortDirection === "asc" ? 1 : -1;
+        if (right.con_inc !== left.con_inc) {
+          return right.con_inc - left.con_inc;
+        }
 
+        if (right.partidos !== left.partidos) {
+          return right.partidos - left.partidos;
+        }
+
+        return left.responsable.localeCompare(right.responsable, "es", {
+          sensitivity: "base",
+        });
+      });
+  }, [baseFilteredReports]);
+
+  const responsibleRanking = useMemo(() => {
+    const directionFactor = rankingSortDirection === "asc" ? 1 : -1;
+
+    return responsiblePerformanceRows
+      .slice()
+      .sort((left, right) => {
         if (rankingSortBy === "responsible") {
           return (
-            left.responsible.localeCompare(right.responsible, "es", {
+            left.responsable.localeCompare(right.responsable, "es", {
               sensitivity: "base",
             }) * directionFactor
           );
         }
 
-        if (rankingSortBy === "role") {
+        if (rankingSortBy === "matches") {
+          return (left.partidos - right.partidos) * directionFactor;
+        }
+
+        if (rankingSortBy === "with_incident") {
+          return (left.con_inc - right.con_inc) * directionFactor;
+        }
+
+        if (rankingSortBy === "incident_rate") {
+          return (left.inc_percent - right.inc_percent) * directionFactor;
+        }
+
+        if (rankingSortBy === "incidents_per_100_matches") {
           return (
-            left.role.localeCompare(right.role, "es", {
-              sensitivity: "base",
-            }) * directionFactor
+            (left.inc_por_100_partidos - right.inc_por_100_partidos) *
+            directionFactor
           );
         }
 
-        if (rankingSortBy === "assignments") {
-          return (left.assignments - right.assignments) * directionFactor;
+        if (rankingSortBy === "critical") {
+          return (left.criticas - right.criticas) * directionFactor;
         }
 
-        return (left.reports - right.reports) * directionFactor;
-      })
-      .slice(0, 5);
-  }, [baseFilteredReports, rankingSortBy, rankingSortDirection]);
+        if (rankingSortBy === "high") {
+          return (left.altas - right.altas) * directionFactor;
+        }
 
-  const summaryInsights = useMemo(() => {
-    const leadingLeague = leagueDistribution[0];
-    const criticalLeague = baseFilteredReports
-      .filter((report) => report.severity === "Crítica")
-      .map((report) => report.league);
-    const criticalLeagueName = criticalLeague[0] ?? leagueFilter;
-    const busiestResponsible = responsibleRanking[0]?.responsible;
+        return (left.medias - right.medias) * directionFactor;
+      });
+  }, [rankingSortBy, rankingSortDirection, responsiblePerformanceRows]);
 
-    return [
-      leadingLeague
-        ? `${leadingLeague.league} concentra ${leadingLeague.count} cierres en el periodo activo.`
-        : "No hay suficientes cierres para detectar concentración por liga.",
-      summaryMetrics.unpaidCount
-        ? `${summaryMetrics.unpaidCount} reportes siguen sin pago confirmado y requieren seguimiento administrativo.`
-        : "No hay pagos pendientes en el periodo visible.",
-      busiestResponsible
-        ? `${busiestResponsible} lidera el volumen de cierres dentro del periodo visible.`
-        : "Sin datos suficientes para calcular el ranking de responsables.",
-      criticalLeagueName && summaryMetrics.criticalCount
-        ? `${criticalLeagueName} concentra la mayor urgencia con ${summaryMetrics.criticalCount} cierres críticos.`
-        : "No hay cierres críticos abiertos en este corte.",
-    ];
-  }, [
-    baseFilteredReports,
-    leagueDistribution,
-    leagueFilter,
-    responsibleRanking,
-    summaryMetrics.criticalCount,
-    summaryMetrics.unpaidCount,
-  ]);
+  const summaryAiContext = useMemo(
+    () => ({
+      corte_visible: {
+        periodo: activePeriodLabel,
+        modo_periodo: periodMode,
+        filtro_liga: leagueFilter,
+        total_reportes: baseFilteredReports.length,
+        total_ligas: summaryMetrics.activeLeagues,
+      },
+      resumen_ejecutivo: {
+        total_reportes: summaryMetrics.totalReports,
+        con_incidencia: summaryMetrics.withIncident,
+        sin_incidencia: summaryMetrics.totalReports - summaryMetrics.withIncident,
+        criticas_y_altas: summaryMetrics.criticalAndHighCount,
+        pagos_confirmados: summaryMetrics.paidCount,
+        pagos_pendientes: summaryMetrics.unpaidCount,
+        feed_detectado: summaryMetrics.feedDetectedCount,
+        pendientes_operativos: summaryMetrics.pendingReports,
+        ciclo_promedio_min: summaryMetrics.averageCycle,
+      },
+      distribucion_por_gravedad: severityDistribution.map((item) => ({
+        gravedad: item.severity,
+        reportes: item.count,
+        porcentaje: item.percentage,
+      })),
+      incidencias_por_liga: leagueIncidentDetailRows.map((item) => ({
+        liga: item.league,
+        partidos: item.total,
+        con_incidencias: item.incidents,
+        porcentaje_incidencia: item.incidentPercent,
+        porcentaje_del_total: item.sharePercent,
+      })),
+      evolucion_del_periodo: periodEvolutionRows.map((item) => ({
+        tramo: item.label,
+        total: item.total,
+        sin_incidencia: item.noIncident,
+        baja: item.low,
+        media: item.medium,
+        alta: item.high,
+        critica: item.critical,
+      })),
+      rendimiento_por_responsable: responsiblePerformanceRows.slice(0, 12),
+      incidencias_por_sede: venueDetailRows.slice(0, 12).map((item) => ({
+        sede: item.venue,
+        total: item.total,
+        criticas: item.critical,
+        altas: item.high,
+        medias: item.medium,
+        bajas: item.low,
+      })),
+      tabla_cruzada_liga_gravedad: severityCrossTableRows.map((item) => ({
+        liga: item.league,
+        critica: item.critical,
+        alta: item.high,
+        media: item.medium,
+        baja: item.low,
+        sin_incidencia: item.noIncident,
+        total: item.total,
+      })),
+    }),
+    [
+      activePeriodLabel,
+      baseFilteredReports.length,
+      leagueFilter,
+      leagueIncidentDetailRows,
+      periodEvolutionRows,
+      periodMode,
+      responsiblePerformanceRows,
+      severityCrossTableRows,
+      severityDistribution,
+      summaryMetrics,
+      venueDetailRows,
+    ],
+  );
+
+  const summaryMetricItems = useMemo(
+    () => [
+      {
+        key: "total",
+        title: "Total partidos",
+        value: summaryMetrics.totalReports,
+        chip: `${summaryMetrics.activeLeagues} ligas activas`,
+        chipTone: "success" as const,
+        barClassName: "bg-[var(--accent)]",
+        barWidth: 100,
+      },
+      {
+        key: "incident",
+        title: "Total incidencias",
+        value: summaryMetrics.withIncident,
+        chip: `${summaryMetrics.incidentPercent}% del total`,
+        chipTone: "warning" as const,
+        barClassName: "bg-[#f59e0b]",
+        barWidth: summaryMetrics.incidentPercent,
+      },
+      {
+        key: "paid",
+        title: "Pago de partidos",
+        value: summaryMetrics.paidCount,
+        chip: `${summaryMetrics.paidPercent}% del total`,
+        chipTone: "success" as const,
+        barClassName: "bg-[#10b981]",
+        barWidth: summaryMetrics.paidPercent,
+      },
+      {
+        key: "critical-high",
+        title: "Críticas + altas",
+        value: summaryMetrics.criticalAndHighCount,
+        chip: `${summaryMetrics.criticalAndHighPercent}% del total`,
+        chipTone: "accent" as const,
+        barClassName: "bg-[var(--accent)]",
+        barWidth: summaryMetrics.criticalAndHighPercent,
+        highlight: true,
+      },
+    ],
+    [summaryMetrics],
+  );
 
   const sortedReports = useMemo(() => {
     const directionFactor = sortDirection === "asc" ? 1 : -1;
@@ -1664,6 +2322,18 @@ export function ReportsWorkspace({
 
   const selectedReport =
     sortedReports.find((report) => report.id_feed === selectedReportId) ?? null;
+  const selectedReportEditable =
+    Boolean(selectedReport) && selectedReport?.severity !== "Sin incidencia";
+  const isSelectedReportEditing =
+    canManageEvidence &&
+    selectedReportEditable &&
+    editingReportId === selectedReport?.id_feed;
+  const selectedReportEvidence = selectedReport
+    ? reportEvidenceById[selectedReport.id_feed] ?? {}
+    : {};
+  const selectedReportUploadState = selectedReport
+    ? uploadStateByReport[selectedReport.id_feed] ?? {}
+    : {};
   const selectedReportTeams = selectedReport
     ? splitMatchLabel(selectedReport.match_label)
     : null;
@@ -1696,19 +2366,193 @@ export function ReportsWorkspace({
                 panel: "border-[#f3e7b8] bg-[#fffef8]",
                 label: "text-[#b79734]",
                 value: "text-[#8f7a2f]",
-              }
+          }
     : null;
+  const selectedReportActivity = selectedReport?.activity ?? activities;
+  const resolvedReportSpeedtest =
+    selectedReportEvidence.speedtest ?? selectedReport?.speedtest ?? "-";
+  const resolvedReportPing =
+    selectedReportEvidence.ping ?? selectedReport?.ping ?? "-";
+  const resolvedReportGpu =
+    selectedReportEvidence.gpuLoad ?? selectedReport?.gpuLoad ?? "-";
+  const selectedReportSpeedtestAttachment =
+    selectedReportEvidence.speedtestAttachment ??
+    selectedReport?.speedtestAttachment ??
+    null;
+  const selectedReportPingAttachment =
+    selectedReportEvidence.pingAttachment ?? selectedReport?.pingAttachment ?? null;
+  const selectedReportGpuAttachment =
+    selectedReportEvidence.gpuAttachment ?? selectedReport?.gpuAttachment ?? null;
+  const isReportEvidenceBusy =
+    isRefreshingEvidence ||
+    selectedReportUploadState.speedtest?.state === "loading" ||
+    selectedReportUploadState.ping?.state === "loading" ||
+    selectedReportUploadState.gpu?.state === "loading";
+
+  function setReportUploadState(
+    reportId: string,
+    kind: TechnicalCaptureKind,
+    nextState: EvidenceUploadState,
+  ) {
+    setUploadStateByReport((current) => ({
+      ...current,
+      [reportId]: {
+        ...current[reportId],
+        [kind]: nextState,
+      },
+    }));
+  }
+
+  function openReportEvidencePicker(
+    report: ReportRecord,
+    kind: TechnicalCaptureKind,
+  ) {
+    if (!canManageEvidence) {
+      return;
+    }
+
+    setDesktopUploadTarget({
+      reportId: report.id_feed,
+      kind,
+    });
+
+    if (desktopEvidenceInputRef.current) {
+      desktopEvidenceInputRef.current.value = "";
+      desktopEvidenceInputRef.current.click();
+    }
+  }
+
+  async function handleReportEvidenceUpload(
+    report: ReportRecord,
+    kind: TechnicalCaptureKind,
+    file: File,
+  ) {
+    setReportUploadState(report.id_feed, kind, {
+      state: "loading",
+      message: "Subiendo evidencia...",
+    });
+
+    try {
+      const formData = new FormData();
+      formData.set("assignmentId", report.assignmentId);
+      formData.set("matchId", report.matchId);
+      formData.set("reportId", report.sourceReportId);
+      formData.set("kind", kind);
+      formData.set("image", file);
+
+      const response = await fetch("/api/collaborator-reports/attachments", {
+        method: "POST",
+        body: formData,
+      });
+
+      const payload = (await response.json().catch(() => null)) as
+        | {
+            attachment?: CollaboratorReportAttachment & { signedUrl?: string };
+            value?: string | null;
+            note?: string;
+            error?: string;
+          }
+        | null;
+
+      if (!response.ok) {
+        throw new Error(
+          payload?.error?.trim() || "No pudimos subir la evidencia técnica.",
+        );
+      }
+
+      const uploadedAttachment =
+        payload?.attachment && typeof payload.attachment.fileName === "string"
+          ? toReportAttachment(payload.attachment)
+          : null;
+      const uploadedValue =
+        typeof payload?.value === "string" && payload.value.trim()
+          ? payload.value.trim()
+          : null;
+
+      setReportEvidenceById((current) => {
+        const reportEvidence = current[report.id_feed] ?? {};
+
+        return {
+          ...current,
+          [report.id_feed]: {
+            ...reportEvidence,
+            ...(kind === "speedtest"
+              ? {
+                  speedtestAttachment:
+                    uploadedAttachment ?? reportEvidence.speedtestAttachment ?? null,
+                  ...(uploadedValue ? { speedtest: uploadedValue } : {}),
+                }
+              : kind === "ping"
+                ? {
+                    pingAttachment:
+                      uploadedAttachment ?? reportEvidence.pingAttachment ?? null,
+                    ...(uploadedValue ? { ping: uploadedValue } : {}),
+                  }
+                : {
+                    gpuAttachment:
+                      uploadedAttachment ?? reportEvidence.gpuAttachment ?? null,
+                    ...(uploadedValue ? { gpuLoad: uploadedValue } : {}),
+                  }),
+          },
+        };
+      });
+
+      setReportUploadState(report.id_feed, kind, {
+        state: "done",
+        message: uploadedValue
+          ? payload?.note?.trim() ||
+            "Evidencia actualizada y sincronizada con el reporte."
+          : "Evidencia cargada. Si el valor no cambió, la lectura automática no devolvió dato.",
+      });
+
+      startRefreshingEvidence(() => {
+        router.refresh();
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error && error.message.trim()
+          ? error.message
+          : "No pudimos subir la evidencia técnica.";
+
+      setReportUploadState(report.id_feed, kind, {
+        state: "error",
+        message,
+      });
+    }
+  }
+
+  function handleReportEvidenceInputChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0] ?? null;
+    const target = desktopUploadTarget;
+    event.currentTarget.value = "";
+    setDesktopUploadTarget(null);
+
+    if (!file || !target) {
+      return;
+    }
+
+    const report = reports.find((item) => item.id_feed === target.reportId);
+
+    if (!report) {
+      return;
+    }
+
+    void handleReportEvidenceUpload(report, target.kind, file);
+  }
 
   const renderReportControlHeader = (column: ReportControlColumn) => {
     const sortableKey = REPORT_CONTROL_COLUMN_SORT_KEY[column];
     const isDropTarget =
       !!draggedColumn && draggedColumn !== column && dragOverColumn === column;
     const headerPadding =
-      column === "match" || column === "action" ? "px-8 py-4" : "px-6 py-4";
+      column === "match" ? "px-4 py-3" : "px-3 py-3";
 
     return (
       <th
         key={column}
+        draggable
+        onDragStart={() => handleColumnDragStart(column)}
+        onDragEnd={handleColumnDragEnd}
         onDragOver={(event) => handleColumnDragOver(event, column)}
         onDrop={() => handleColumnDrop(column)}
         onDragLeave={() => {
@@ -1718,8 +2562,8 @@ export function ReportsWorkspace({
         }}
         className={cn(
           headerPadding,
-          REPORT_CONTROL_LAPTOP_HIDDEN_COLUMNS.has(column) &&
-            "hidden 2xl:table-cell",
+          "cursor-grab select-none active:cursor-grabbing",
+          column === "date" && "text-center",
           isDropTarget && "bg-[#fff6f8]",
           column === "action" && "text-right",
         )}
@@ -1727,23 +2571,10 @@ export function ReportsWorkspace({
         <div
           className={cn(
             "flex w-full items-center gap-2",
+            column === "date" && "justify-center",
             column === "action" && "justify-end",
           )}
         >
-          <button
-            type="button"
-            draggable
-            aria-label={`Reordenar columna ${column}`}
-            onDragStart={() => handleColumnDragStart(column)}
-            onDragEnd={handleColumnDragEnd}
-            className={cn(
-              "inline-flex size-6 shrink-0 cursor-grab items-center justify-center rounded-md text-[#c1cada] transition hover:bg-white hover:text-[#617187] active:cursor-grabbing",
-              draggedColumn === column && "bg-white text-[#617187] shadow-sm",
-            )}
-          >
-            <GripVertical className="size-3.5" />
-          </button>
-
           {sortableKey ? (
             <SortHeader
               label={
@@ -1754,21 +2585,27 @@ export function ReportsWorkspace({
                     : column === "idBp"
                       ? "ID BP"
                     : column === "date"
-                      ? "FECHA"
+                      ? "F.A"
                       : column === "match"
                         ? "PARTIDO"
                         : column === "responsible"
                           ? "RESPONSABLE"
                           : column === "paid"
-                            ? "PAGO"
+                            ? "$"
                             : column === "feed"
-                              ? "FEED"
+                              ? "F"
                               : "GRAVEDAD"
               }
               active={sortBy === sortableKey}
               direction={sortDirection}
               onClick={() => handleSort(sortableKey)}
-              align={column === "action" ? "right" : "left"}
+              align={
+                column === "action"
+                  ? "right"
+                  : column === "date"
+                    ? "center"
+                    : "left"
+              }
             />
           ) : (
             <span className="ml-auto inline-flex uppercase tracking-[0.18em] text-[#94a3b8]">
@@ -1796,41 +2633,44 @@ export function ReportsWorkspace({
   }, [columnOrder, selectedReport]);
 
   const renderReportControlCell = (report: ReportRecord, column: ReportControlColumn) => {
-    const cellClassName = cn(
-      REPORT_CONTROL_LAPTOP_HIDDEN_COLUMNS.has(column) &&
-        "hidden 2xl:table-cell",
-    );
+    const cellClassName = "";
     const editable = report.severity !== "Sin incidencia";
 
     switch (column) {
       case "league":
         return (
-          <td key={column} className={cn("px-4 py-4 xl:px-5 2xl:px-6 2xl:py-5", cellClassName)}>
+          <td key={column} className={cn("px-3 py-3 2xl:px-5 2xl:py-5", cellClassName)}>
             <LeagueLogoMarkClient
               league={report.league}
-              className="h-[3.3rem] w-[4.8rem]"
+              className="h-12 w-16"
             />
           </td>
         );
       case "id":
         return (
-          <td key={column} className={cn("px-4 py-4 xl:px-5 2xl:px-6 2xl:py-5", cellClassName)}>
-            <span className="inline-flex rounded-full border border-[#f3cfd8] bg-[#fff3f6] px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-[var(--accent)]">
+          <td key={column} className={cn("px-3 py-3 2xl:px-5 2xl:py-5", cellClassName)}>
+            <span className="inline-flex rounded-full border border-[#f3cfd8] bg-[#fff3f6] px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--accent)]">
               {report.id_feed}
             </span>
           </td>
         );
       case "idBp":
         return (
-          <td key={column} className={cn("px-4 py-4 xl:px-5 2xl:px-6 2xl:py-5", cellClassName)}>
-            <span className="inline-flex rounded-full border border-[#d7e2f6] bg-[#f4f8ff] px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-[#2b6be7]">
+          <td key={column} className={cn("px-2 py-3 2xl:px-5 2xl:py-5", cellClassName)}>
+            <span className="inline-flex rounded-full border border-[#d7e2f6] bg-[#f4f8ff] px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-[#2b6be7]">
               {report.id_bp}
             </span>
           </td>
         );
       case "date":
         return (
-          <td key={column} className={cn("px-4 py-4 xl:px-5 2xl:px-6 2xl:py-5", cellClassName)}>
+          <td
+            key={column}
+            className={cn(
+              "px-2 py-3 text-center 2xl:px-5 2xl:py-5",
+              cellClassName,
+            )}
+          >
             <span className="inline-flex text-sm font-black uppercase tracking-[0.12em] text-[#617187]">
               {formatCompactReportDate(report.event_date)}
             </span>
@@ -1842,8 +2682,8 @@ export function ReportsWorkspace({
             key={column}
             className={cn(
               selectedReport
-                ? "px-4 py-4 xl:px-5 2xl:px-5 2xl:py-5"
-                : "px-4 py-4 xl:px-6 2xl:px-8 2xl:py-5",
+                ? "px-3 py-3 2xl:px-5 2xl:py-5"
+                : "px-3 py-3 xl:px-4 2xl:px-6 2xl:py-5",
               cellClassName,
             )}
           >
@@ -1857,57 +2697,52 @@ export function ReportsWorkspace({
         );
       case "responsible":
         return (
-          <td key={column} className={cn("px-4 py-4 xl:px-5 2xl:px-6 2xl:py-5", cellClassName)}>
-            <div className="flex min-w-0 items-center gap-3">
-              <HoverAvatarBadge
-                initials={getInitials(report.responsible_name)}
-                roleLabel="Responsable"
-                tone="accent"
-                size="sm"
-              />
-              <span className="min-w-0 flex-1 truncate text-sm font-semibold text-[var(--foreground)]">
-                {report.responsible_name}
-              </span>
-            </div>
+          <td key={column} className={cn("px-3 py-3 2xl:px-5 2xl:py-5", cellClassName)}>
+            <PersonRoleStack
+              label="Responsable"
+              value={report.responsible_name}
+              initials={getInitials(report.responsible_name)}
+              size="sm"
+            />
           </td>
         );
       case "paid":
         return (
-          <td key={column} className={cn("px-4 py-4 xl:px-5 2xl:px-6 2xl:py-5", cellClassName)}>
-            <div className="flex min-h-10 items-center justify-center">
+          <td key={column} className={cn("px-1 py-3 2xl:px-2 2xl:py-5", cellClassName)}>
+            <div className="flex min-h-9 items-center justify-center">
               {report.paid ? (
-                <CircleCheckBig className="size-6 text-[#10b981]" />
+                <CircleCheckBig className="size-5 text-[#10b981]" />
               ) : (
-                <CircleX className="size-6 text-[#e44b68]" />
+                <CircleX className="size-5 text-[#e44b68]" />
               )}
             </div>
           </td>
         );
       case "feed":
         return (
-          <td key={column} className={cn("px-4 py-4 xl:px-5 2xl:px-6 2xl:py-5", cellClassName)}>
-            <div className="flex min-h-10 items-center justify-center">
+          <td key={column} className={cn("px-1 py-3 2xl:px-2 2xl:py-5", cellClassName)}>
+            <div className="flex min-h-9 items-center justify-center">
               {report.feed_detected ? (
-                <CircleCheckBig className="size-6 text-[#10b981]" />
+                <CircleCheckBig className="size-5 text-[#10b981]" />
               ) : (
-                <CircleX className="size-6 text-[#e44b68]" />
+                <CircleX className="size-5 text-[#e44b68]" />
               )}
             </div>
           </td>
         );
       case "severity":
         return (
-          <td key={column} className={cn("px-4 py-4 xl:px-5 2xl:px-6 2xl:py-5", cellClassName)}>
+          <td key={column} className={cn("px-2 py-3 2xl:px-5 2xl:py-5", cellClassName)}>
             <SeverityBadge severity={report.severity} />
           </td>
         );
       case "action":
         return (
-          <td key={column} className={cn("px-4 py-4 text-right xl:px-6 2xl:px-8 2xl:py-5", cellClassName)}>
+          <td key={column} className={cn("px-2 py-3 text-right 2xl:px-5 2xl:py-5", cellClassName)}>
             <button
               type="button"
               title={editable ? "Editar reporte" : "Ver reporte"}
-              className="inline-flex size-10 items-center justify-center rounded-xl text-[#94a3b8] transition hover:bg-[var(--accent)] hover:text-white"
+              className="inline-flex size-8 items-center justify-center rounded-lg text-[#94a3b8] transition hover:bg-[var(--accent)] hover:text-white"
             >
               {editable ? <Pencil className="size-4" /> : <Eye className="size-4" />}
             </button>
@@ -1926,18 +2761,29 @@ export function ReportsWorkspace({
 
     const label =
       column === "responsible"
-        ? "Responsable"
-        : column === "role"
-          ? "Rol"
-        : column === "assignments"
-          ? "Asignaciones"
-          : "Reportes";
+        ? "Operador"
+        : column === "matches"
+          ? "Partidos"
+        : column === "with_incident"
+          ? "Con Inc."
+        : column === "incident_rate"
+          ? "% Inc."
+        : column === "incidents_per_100_matches"
+          ? "Inc. c/100 partidos"
+        : column === "critical"
+          ? "Críticas"
+        : column === "high"
+          ? "Altas"
+          : "Medias";
 
     return (
       <th
         key={column}
+        draggable
+        onDragStart={() => handleRankingColumnDragStart(column)}
+        onDragEnd={handleRankingColumnDragEnd}
         className={cn(
-          "px-2 pb-4 transition-colors",
+          "cursor-grab select-none px-2 pb-4 transition-colors active:cursor-grabbing",
           isDropTarget && "bg-[#f8fafc]",
         )}
         onDragOver={(event) => {
@@ -1949,9 +2795,7 @@ export function ReportsWorkspace({
           handleRankingColumnDrop(column);
         }}
       >
-        <div
-          className="flex items-center justify-between gap-2"
-        >
+        <div className="flex items-center justify-start gap-2">
           <SortHeader
             label={label}
             active={rankingSortBy === column}
@@ -1959,20 +2803,6 @@ export function ReportsWorkspace({
             onClick={() => handleRankingSort(column)}
             align="left"
           />
-          <button
-            type="button"
-            draggable
-            aria-label={`Reordenar columna ${label}`}
-            onDragStart={() => handleRankingColumnDragStart(column)}
-            onDragEnd={handleRankingColumnDragEnd}
-            className={cn(
-              "inline-flex size-6 items-center justify-center rounded-md text-[#b0bccd] transition hover:bg-[#eef2f7] hover:text-[#617187]",
-              draggedRankingColumn === column &&
-                "bg-white text-[#617187] shadow-sm",
-            )}
-          >
-            <GripVertical className="size-3.5" />
-          </button>
         </div>
       </th>
     );
@@ -1986,60 +2816,76 @@ export function ReportsWorkspace({
       case "responsible":
         return (
           <td key={column} className="px-2 py-4">
-            <div className="flex items-center gap-3">
-              <HoverAvatarBadge
-                initials={getInitials(item.responsible)}
-                roleLabel="Responsable"
-                tone="accent"
-                size="sm"
-              />
-              <span className="text-sm font-bold text-[var(--foreground)]">
-                {item.responsible}
-              </span>
-            </div>
+            <PersonRoleStack
+              label="Operador"
+              value={item.responsable}
+              initials={getInitials(item.responsable)}
+              size="sm"
+            />
           </td>
         );
-      case "role":
+      case "matches":
+        return (
+          <td key={column} className="px-2 py-4 text-sm font-medium text-[#24364b]">
+            {item.partidos}
+          </td>
+        );
+      case "with_incident":
+        return (
+          <td key={column} className="px-2 py-4 text-sm font-medium text-[#24364b]">
+            {item.con_inc}
+          </td>
+        );
+      case "incident_rate": {
+        const tone = getPerformanceMetricTone(item.inc_percent);
+
         return (
           <td key={column} className="px-2 py-4">
-            <span className="inline-flex rounded-full border border-[#d7e2f6] bg-[#f4f8ff] px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-[#617187]">
-              {item.role}
+            <span
+              className={cn(
+                "inline-flex rounded-full px-2.5 py-1 text-xs font-black",
+                tone.badge,
+              )}
+            >
+              {formatSummaryPercentage(item.con_inc, item.partidos)}
             </span>
           </td>
         );
-      case "assignments":
+      }
+      case "incidents_per_100_matches": {
+        const tone = getPerformanceMetricTone(item.inc_por_100_partidos);
+
         return (
-          <td key={column} className="px-2 py-4 text-sm font-medium text-[#617187]">
-            {item.assignments}
+          <td
+            key={column}
+            className={cn("px-2 py-4 text-sm font-black", tone.text)}
+          >
+            {item.inc_por_100_partidos.toFixed(1)}
           </td>
         );
-      case "reports":
+      }
+      case "critical":
         return (
-          <td key={column} className="px-2 py-4 text-sm font-medium text-[#617187]">
-            {item.reports}
+          <td key={column} className="px-2 py-4 text-sm font-medium text-[#24364b]">
+            {item.criticas}
+          </td>
+        );
+      case "high":
+        return (
+          <td key={column} className="px-2 py-4 text-sm font-medium text-[#24364b]">
+            {item.altas}
+          </td>
+        );
+      case "medium":
+        return (
+          <td key={column} className="px-2 py-4 text-sm font-medium text-[#24364b]">
+            {item.medias}
           </td>
         );
       default:
         return null;
     }
   };
-
-  const activePeriodValue =
-    periodMode === "day"
-      ? selectedDayKey
-      : periodMode === "week"
-        ? selectedWeekKey
-        : selectedMonthKey;
-
-  const activePeriodOptions =
-    periodMode === "day"
-      ? dayOptions
-      : periodMode === "week"
-        ? weekOptions.map(({ value, label }) => ({ value, label }))
-        : monthOptions;
-  const activePeriodLabel =
-    activePeriodOptions.find((option) => option.value === activePeriodValue)?.label ??
-    activePeriodValue;
 
   const reportsBlockTitle =
     leagueFilter !== "Todas las ligas" ? leagueFilter : "Control de reportes";
@@ -2048,12 +2894,13 @@ export function ReportsWorkspace({
       ? getReportLeagueCanvasTone(leagueFilter)
       : null;
 
-  async function exportVisibleReports(sourceReports: ReportRecord[]) {
+  async function exportVisibleReports(sourceReports: ReportRecord[], format: "excel" | "pdf") {
     if (!sourceReports.length || isExporting) {
       return;
     }
 
     setIsExporting(true);
+    setExportMenuOpen(null);
 
     try {
       const reportGroups = groupReportsByLeague(sourceReports);
@@ -2067,17 +2914,14 @@ export function ReportsWorkspace({
         .filter(Boolean)
         .join("-");
 
-      const excelDocument = buildReportsExcelDocument(
-        reportGroups,
-        activePeriodLabel,
-      );
-
-      downloadBlob(
-        new Blob([excelDocument], {
-          type: "application/vnd.ms-excel;charset=utf-8",
-        }),
-        `${fileBaseName}.xls`,
-      );
+      if (format === "excel") {
+        const excelDocument = buildReportsExcelDocument(reportGroups, activePeriodLabel);
+        downloadBlob(
+          new Blob([excelDocument], { type: "application/vnd.ms-excel;charset=utf-8" }),
+          `${fileBaseName}.xls`,
+        );
+        return;
+      }
 
       const [{ jsPDF }, { default: autoTable }] = await Promise.all([
         import("jspdf"),
@@ -2174,6 +3018,17 @@ export function ReportsWorkspace({
   }
 
   useEffect(() => {
+    if (!exportMenuOpen) return;
+    function onPointerDown(e: PointerEvent) {
+      if (exportMenuRef.current && !exportMenuRef.current.contains(e.target as Node)) {
+        setExportMenuOpen(null);
+      }
+    }
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
+  }, [exportMenuOpen]);
+
+  useEffect(() => {
     const root = document.documentElement;
 
     if (canvasTone) {
@@ -2233,48 +3088,73 @@ export function ReportsWorkspace({
   );
 
   const summaryActions = (
-    <div className="flex flex-wrap items-start justify-end gap-3">
-      {periodSelector}
-      <div className="relative">
-        <select
-          value={leagueFilter}
-          onChange={(event) => setLeagueFilter(event.target.value)}
-          className="h-12 appearance-none rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--surface)] px-4 pr-9 text-sm font-bold text-[#617187] outline-none shadow-sm transition hover:bg-[#fafbfd]"
-        >
-          {leagueOptions.map((league) => (
-            <option key={league} value={league}>
-              {league}
-            </option>
-          ))}
-        </select>
-        <ChevronDown className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-[#94a3b8]" />
-      </div>
-      <div className="flex shrink-0 items-center gap-3 self-start">
+    <div className="flex w-full flex-col items-end gap-3">
+      <div className="flex shrink-0 items-center gap-3">
         <SectionAiAssistant
           section="Reportes"
-          title="Consulta el resumen actual"
-          description="Haz preguntas ejecutivas sobre volumen, calidad, pagos, feed y responsables usando el corte visible."
-          placeholder="Ej. ¿Qué liga concentra más reportes con incidencia en este periodo?"
-          contextLabel="Resumen filtrado de reportes"
-          context={aiContext}
-          guidance="Responde con foco ejecutivo: volumen, incidencia, pagos, feed detectado, responsables y ligas más relevantes."
+          title="Analiza el resumen actual"
+          description="Pide un informe ejecutivo del corte visible o una lectura puntual por gravedad, ligas, sedes y responsables."
+          placeholder="Ej. Genera un informe ejecutivo del periodo visible con resumen, gravedad, ligas, responsables y recomendaciones."
+          contextLabel="Resumen ejecutivo estructurado del corte visible"
+          context={summaryAiContext}
+          guidance={REPORT_SUMMARY_AI_GUIDANCE}
           examples={[
-            "¿Qué liga tiene más cierres con incidencia?",
-            "¿Cuántos reportes críticos están sin pago?",
-            "¿Quién lidera el ranking de responsables visibles?",
+            "Genera un informe ejecutivo del periodo visible.",
+            "Resume el corte con hallazgos, riesgos y recomendaciones operativas.",
+            "¿Qué liga y qué responsable concentran más incidencias visibles?",
           ]}
           hasGeminiKey={hasGeminiKey}
           buttonVariant="icon"
         />
-        <ToolbarIconButton
-          type="button"
-          onClick={() => void exportVisibleReports(baseFilteredReports)}
-          disabled={!baseFilteredReports.length || isExporting}
-          aria-label={isExporting ? "Exportando reportes" : "Exportar reportes"}
-          title={isExporting ? "Exportando reportes" : "Exportar reportes"}
-        >
-          <Download className="size-4" />
-        </ToolbarIconButton>
+        <div ref={exportMenuOpen === "summary" ? exportMenuRef : undefined} className="relative">
+          <ToolbarIconButton
+            type="button"
+            onClick={() => setExportMenuOpen((o) => o === "summary" ? null : "summary")}
+            disabled={!baseFilteredReports.length || isExporting}
+            aria-label={isExporting ? "Exportando…" : "Exportar reportes"}
+            title={isExporting ? "Exportando…" : "Exportar reportes"}
+          >
+            <Download className="size-4" />
+          </ToolbarIconButton>
+          {exportMenuOpen === "summary" && (
+            <div className="absolute right-0 top-full z-50 mt-1.5 min-w-[160px] overflow-hidden rounded-xl border border-[var(--border)] bg-white shadow-lg">
+              <button
+                type="button"
+                className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm font-semibold text-[var(--foreground)] hover:bg-[#f6f8fb]"
+                onClick={() => void exportVisibleReports(baseFilteredReports, "excel")}
+              >
+                <FileText className="size-4 text-[#1faa52]" />
+                Excel (.xls)
+              </button>
+              <button
+                type="button"
+                className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm font-semibold text-[var(--foreground)] hover:bg-[#f6f8fb]"
+                onClick={() => void exportVisibleReports(baseFilteredReports, "pdf")}
+              >
+                <FileText className="size-4 text-[var(--accent)]" />
+                PDF
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center justify-end gap-3">
+        {periodSelector}
+        <div className="relative">
+          <select
+            value={leagueFilter}
+            onChange={(event) => setLeagueFilter(event.target.value)}
+            className="h-12 appearance-none rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--surface)] px-4 pr-9 text-sm font-bold text-[#617187] outline-none shadow-sm transition hover:bg-[#fafbfd]"
+          >
+            {leagueOptions.map((league) => (
+              <option key={league} value={league}>
+                {league}
+              </option>
+            ))}
+          </select>
+          <ChevronDown className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-[#94a3b8]" />
+        </div>
       </div>
     </div>
   );
@@ -2286,7 +3166,6 @@ export function ReportsWorkspace({
         value={query}
         onChange={(event) => setQuery(event.target.value)}
         placeholder="Buscar ID feed, ID BP, liga o responsable..."
-        className="w-full xl:min-w-[18rem] 2xl:min-w-[280px]"
         inputClassName="text-sm font-medium text-[var(--foreground)] placeholder:text-[#94a3b8]"
       />
       <div className="flex shrink-0 items-center gap-3">
@@ -2296,7 +3175,7 @@ export function ReportsWorkspace({
           description="Pregunta por gravedad, responsables, pagos, detección de feed o cierres pendientes usando solo los reportes visibles."
           placeholder="Ej. ¿Qué reportes tienen gravedad alta o crítica y quién es el responsable?"
           contextLabel="Reportes visibles en la tabla actual"
-          context={aiContext}
+          context={visibleReportsAiContext}
           guidance="Prioriza gravedad, responsable, pago, detección de feed, partido, liga y problema. Si preguntan por pendientes, usa los reportes visibles con incidencia."
           examples={[
             "¿Qué reportes tienen Sin incidencia?",
@@ -2306,15 +3185,37 @@ export function ReportsWorkspace({
           hasGeminiKey={hasGeminiKey}
           buttonVariant="icon"
         />
-        <ToolbarIconButton
-          type="button"
-          onClick={() => void exportVisibleReports(sortedReports)}
-          disabled={!sortedReports.length || isExporting}
-          aria-label={isExporting ? "Exportando reportes" : "Exportar reportes"}
-          title={isExporting ? "Exportando reportes" : "Exportar reportes"}
-        >
-          <Download className="size-4" />
-        </ToolbarIconButton>
+        <div ref={exportMenuOpen === "incidents" ? exportMenuRef : undefined} className="relative">
+          <ToolbarIconButton
+            type="button"
+            onClick={() => setExportMenuOpen((o) => o === "incidents" ? null : "incidents")}
+            disabled={!sortedReports.length || isExporting}
+            aria-label={isExporting ? "Exportando…" : "Exportar reportes"}
+            title={isExporting ? "Exportando…" : "Exportar reportes"}
+          >
+            <Download className="size-4" />
+          </ToolbarIconButton>
+          {exportMenuOpen === "incidents" && (
+            <div className="absolute right-0 top-full z-50 mt-1.5 min-w-[160px] overflow-hidden rounded-xl border border-[var(--border)] bg-white shadow-lg">
+              <button
+                type="button"
+                className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm font-semibold text-[var(--foreground)] hover:bg-[#f6f8fb]"
+                onClick={() => void exportVisibleReports(sortedReports, "excel")}
+              >
+                <FileText className="size-4 text-[#1faa52]" />
+                Excel (.xls)
+              </button>
+              <button
+                type="button"
+                className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm font-semibold text-[var(--foreground)] hover:bg-[#f6f8fb]"
+                onClick={() => void exportVisibleReports(sortedReports, "pdf")}
+              >
+                <FileText className="size-4 text-[var(--accent)]" />
+                PDF
+              </button>
+            </div>
+          )}
+        </div>
       </div>
     </>
   );
@@ -2332,6 +3233,42 @@ export function ReportsWorkspace({
       : activeView === "control"
         ? "Revisa cierres, responsables, pagos y detección de feed del corte visible."
         : "Sigue incidencias, severidad, pruebas y observaciones del periodo visible."
+
+  const summaryPeriodGranularityLabel =
+    periodMode === "day"
+      ? "Por hora"
+      : periodMode === "week"
+        ? "Por día"
+        : "Por semana";
+  const activeSummaryPanel = selectedSummaryInsight;
+  const activeSummaryDisplayMode =
+    activeSummaryPanel !== "evolution"
+      ? summaryInsightDisplayMode[activeSummaryPanel]
+      : null;
+  const activeSummaryPanelTitle =
+    activeSummaryPanel === "league"
+      ? "Gravedad por liga"
+      : activeSummaryPanel === "severity"
+        ? "Distribucion por gravedad"
+        : activeSummaryPanel === "venue"
+          ? "Incidencias por sede"
+          : "Evolución de reportes";
+  const activeSummaryPanelSubtitle =
+    activeSummaryPanel === "league"
+      ? "Cruce de ligas y niveles de gravedad del corte visible"
+      : activeSummaryPanel === "severity"
+        ? "Peso relativo de cada nivel de severidad"
+        : activeSummaryPanel === "venue"
+          ? "Reincidencias acumuladas por sede en el corte visible"
+          : summaryPeriodGranularityLabel;
+  const activeSummaryPanelToggleLabel =
+    activeSummaryDisplayMode === "chart" ? "Ver tabla" : "Ver gráfico";
+  const leagueTableGridColumns =
+    "minmax(180px,1.75fr) repeat(6,minmax(72px,0.82fr))";
+  const severityTableGridColumns =
+    "minmax(180px,1.45fr) repeat(2,minmax(120px,1fr))";
+  const venueTableGridColumns =
+    "minmax(220px,1.9fr) repeat(5,minmax(78px,0.82fr))";
 
   const headerActions =
     activeView === "summary" ? (
@@ -2375,8 +3312,8 @@ export function ReportsWorkspace({
   );
 
   const controlWorkspaceContent = (
-    <div className="flex min-w-0 flex-col gap-8">
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+    <div className="flex min-w-0 flex-col gap-0">
+      <section className="grid gap-4 pb-6 pt-5 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard
           title="Total partidos"
           value={controlMetrics.totalMatches}
@@ -2478,17 +3415,6 @@ export function ReportsWorkspace({
               <p className="text-xs font-black uppercase tracking-[0.14em] text-[#617187]">
                 Mostrando {queryFilteredReports.length} de {reports.length} reportes
               </p>
-              <div className="flex gap-1">
-                <button className="inline-flex size-9 items-center justify-center rounded-lg border border-[var(--border)] bg-white text-[#94a3b8]">
-                  1
-                </button>
-                <button className="inline-flex size-9 items-center justify-center rounded-lg border border-[var(--border)] bg-[#fafbfd] text-[#94a3b8]">
-                  2
-                </button>
-                <button className="inline-flex size-9 items-center justify-center rounded-lg border border-[var(--border)] bg-[#fafbfd] text-[#94a3b8]">
-                  3
-                </button>
-              </div>
             </>
           }
         >
@@ -2499,10 +3425,6 @@ export function ReportsWorkspace({
                   {columnOrder.map((column) => (
                     <col
                       key={column}
-                      className={cn(
-                        REPORT_CONTROL_LAPTOP_HIDDEN_COLUMNS.has(column) &&
-                          "hidden 2xl:table-column",
-                      )}
                       style={{ width: reportColumnWidths[column] }}
                     />
                   ))}
@@ -2548,8 +3470,16 @@ export function ReportsWorkspace({
           ) : (
             <div className="p-8">
               <EmptyState
-                title="No encontramos reportes con esa búsqueda"
-                description="Prueba con otro ID, responsable o liga para volver al tablero completo de cierres."
+                title={
+                  reports.length
+                    ? "No encontramos reportes con esa búsqueda"
+                    : "Todavía no hay reportes cargados"
+                }
+                description={
+                  reports.length
+                    ? "Prueba con otro ID, responsable o liga para volver al tablero completo de cierres."
+                    : "Cuando el primer colaborador envíe su reporte desde Mi jornada, aparecerá aquí con su detalle operativo."
+                }
               />
             </div>
           )}
@@ -2560,8 +3490,8 @@ export function ReportsWorkspace({
 
   const selectedReportDrawer = selectedReport ? (
     <aside className="min-w-0 self-start 2xl:sticky 2xl:top-24">
-      <div className="panel-surface fixed inset-x-4 bottom-4 top-20 z-40 flex flex-col overflow-hidden border border-[var(--border)] bg-[var(--surface)] 2xl:static 2xl:h-[calc(100vh-8rem)] 2xl:w-full">
-        <div className="border-b border-[var(--border)] p-6">
+      <div className="panel-surface fixed inset-x-2 bottom-3 top-3 z-40 flex flex-col overflow-hidden border border-[var(--border)] bg-[var(--surface)] shadow-[0_28px_70px_rgba(15,23,42,0.18)] transition md:left-auto md:right-2 md:w-[25rem] md:max-w-[calc(100vw-1rem)] 2xl:static 2xl:h-[calc(100vh-8rem)] 2xl:w-full 2xl:shadow-none">
+        <div className="border-b border-[var(--border)] p-5">
           <div className="mb-4 flex items-center justify-between gap-4">
             <div className="flex flex-wrap items-center gap-2">
               <span className="inline-flex rounded-full border border-[#f3cfd8] bg-[#fff3f6] px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-[var(--accent)]">
@@ -2570,9 +3500,10 @@ export function ReportsWorkspace({
               <span
                 style={{
                   backgroundColor: getTeamLeagueColorSet(selectedReport.league).soft,
+                  borderColor: getTeamLeagueColorSet(selectedReport.league).border,
                   color: getTeamLeagueColorSet(selectedReport.league).accent,
                 }}
-                className="inline-flex rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em]"
+                className="inline-flex rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em]"
               >
                 {selectedReport.league}
               </span>
@@ -2581,6 +3512,7 @@ export function ReportsWorkspace({
               type="button"
               onClick={() => {
                 setSelectedReportId(null);
+                setEditingReportId(null);
                 setReportDrawerTab("details");
               }}
               aria-label="Cerrar detalle de reporte"
@@ -2591,9 +3523,40 @@ export function ReportsWorkspace({
           </div>
 
           <div className="space-y-1">
-            <p className="text-[1.6rem] font-black leading-[1.05] tracking-[-0.04em] text-[var(--foreground)]">
-              {selectedReportTeams?.homeTeam}
-            </p>
+            <div className="flex min-w-0 items-center gap-2">
+              <p className="min-w-0 text-[1.6rem] font-black leading-[1.05] tracking-[-0.04em] text-[var(--foreground)]">
+                {selectedReportTeams?.homeTeam}
+              </p>
+              {canManageEvidence && selectedReportEditable ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setReportDrawerTab("details");
+                    setEditingReportId((current) =>
+                      current === selectedReport.id_feed ? null : selectedReport.id_feed,
+                    );
+                  }}
+                  aria-label={
+                    isSelectedReportEditing
+                      ? "Cerrar edición de reporte"
+                      : "Editar reporte"
+                  }
+                  title={
+                    isSelectedReportEditing
+                      ? "Cerrar edición de reporte"
+                      : "Editar reporte"
+                  }
+                  className={cn(
+                    "inline-flex size-8 shrink-0 items-center justify-center rounded-full transition",
+                    isSelectedReportEditing
+                      ? "bg-[var(--accent)] text-white hover:bg-[var(--accent-strong)]"
+                      : "bg-[#f4f7fb] text-[#70819b] hover:bg-[#eef2f6] hover:text-[var(--accent)]",
+                  )}
+                >
+                  <Pencil className="size-4" />
+                </button>
+              ) : null}
+            </div>
             <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-[1.6rem] font-black leading-[1.05] tracking-[-0.04em] text-[var(--foreground)]">
               <span className="text-[var(--accent)]">VS</span>
               <span>{selectedReportTeams?.awayTeam}</span>
@@ -2636,7 +3599,7 @@ export function ReportsWorkspace({
           ]}
         />
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5 sm:px-6 sm:py-6 2xl:max-h-none">
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 2xl:max-h-none">
           {reportDrawerTab === "details" ? (
             <div className="space-y-8">
               <section className="space-y-4">
@@ -2656,7 +3619,7 @@ export function ReportsWorkspace({
                         selectedReportSeverityTone?.label,
                       )}
                     >
-                      Nivel actual
+                      Gravedad
                     </p>
                     <p
                       className={cn(
@@ -2669,20 +3632,12 @@ export function ReportsWorkspace({
                   </div>
 
                   <div className="panel-radius border border-[var(--border)] bg-white p-4">
-                    <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#94a3b8]">
-                      Responsable
-                    </p>
-                    <div className="mt-3 flex items-center gap-3">
-                      <HoverAvatarBadge
-                        initials={getInitials(selectedReport.responsible_name)}
-                        roleLabel="Responsable"
-                        tone="accent"
-                        size="md"
-                      />
-                      <p className="text-sm font-bold text-[var(--foreground)]">
-                        {selectedReport.responsible_name}
-                      </p>
-                    </div>
+                    <PersonRoleStack
+                      label="Responsable"
+                      value={selectedReport.responsible_name}
+                      initials={getInitials(selectedReport.responsible_name)}
+                      size="md"
+                    />
                   </div>
 
                   <div className="grid grid-cols-2 gap-3">
@@ -2696,7 +3651,7 @@ export function ReportsWorkspace({
                     </div>
                     <div className="panel-radius border border-[var(--border)] bg-white p-4">
                       <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#94a3b8]">
-                        Estado financiero
+                        Pago
                       </p>
                       <p className="mt-2 text-sm font-bold text-[var(--foreground)]">
                         {selectedReport.paid ? "Pagado" : "No pagado"}
@@ -2705,6 +3660,18 @@ export function ReportsWorkspace({
                   </div>
                 </div>
               </section>
+
+              <section className="space-y-4">
+                <h4 className="text-[11px] font-black uppercase tracking-[0.18em] text-[#94a3b8]">
+                  Observación técnica
+                </h4>
+                <div className="rounded-2xl border border-[var(--border)] bg-[var(--background-soft)] p-4">
+                  <p className="text-sm leading-7 text-[#4b5c74]">
+                    {selectedReport.technicalObservation || "Ninguna"}
+                  </p>
+                </div>
+              </section>
+
             </div>
           ) : (
             <section className="space-y-5">
@@ -2716,13 +3683,13 @@ export function ReportsWorkspace({
                   </h4>
                 </div>
                 <span className="rounded-full bg-[var(--background-soft)] px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-[#7d8ca1]">
-                  {activities.slice(0, 3).length} eventos
+                  {selectedReportActivity.slice(0, 3).length} eventos
                 </span>
               </div>
 
-              {activities.length ? (
+              {selectedReportActivity.length ? (
                 <div className="space-y-4 border-l border-[var(--border)] pl-5">
-                  {activities.slice(0, 3).map((activity) => {
+                  {selectedReportActivity.slice(0, 3).map((activity) => {
                     const tone = getReportActivityTone(activity.tone);
 
                     return (
@@ -2773,11 +3740,539 @@ export function ReportsWorkspace({
   const hasNonSummaryDrawer = activeView === "control"
     ? Boolean(selectedReportDrawer)
     : hasEmbeddedIncidentDrawer;
+  const summaryPanelControls =
+    activeSummaryPanel === "evolution" ? (
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => setChartTimeOffset((o) => o + 1)}
+            className="inline-flex size-8 items-center justify-center rounded-full border border-[#d7dde7] bg-white text-[#617187] transition hover:border-[#bbd3f2] hover:bg-[#f6fbff] hover:text-[#194c8f]"
+            aria-label="Período anterior"
+          >
+            <ChevronLeft className="size-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => setChartTimeOffset((o) => Math.max(0, o - 1))}
+            disabled={chartTimeOffset === 0}
+            className="inline-flex size-8 items-center justify-center rounded-full border border-[#d7dde7] bg-white text-[#617187] transition hover:border-[#bbd3f2] hover:bg-[#f6fbff] hover:text-[#194c8f] disabled:cursor-not-allowed disabled:opacity-40"
+            aria-label="Período siguiente"
+          >
+            <ChevronRight className="size-4" />
+          </button>
+        </div>
+        <SegmentedControl
+          size="sm"
+          items={[
+            {
+              key: "count",
+              label: "Cantidad",
+              active: incidentChartMetric === "count",
+              onClick: () => setIncidentChartMetric("count"),
+            },
+            {
+              key: "rate",
+              label: "Tasa %",
+              active: incidentChartMetric === "rate",
+              onClick: () => setIncidentChartMetric("rate"),
+            },
+          ]}
+        />
+      </div>
+    ) : (
+      <button
+        type="button"
+        onClick={() => toggleSummaryInsightDisplayMode(activeSummaryPanel)}
+        className="inline-flex size-9 shrink-0 items-center justify-center rounded-full border-0 bg-[#b12cf0] text-white transition hover:bg-[#9720cf]"
+        aria-label={activeSummaryPanelToggleLabel}
+        title={activeSummaryPanelToggleLabel}
+      >
+        {activeSummaryDisplayMode === "chart" ? (
+          <FileText className="size-4" />
+        ) : (
+          <BarChart3 className="size-4" />
+        )}
+      </button>
+    );
+  const summaryPanelContent =
+    activeSummaryPanel === "league" ? (
+      leagueDetailRows.length ? (
+        activeSummaryDisplayMode === "chart" ? (
+          <div
+            className={cn(
+              "flex flex-col",
+              leagueDetailRows.length <= 4 ? "min-h-full justify-evenly gap-4" : "gap-4",
+            )}
+          >
+            {leagueDetailRows.map((row) => (
+              <div
+                key={row.league}
+                className="rounded-[18px] border border-[#dde6f3] bg-[#fbfcfe] p-4"
+              >
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <span className="inline-flex items-center gap-2 text-sm font-black text-[#24364b]">
+                    <LeagueLogoMarkClient league={row.league} className="size-7" />
+                    {row.league}
+                  </span>
+                  <span className="text-xs font-black uppercase tracking-[0.14em] text-[#617187]">
+                    {row.total} rep.
+                  </span>
+                </div>
+                <div className="flex h-4 overflow-hidden rounded-full bg-[#ecf1f7]">
+                  {row.critical ? (
+                    <div
+                      className="h-full bg-[#a12ad6]"
+                      style={{ width: `${(row.critical / row.total) * 100}%` }}
+                    />
+                  ) : null}
+                  {row.high ? (
+                    <div
+                      className="h-full bg-[#e44b68]"
+                      style={{ width: `${(row.high / row.total) * 100}%` }}
+                    />
+                  ) : null}
+                  {row.medium ? (
+                    <div
+                      className="h-full bg-[#e7c247]"
+                      style={{ width: `${(row.medium / row.total) * 100}%` }}
+                    />
+                  ) : null}
+                  {row.low ? (
+                    <div
+                      className="h-full bg-[#7cb342]"
+                      style={{ width: `${(row.low / row.total) * 100}%` }}
+                    />
+                  ) : null}
+                  {row.noIncident ? (
+                    <div
+                      className="h-full bg-[#3f83df]"
+                      style={{ width: `${(row.noIncident / row.total) * 100}%` }}
+                    />
+                  ) : null}
+                </div>
+                <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2 text-[11px] font-black uppercase tracking-[0.12em] text-[#70819b]">
+                  <span>Cri {row.critical}</span>
+                  <span>Alt {row.high}</span>
+                  <span>Med {row.medium}</span>
+                  <span>Baj {row.low}</span>
+                  <span>Sin {row.noIncident}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="overflow-x-auto rounded-[6px] border border-[#dbe6f5] bg-[#f8fbff] xl:h-full">
+            <div
+              className="grid min-w-[48rem] text-sm xl:h-full"
+              style={{
+                gridTemplateRows: `auto repeat(${leagueDetailRows.length + 1}, minmax(0, 1fr))`,
+              }}
+            >
+              <div
+                className="grid border-b border-[#b9d3f2] bg-[#eef5ff] text-[#194c8f]"
+                style={{ gridTemplateColumns: leagueTableGridColumns }}
+              >
+                <div className="flex items-center px-5 py-4 font-black">Liga</div>
+                <div className="flex items-center justify-center px-4 py-4 font-black">Crítica</div>
+                <div className="flex items-center justify-center px-4 py-4 font-black">Alta</div>
+                <div className="flex items-center justify-center px-4 py-4 font-black">Media</div>
+                <div className="flex items-center justify-center px-4 py-4 font-black">Baja</div>
+                <div className="flex items-center justify-center px-4 py-4 font-black">Sin inc.</div>
+                <div className="flex items-center justify-center px-4 py-4 font-black">Total</div>
+              </div>
+              {leagueDetailRows.map((row, index) => (
+                <div
+                  key={row.league}
+                  className={cn(
+                    "grid min-h-0 border-b border-[#e7eef8]",
+                    index % 2 === 0 ? "bg-white" : "bg-[#f6f9fd]",
+                  )}
+                  style={{ gridTemplateColumns: leagueTableGridColumns }}
+                >
+                  <div className="flex min-h-0 items-center px-5 font-medium text-[#24364b]">
+                    {row.league}
+                  </div>
+                  <div className="flex min-h-0 items-center justify-center px-4 text-[#24364b]">
+                    {row.critical}
+                  </div>
+                  <div className="flex min-h-0 items-center justify-center px-4 text-[#24364b]">
+                    {row.high}
+                  </div>
+                  <div className="flex min-h-0 items-center justify-center px-4 text-[#24364b]">
+                    {row.medium}
+                  </div>
+                  <div className="flex min-h-0 items-center justify-center px-4 text-[#24364b]">
+                    {row.low}
+                  </div>
+                  <div className="flex min-h-0 items-center justify-center px-4 text-[#24364b]">
+                    {row.noIncident}
+                  </div>
+                  <div className="flex min-h-0 items-center justify-center px-4 font-semibold text-[#24364b]">
+                    {row.total}
+                  </div>
+                </div>
+              ))}
+              <div
+                className="grid min-h-0 bg-[#e8f1fb] text-[#194c8f]"
+                style={{ gridTemplateColumns: leagueTableGridColumns }}
+              >
+                <div className="flex min-h-0 items-center px-5 font-black uppercase">Total</div>
+                <div className="flex min-h-0 items-center justify-center px-4 font-black">
+                  {leagueDetailTotalRow.critical}
+                </div>
+                <div className="flex min-h-0 items-center justify-center px-4 font-black">
+                  {leagueDetailTotalRow.high}
+                </div>
+                <div className="flex min-h-0 items-center justify-center px-4 font-black">
+                  {leagueDetailTotalRow.medium}
+                </div>
+                <div className="flex min-h-0 items-center justify-center px-4 font-black">
+                  {leagueDetailTotalRow.low}
+                </div>
+                <div className="flex min-h-0 items-center justify-center px-4 font-black">
+                  {leagueDetailTotalRow.noIncident}
+                </div>
+                <div className="flex min-h-0 items-center justify-center px-4 font-black">
+                  {leagueDetailTotalRow.total}
+                </div>
+              </div>
+            </div>
+          </div>
+        )
+      ) : (
+        <EmptyState
+          title="Sin datos para este corte"
+          description="Ajusta el periodo o la liga para desplegar el detalle por gravedad."
+        />
+      )
+    ) : activeSummaryPanel === "severity" ? (
+      severityDetailRows.length ? (
+        activeSummaryDisplayMode === "chart" ? (
+          <div className="grid min-h-full gap-6 xl:grid-cols-[minmax(240px,0.8fr)_minmax(0,1fr)]">
+            <div className="flex items-center justify-center">
+              <div className="relative flex size-60 items-center justify-center rounded-full bg-[#eef3f8]">
+                <div
+                  className="absolute inset-0 rounded-full"
+                  style={{ background: severityChartGradient ?? "#eef3f8" }}
+                />
+                <div className="absolute inset-[18%] rounded-full bg-white" />
+                <div className="relative z-[1] text-center">
+                  <p className="text-[11px] font-black uppercase tracking-[0.18em] text-[#94a3b8]">
+                    Total
+                  </p>
+                  <p className="mt-2 text-4xl font-black text-[#24364b]">
+                    {baseFilteredReports.length}
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div className="flex min-h-full flex-col justify-center gap-3">
+              {severityDetailRows.map((item) => {
+                const { icon: SeverityIcon, iconClassName } = getSeverityDistributionMeta(
+                  item.severity,
+                );
+
+                return (
+                  <div
+                    key={item.severity}
+                    className="rounded-[18px] border border-[#e4eaf3] bg-[#fbfcfe] px-4 py-3"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="inline-flex items-center gap-3 text-sm font-black text-[#24364b]">
+                        <SeverityIcon className={cn("size-4", iconClassName)} />
+                        {item.severity}
+                      </span>
+                      <span className="text-sm font-black text-[#24364b]">
+                        {item.percentage}%
+                      </span>
+                    </div>
+                    <p className="mt-2 text-xs font-semibold text-[#70819b]">
+                      {item.count} reportes
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ) : (
+          <div className="overflow-x-auto rounded-[6px] border border-[#dbe6f5] bg-[#f8fbff] xl:h-full">
+            <div
+              className="grid min-w-[32rem] text-sm xl:h-full"
+              style={{
+                gridTemplateRows: `auto repeat(${severityDetailRows.length}, minmax(0, 1fr))`,
+              }}
+            >
+              <div
+                className="grid border-b border-[#b9d3f2] bg-[#eef5ff] text-[#194c8f]"
+                style={{ gridTemplateColumns: severityTableGridColumns }}
+              >
+                <div className="flex items-center px-5 py-4 font-black">Gravedad</div>
+                <div className="flex items-center justify-center px-4 py-4 font-black">Reportes</div>
+                <div className="flex items-center justify-center px-4 py-4 font-black">% del total</div>
+              </div>
+              {severityDetailRows.map((item, index) => (
+                <div
+                  key={item.severity}
+                  className={cn(
+                    "grid min-h-0 border-b border-[#e7eef8]",
+                    index % 2 === 0 ? "bg-white" : "bg-[#f6f9fd]",
+                  )}
+                  style={{ gridTemplateColumns: severityTableGridColumns }}
+                >
+                  <div className="flex min-h-0 items-center px-5 font-medium text-[#24364b]">
+                    {item.severity}
+                  </div>
+                  <div className="flex min-h-0 items-center justify-center px-4 text-[#24364b]">
+                    {item.count}
+                  </div>
+                  <div className="flex min-h-0 items-center justify-center px-4 font-semibold text-[#24364b]">
+                    {item.percentage}%
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )
+      ) : (
+        <EmptyState
+          title="Sin datos de gravedad"
+          description="No hay suficiente información visible para construir esta distribución."
+        />
+      )
+    ) : activeSummaryPanel === "venue" ? (
+      venueRecurrence.length ? (
+        activeSummaryDisplayMode === "chart" ? (
+          <div
+            className={cn(
+              "flex flex-col",
+              venueRecurrence.length <= 4 ? "min-h-full justify-evenly gap-4" : "gap-4",
+            )}
+          >
+            {venueRecurrence.map((item) => (
+              <div
+                key={item.venue}
+                className="rounded-[18px] border border-[#dde6f3] bg-[#fbfcfe] px-4 py-4"
+              >
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <span className="inline-flex min-w-0 items-center gap-3 text-sm font-black text-[#24364b]">
+                    <ClientTeamLogoMark
+                      teamName={item.teamName}
+                      competition={item.competition}
+                      className="size-9 rounded-[12px] border-transparent bg-transparent shadow-none"
+                      imageClassName="object-contain p-0.5"
+                      initialsClassName="text-[10px] tracking-[0.12em] text-[#70819b]"
+                    />
+                    <span className="truncate">{item.venue}</span>
+                  </span>
+                  <span className="text-xs font-black uppercase tracking-[0.14em] text-[#617187]">
+                    {item.total} inc.
+                  </span>
+                </div>
+                <div className="flex h-4 overflow-hidden rounded-full bg-[#edf1f6]">
+                  {item.severities["Crítica"] ? (
+                    <div
+                      className="h-full bg-[#a12ad6]"
+                      style={{
+                        width: `${(item.severities["Crítica"] / item.total) * 100}%`,
+                      }}
+                    />
+                  ) : null}
+                  {item.severities.Alta ? (
+                    <div
+                      className="h-full bg-[#e44b68]"
+                      style={{
+                        width: `${(item.severities.Alta / item.total) * 100}%`,
+                      }}
+                    />
+                  ) : null}
+                  {item.severities.Media ? (
+                    <div
+                      className="h-full bg-[#e7c247]"
+                      style={{
+                        width: `${(item.severities.Media / item.total) * 100}%`,
+                      }}
+                    />
+                  ) : null}
+                  {item.severities.Baja ? (
+                    <div
+                      className="h-full bg-[#d8e2ef]"
+                      style={{
+                        width: `${(item.severities.Baja / item.total) * 100}%`,
+                      }}
+                    />
+                  ) : null}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="overflow-x-auto rounded-[6px] border border-[#dbe6f5] bg-[#f8fbff] xl:h-full">
+            <div
+              className="grid min-w-[46rem] text-sm xl:h-full"
+              style={{
+                gridTemplateRows: `auto repeat(${venueDetailRows.length}, minmax(0, 1fr))`,
+              }}
+            >
+              <div
+                className="grid border-b border-[#b9d3f2] bg-[#eef5ff] text-[#194c8f]"
+                style={{ gridTemplateColumns: venueTableGridColumns }}
+              >
+                <div className="flex items-center px-5 py-4 font-black">Sede</div>
+                <div className="flex items-center justify-center px-4 py-4 font-black">Total</div>
+                <div className="flex items-center justify-center px-4 py-4 font-black">Críticas</div>
+                <div className="flex items-center justify-center px-4 py-4 font-black">Altas</div>
+                <div className="flex items-center justify-center px-4 py-4 font-black">Medias</div>
+                <div className="flex items-center justify-center px-4 py-4 font-black">Bajas</div>
+              </div>
+              {venueDetailRows.map((row, index) => (
+                <div
+                  key={row.venue}
+                  className={cn(
+                    "grid min-h-0 border-b border-[#e7eef8]",
+                    index % 2 === 0 ? "bg-white" : "bg-[#f6f9fd]",
+                  )}
+                  style={{ gridTemplateColumns: venueTableGridColumns }}
+                >
+                  <div className="flex min-h-0 items-center px-5 font-medium text-[#24364b]">
+                    {row.venue}
+                  </div>
+                  <div className="flex min-h-0 items-center justify-center px-4 font-semibold text-[#24364b]">
+                    {row.total}
+                  </div>
+                  <div className="flex min-h-0 items-center justify-center px-4 text-[#24364b]">
+                    {row.critical}
+                  </div>
+                  <div className="flex min-h-0 items-center justify-center px-4 text-[#24364b]">
+                    {row.high}
+                  </div>
+                  <div className="flex min-h-0 items-center justify-center px-4 text-[#24364b]">
+                    {row.medium}
+                  </div>
+                  <div className="flex min-h-0 items-center justify-center px-4 text-[#24364b]">
+                    {row.low}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )
+      ) : (
+        <EmptyState
+          title="Sin incidencias por sede"
+          description="No hay reincidencias visibles para representar en este corte."
+        />
+      )
+    ) : incidentLeagueChartView.series.length ? (
+      <div className="space-y-4">
+        <div className="overflow-hidden rounded-[var(--panel-radius)] bg-white">
+          {(() => {
+            const ticks: number[] =
+              incidentChartMax <= 6
+                ? Array.from({ length: incidentChartMax + 1 }, (_, i) => i)
+                : [0, Math.round(incidentChartMax / 2), incidentChartMax];
+
+            return (
+              <div className="px-1 pt-4">
+                <div className="relative h-[375px] xl:h-[425px] 2xl:h-[525px]">
+                  {/* Grid lines */}
+                  {ticks.map((value) => {
+                    const bottomPct = (value / incidentChartMax) * 100;
+                    const label = incidentChartMetric === "rate" ? `${value}%` : value;
+                    return (
+                      <div
+                        key={value}
+                        className="pointer-events-none absolute inset-x-0 h-0"
+                        style={{ bottom: `${bottomPct}%` }}
+                      >
+                        <div className="flex -translate-y-1/2 items-center">
+                          <span className="mr-1.5 shrink-0 text-[10px] font-black leading-none text-[#94a3b8]">
+                            {label}
+                          </span>
+                          <div className="h-px flex-1 bg-[#edf1f6]" />
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {/* Bars — absolute fill so % height works */}
+                  <div className="absolute inset-0 flex items-end">
+                    {incidentLeagueChartView.labels.map((label, colIndex) => {
+                      const colTotal = incidentLeagueChartView.series.reduce(
+                        (sum, s) => sum + (s.points[colIndex]?.value ?? 0),
+                        0,
+                      );
+                      const colHeightPct = Math.min(colTotal / incidentChartMax, 1) * 100;
+                      return (
+                        <div key={label} className="flex flex-1 items-end justify-center" style={{ height: "100%" }}>
+                          <div
+                            className="flex w-1/2 flex-col-reverse overflow-hidden rounded-t-sm"
+                            style={{ height: `${colHeightPct}%` }}
+                          >
+                            {incidentLeagueChartView.series.map((s) => {
+                              const value = s.points[colIndex]?.value ?? 0;
+                              const segPct = colTotal > 0 ? (value / colTotal) * 100 : 0;
+                              return (
+                                <div
+                                  key={s.league}
+                                  style={{ height: `${segPct}%`, backgroundColor: s.color }}
+                                />
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+                <div className="mt-1.5 flex pb-2">
+                  {incidentLeagueChartView.labels.map((label, i) => (
+                    <div
+                      key={label}
+                      className="flex flex-1 flex-col items-center gap-0.5"
+                    >
+                      <span className="text-[9px] font-black uppercase tracking-[0.06em] text-[#94a3b8]">
+                        {("dayLabels" in incidentLeagueChartView ? (incidentLeagueChartView as typeof incidentLeagueChartDebug).dayLabels[i] : "")}
+                      </span>
+                      <span className="text-[9px] font-medium text-[#b0bcc9]">
+                        {label}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          {incidentLeagueChartView.series.map((item) => (
+            <div
+              key={item.league}
+              title={item.league}
+              className="inline-flex items-center gap-1.5 rounded-full border border-[#edf1f6] bg-white px-2 py-1"
+            >
+              <span
+                className="size-1.5 rounded-full"
+                style={{ backgroundColor: item.color }}
+              />
+              <span className="text-[11px] font-bold text-[var(--foreground)]">
+                {getLeagueLegendLabel(item.league)}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+        ) : (
+      <EmptyState
+        title="Sin datos para este corte"
+        description="Cambia el periodo o la liga para reconstruir la evolución de incidencias por liga."
+      />
+    );
 
   return (
     <div
       className={cn(
-        "flex min-h-[42rem] flex-col transition-colors",
+        "flex min-h-0 flex-col transition-colors",
         activeView === "summary" ? "gap-4" : "gap-3",
       )}
     >
@@ -2792,269 +4287,117 @@ export function ReportsWorkspace({
           />
           {tabsNavigation}
         <div className="space-y-8">
-          <section className="grid gap-8 xl:grid-cols-[minmax(0,1.62fr)_minmax(19.5rem,0.98fr)] 2xl:grid-cols-[minmax(0,1.7fr)_minmax(320px,1fr)]">
-            <div className="space-y-8">
-              <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4 [&>*]:h-full">
-                <MetricCard
-                  title="Total partidos"
-                  value={summaryMetrics.totalReports}
-                  chip={`${summaryMetrics.activeLeagues} ligas activas`}
-                  chipTone="success"
-                  barClassName="bg-[var(--accent)]"
-                  barWidth={100}
-                />
-                <MetricCard
-                  title="Total incidencias"
-                  value={summaryMetrics.withIncident}
-                  chip={`${summaryMetrics.incidentPercent}% del total`}
-                  chipTone="warning"
-                  barClassName="bg-[#f59e0b]"
-                  barWidth={summaryMetrics.incidentPercent}
-                />
-                <MetricCard
-                  title="Detección de feed"
-                  value={summaryMetrics.feedDetectedCount}
-                  chip={`${summaryMetrics.feedPercent}% del total`}
-                  chipTone="success"
-                  barClassName="bg-[#10b981]"
-                  barWidth={summaryMetrics.feedPercent}
-                />
-                <MetricCard
-                  title="Pago de partidos"
-                  value={summaryMetrics.paidCount}
-                  chip={`${summaryMetrics.paidPercent}% del total`}
-                  chipTone="success"
-                  barClassName="bg-[#10b981]"
-                  barWidth={summaryMetrics.paidPercent}
-                />
+          <section className="grid items-start gap-8 xl:grid-cols-[minmax(0,1.62fr)_minmax(19.5rem,0.98fr)] 2xl:grid-cols-[minmax(0,1.7fr)_minmax(320px,1fr)]">
+            <div
+              className="space-y-8 xl:flex xl:min-h-0 xl:flex-col xl:overflow-hidden"
+              style={summarySidebarHeight ? { minHeight: `${summarySidebarHeight}px` } : undefined}
+            >
+              <section className="space-y-4 xl:shrink-0">
+                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                  {summaryMetricItems.map((item) => (
+                    <div
+                      key={item.key}
+                      className="min-w-0"
+                    >
+                      <MetricCard
+                        title={item.title}
+                        value={item.value}
+                        chip={item.chip}
+                        chipTone={item.chipTone}
+                        barClassName={item.barClassName}
+                        barWidth={item.barWidth}
+                        highlight={item.highlight}
+                      />
+                    </div>
+                  ))}
+                </div>
               </section>
 
-              <article className="panel-surface border border-[var(--border)] bg-[var(--surface)] p-5 xl:p-6">
-                <div className="mb-6 flex items-center justify-between gap-4">
+              <article className="panel-surface border border-[var(--border)] bg-[var(--surface)] p-5 xl:flex xl:min-h-0 xl:flex-1 xl:flex-col xl:p-6">
+                <div className="mb-6 flex items-start justify-between gap-4">
                   <div>
-                    <h3 className="text-2xl font-black text-[var(--foreground)]">
-                      Evolución de reportes
-                    </h3>
+                    <div className="flex items-center gap-3">
+                      <h3 className="text-2xl font-black text-[var(--foreground)]">
+                        {activeSummaryPanelTitle}
+                      </h3>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedSummaryInsight("evolution")}
+                        className={cn(
+                          "inline-flex size-9 shrink-0 translate-y-0.5 items-center justify-center rounded-full border transition",
+                          activeSummaryPanel !== "evolution"
+                            ? "border-[#1faa52] bg-[#1faa52] text-white hover:border-[#178546] hover:bg-[#178546]"
+                            : "border-[#d7dde7] bg-white text-[#617187] hover:border-[#bbd3f2] hover:bg-[#f6fbff] hover:text-[#194c8f]",
+                        )}
+                        aria-label={
+                          activeSummaryPanel !== "evolution"
+                            ? "Volver a evolución"
+                            : "Panel general de evolución"
+                        }
+                        title={
+                          activeSummaryPanel !== "evolution"
+                            ? "Volver a evolución"
+                            : "Panel general de evolución"
+                        }
+                      >
+                        <Eye className="size-3.5" />
+                      </button>
+                    </div>
                     <p className="mt-1 text-sm font-medium text-[#617187]">
-                      {periodMode === "day"
-                        ? "Por hora"
-                        : periodMode === "week"
-                          ? "Por día"
-                          : "Por semana"}
+                      {activeSummaryPanelSubtitle}
                     </p>
                   </div>
-                  <div className="flex flex-wrap items-center gap-3">
-                    <SegmentedControl
-                      size="sm"
-                      items={[
-                        {
-                          key: "count",
-                          label: "Cantidad",
-                          active: incidentChartMetric === "count",
-                          onClick: () => setIncidentChartMetric("count"),
-                        },
-                        {
-                          key: "rate",
-                          label: "Tasa %",
-                          active: incidentChartMetric === "rate",
-                          onClick: () => setIncidentChartMetric("rate"),
-                        },
-                      ]}
-                    />
-                    <SegmentedControl
-                      size="sm"
-                      items={[
-                        {
-                          key: "top-5",
-                          label: "Top 5",
-                          active: incidentChartLimit === 5,
-                          onClick: () => setIncidentChartLimit(5),
-                        },
-                        {
-                          key: "top-10",
-                          label: "Top 10",
-                          active: incidentChartLimit === 10,
-                          onClick: () => setIncidentChartLimit(10),
-                        },
-                      ]}
-                    />
-                  </div>
+                  {summaryPanelControls}
                 </div>
 
                 <div className="rounded-[var(--panel-radius)] bg-transparent">
-                  {incidentLeagueChart.series.length ? (
-                    <div className="space-y-5">
-                      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
-                        {incidentLeagueChart.series.map((item) => (
-                          <div
-                            key={item.league}
-                            className="rounded-[var(--panel-radius)] border border-[#edf1f6] bg-white/80 p-3"
-                          >
-                            <div className="flex items-center justify-between gap-3">
-                              <span className="inline-flex items-center gap-2 text-sm font-bold text-[var(--foreground)]">
-                                <span
-                                  className="size-2.5 rounded-full"
-                                  style={{ backgroundColor: item.color }}
-                                />
-                                {item.league}
-                              </span>
-                              <span className="text-xs font-black uppercase tracking-[0.14em] text-[#617187]">
-                                {incidentChartMetric === "count"
-                                  ? `${item.totalIncidents} inc.`
-                                  : `${Math.max(...item.points.map((point) => point.value)).toFixed(1)}% máx`}
-                              </span>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-
-                      <div className="h-[420px] rounded-[var(--panel-radius)] bg-white px-1 py-2 sm:px-0.5">
-                        <svg
-                          viewBox={`0 0 ${incidentChartFrame.width} ${incidentChartFrame.height}`}
-                          className="h-full w-full overflow-visible"
-                        >
-                          {[0, 0.25, 0.5, 0.75, 1].map((ratio) => {
-                            const y =
-                              incidentChartFrame.marginTop +
-                              incidentChartPlotHeight * ratio;
-
-                            return (
-                              <line
-                                key={ratio}
-                                x1={incidentChartFrame.marginLeft}
-                                x2={incidentChartFrame.width - incidentChartFrame.marginRight}
-                                y1={y}
-                                y2={y}
-                                stroke="#edf1f6"
-                                strokeWidth="1"
-                              />
-                            );
-                          })}
-
-                          {incidentLeagueChart.series.map((item) => {
-                            const values = item.points.map((point) => point.value);
-                            const path = buildChartLinePath(
-                              values,
-                              incidentChartPlotWidth,
-                              incidentChartPlotHeight,
-                              incidentLeagueChart.maxValue,
-                            );
-
-                            return (
-                              <g
-                                key={item.league}
-                                transform={`translate(${incidentChartFrame.marginLeft} ${incidentChartFrame.marginTop})`}
-                              >
-                                <path
-                                  d={path}
-                                  fill="none"
-                                  stroke={item.color}
-                                  strokeWidth={item.strokeWidth}
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                  opacity={item.strokeWidth > 3 ? 1 : 0.9}
-                                />
-                                {values.map((value, index) => {
-                                  const x =
-                                    values.length === 1
-                                      ? incidentChartPlotWidth / 2
-                                      : (incidentChartPlotWidth /
-                                          Math.max(values.length - 1, 1)) *
-                                        index;
-                                  const y =
-                                    incidentChartPlotHeight -
-                                    (value /
-                                      Math.max(incidentLeagueChart.maxValue, 1)) *
-                                      incidentChartPlotHeight;
-
-                                  return (
-                                    <circle
-                                      key={`${item.league}-${incidentLeagueChart.labels[index]}`}
-                                      cx={x}
-                                      cy={y}
-                                      r={item.strokeWidth > 3 ? 4.5 : 3.5}
-                                      fill={item.color}
-                                      stroke="#ffffff"
-                                      strokeWidth="2"
-                                    />
-                                  );
-                                })}
-                              </g>
-                            );
-                          })}
-
-                          {incidentLeagueChart.labels.map((label, index, labels) => {
-                            const x =
-                              labels.length === 1
-                                ? incidentChartFrame.marginLeft + incidentChartPlotWidth / 2
-                                : incidentChartFrame.marginLeft +
-                                  (incidentChartPlotWidth /
-                                    Math.max(labels.length - 1, 1)) *
-                                    index;
-
-                            return (
-                              <text
-                                key={label}
-                                x={x}
-                                y={incidentChartFrame.height - 4}
-                                textAnchor="middle"
-                                className="fill-[#94a3b8] text-[11px] font-black tracking-[0.12em]"
-                              >
-                                {label}
-                              </text>
-                            );
-                          })}
-
-                          {[0, 0.5, 1].map((ratio, index) => {
-                            const value = Math.round(
-                              incidentLeagueChart.maxValue * (1 - ratio) * 10,
-                            ) / 10;
-                            const y =
-                              incidentChartFrame.marginTop +
-                              incidentChartPlotHeight * ratio +
-                              4;
-
-                            return (
-                              <text
-                                key={`${ratio}-${index}`}
-                              x={2}
-                                y={y}
-                                textAnchor="start"
-                                className="fill-[#94a3b8] text-[11px] font-black"
-                              >
-                                {incidentChartMetric === "rate" ? `${value}%` : value}
-                              </text>
-                            );
-                          })}
-                        </svg>
-                      </div>
-                    </div>
-                  ) : (
-                    <EmptyState
-                      title="Sin datos para este corte"
-                      description="Cambia el periodo o la liga para reconstruir la evolución de incidencias por liga."
-                    />
-                  )}
+                  {summaryPanelContent}
                 </div>
               </article>
             </div>
 
-            <article className="panel-surface border border-[var(--border)] bg-[var(--surface)] px-5 pb-5 pt-5 xl:sticky xl:top-24 xl:self-start xl:px-6 xl:pb-6 2xl:px-8 2xl:pb-8 2xl:pt-6">
+            <article
+              ref={summarySidebarRef}
+              className="rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--surface)] px-5 pb-5 pt-5 xl:sticky xl:top-24 xl:self-start xl:px-6 xl:pb-6 2xl:px-8 2xl:pb-8 2xl:pt-6"
+            >
               <h3 className="text-2xl font-black text-[var(--foreground)]">
                 Resumen de reportes
               </h3>
               <div className="mt-6 space-y-4.5">
                 <div className="space-y-3.5">
-                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#94a3b8]">
-                    Por liga
-                  </p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#94a3b8]">
+                      Por liga
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => toggleSummaryInsight("league")}
+                      className={cn(
+                        "inline-flex size-7 items-center justify-center rounded-full border transition",
+                        selectedSummaryInsight === "league"
+                          ? "border-[#1faa52] bg-[#1faa52] text-white hover:border-[#178546] hover:bg-[#178546]"
+                          : "border-[#d9e1eb] bg-[var(--surface)] text-[#617187] hover:border-[#efc2cb] hover:bg-[#fff6f8] hover:text-[var(--accent)]",
+                      )}
+                      aria-label={
+                        selectedSummaryInsight === "league"
+                          ? "Cerrar detalle por liga"
+                          : "Ver detalle por liga"
+                      }
+                      title={
+                        selectedSummaryInsight === "league"
+                          ? "Cerrar detalle por liga"
+                          : "Ver detalle por liga"
+                      }
+                    >
+                      <Eye className="size-3.5" />
+                    </button>
+                  </div>
                   {(() => {
                     const maxCount = Math.max(
                       ...visibleLeagueDistribution.map((entry) => entry.count),
                       1,
                     );
-
-                    return visibleLeagueDistribution.map((item) => (
+                    const rows = visibleLeagueDistribution.map((item) => (
                       <InsightBarRow
                         key={item.league}
                         icon={<LeagueLogoMarkClient league={item.league} className="size-9" />}
@@ -3068,6 +4411,16 @@ export function ReportsWorkspace({
                         }
                       />
                     ));
+                    const placeholders = Array.from({ length: Math.max(0, 3 - rows.length) }, (_, i) => (
+                      <InsightBarRow
+                        key={`ph-league-${i}`}
+                        icon={<div className="size-9 rounded-full bg-[#f0f3f8]" />}
+                        label={<div className="h-2.5 w-24 rounded-full bg-[#edf1f6]" />}
+                        value=""
+                        bar={null}
+                      />
+                    ));
+                    return [...rows, ...placeholders];
                   })()}
                   {leagueDistribution.length ? (
                     <ExpandDivider
@@ -3088,36 +4441,71 @@ export function ReportsWorkspace({
                 </div>
 
                 <div className="pt-0.5">
-                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#94a3b8]">
-                    Por gravedad
-                  </p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#94a3b8]">
+                      Por gravedad
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => toggleSummaryInsight("severity")}
+                      className={cn(
+                        "inline-flex size-7 items-center justify-center rounded-full border transition",
+                        selectedSummaryInsight === "severity"
+                          ? "border-[#1faa52] bg-[#1faa52] text-white hover:border-[#178546] hover:bg-[#178546]"
+                          : "border-[#d9e1eb] bg-[var(--surface)] text-[#617187] hover:border-[#efc2cb] hover:bg-[#fff6f8] hover:text-[var(--accent)]",
+                      )}
+                      aria-label={
+                        selectedSummaryInsight === "severity"
+                          ? "Cerrar detalle por gravedad"
+                          : "Ver detalle por gravedad"
+                      }
+                      title={
+                        selectedSummaryInsight === "severity"
+                          ? "Cerrar detalle por gravedad"
+                          : "Ver detalle por gravedad"
+                      }
+                    >
+                      <Eye className="size-3.5" />
+                    </button>
+                  </div>
                   <div className="mt-3.5 space-y-3.5">
-                    {visibleSeverityDistribution.map((item) => {
-                      const {
-                        barClassName,
-                        icon: SeverityIcon,
-                        iconClassName,
-                      } = getSeverityDistributionMeta(item.severity);
-
-                      return (
+                    {(() => {
+                      const rows = visibleSeverityDistribution.map((item) => {
+                        const {
+                          barClassName,
+                          icon: SeverityIcon,
+                          iconClassName,
+                        } = getSeverityDistributionMeta(item.severity);
+                        return (
+                          <InsightBarRow
+                            key={item.severity}
+                            icon={
+                              <SeverityIcon
+                                className={cn("size-[1.35rem] shrink-0", iconClassName)}
+                              />
+                            }
+                            label={item.severity}
+                            value={`${item.percentage}%`}
+                            bar={
+                              <div
+                                className={cn("h-full rounded-full", barClassName)}
+                                style={{ width: `${item.percentage}%` }}
+                              />
+                            }
+                          />
+                        );
+                      });
+                      const placeholders = Array.from({ length: Math.max(0, 3 - rows.length) }, (_, i) => (
                         <InsightBarRow
-                          key={item.severity}
-                          icon={
-                            <SeverityIcon
-                              className={cn("size-[1.35rem] shrink-0", iconClassName)}
-                            />
-                          }
-                          label={item.severity}
-                          value={`${item.percentage}%`}
-                          bar={
-                            <div
-                              className={cn("h-full rounded-full", barClassName)}
-                              style={{ width: `${item.percentage}%` }}
-                            />
-                          }
+                          key={`ph-sev-${i}`}
+                          icon={<div className="size-[1.35rem] rounded-full bg-[#f0f3f8]" />}
+                          label={<div className="h-2.5 w-20 rounded-full bg-[#edf1f6]" />}
+                          value=""
+                          bar={null}
                         />
-                      );
-                    })}
+                      ));
+                      return [...rows, ...placeholders];
+                    })()}
                     {canExpandSeverityDistribution ? (
                       <ExpandDivider
                         expanded={showAllSeverityDistribution}
@@ -3136,16 +4524,40 @@ export function ReportsWorkspace({
 
                 <div className="pt-0">
                   <div className="flex items-center justify-between gap-3">
-                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#94a3b8]">
-                      Por sede
-                    </p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#94a3b8]">
+                        Por sede
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => toggleSummaryInsight("venue")}
+                        className={cn(
+                          "inline-flex size-7 items-center justify-center rounded-full border transition",
+                          selectedSummaryInsight === "venue"
+                            ? "border-[#1faa52] bg-[#1faa52] text-white hover:border-[#178546] hover:bg-[#178546]"
+                            : "border-[#d9e1eb] bg-[var(--surface)] text-[#617187] hover:border-[#efc2cb] hover:bg-[#fff6f8] hover:text-[var(--accent)]",
+                        )}
+                        aria-label={
+                          selectedSummaryInsight === "venue"
+                            ? "Cerrar detalle por sede"
+                            : "Ver detalle por sede"
+                        }
+                        title={
+                          selectedSummaryInsight === "venue"
+                            ? "Cerrar detalle por sede"
+                            : "Ver detalle por sede"
+                        }
+                      >
+                        <Eye className="size-3.5" />
+                      </button>
+                    </div>
                     <span className="text-[10px] font-black uppercase tracking-[0.14em] text-[#94a3b8]">
                       Top {Math.min(venueRecurrence.length, showAllVenueRecurrence ? 10 : 3)}
                     </span>
                   </div>
                   <div className="mt-3.5 space-y-3.5">
-                    {visibleVenueRecurrence.length ? (
-                      visibleVenueRecurrence.map((item) => (
+                    {(() => {
+                      const rows = visibleVenueRecurrence.map((item) => (
                         <InsightBarRow
                           key={item.venue}
                           icon={
@@ -3199,12 +4611,21 @@ export function ReportsWorkspace({
                             </div>
                           }
                         />
-                      ))
-                    ) : (
-                      <p className="text-sm font-medium text-[#94a3b8]">
-                        No hay reincidencias por sede en el periodo visible.
-                      </p>
-                    )}
+                      ));
+                      const placeholders = Array.from({ length: Math.max(0, 3 - rows.length) }, (_, i) => (
+                        <InsightBarRow
+                          key={`ph-venue-${i}`}
+                          icon={<div className="size-9 rounded-[12px] bg-[#f0f3f8]" />}
+                          label={<div className="h-2.5 w-28 rounded-full bg-[#edf1f6]" />}
+                          value=""
+                          barContainerClassName="bg-transparent p-0"
+                          bar={
+                            <div className="h-full w-full rounded-full bg-[#edf1f6]" />
+                          }
+                        />
+                      ));
+                      return [...rows, ...placeholders];
+                    })()}
                     {canExpandVenueRecurrence ? (
                       <ExpandDivider
                         expanded={showAllVenueRecurrence}
@@ -3222,15 +4643,12 @@ export function ReportsWorkspace({
             </article>
           </section>
 
-          <section className="grid gap-8 2xl:grid-cols-[minmax(0,1.7fr)_minmax(340px,1fr)]">
+          <section className="grid gap-8">
             <article className="panel-surface border border-[var(--border)] bg-[var(--surface)] p-5 xl:p-6 2xl:p-8">
               <div className="mb-6 flex items-center justify-between">
                 <h3 className="text-2xl font-black text-[var(--foreground)]">
                   Reportes por personal
                 </h3>
-                <span className="text-[10px] font-black uppercase tracking-[0.16em] text-[#11915a]">
-                  Top performance
-                </span>
               </div>
 
               <div className="overflow-x-auto">
@@ -3244,7 +4662,7 @@ export function ReportsWorkspace({
                   </thead>
                   <tbody className="divide-y divide-[#edf1f6]">
                     {responsibleRanking.map((item) => (
-                      <tr key={item.responsible} className="transition hover:bg-[#fafbfd]">
+                      <tr key={item.responsable} className="transition hover:bg-[#fafbfd]">
                         {rankingColumnOrder.map((column) =>
                           renderRankingCell(item, column),
                         )}
@@ -3254,32 +4672,6 @@ export function ReportsWorkspace({
                 </table>
               </div>
             </article>
-
-            <div>
-              <article className="rounded-[var(--panel-radius)] bg-[var(--accent)] p-6 text-white shadow-[0_18px_40px_rgba(230,18,56,0.18)]">
-                <div className="flex items-center gap-2">
-                  <Bot className="size-5" />
-                  <h3 className="text-xl font-black">Insights de IA</h3>
-                </div>
-                <div className="mt-6 space-y-3">
-                  {summaryInsights.slice(0, 2).map((insight, index) => (
-                    <div
-                      key={insight}
-                      className="rounded-[var(--panel-radius)] border border-white/15 bg-white/10 p-4"
-                    >
-                      <p className="text-[10px] font-black uppercase tracking-[0.14em] text-white/70">
-                        {index === 0 ? "Anomalía detectada" : "Lectura de periodo"}
-                      </p>
-                      <p className="mt-2 text-sm font-medium leading-6">{insight}</p>
-                    </div>
-                  ))}
-                </div>
-                <button className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-[var(--panel-radius)] bg-white px-4 py-3 text-sm font-extrabold text-[var(--accent)] transition hover:bg-white/95">
-                  <Sparkles className="size-4" />
-                  Generar reporte detallado
-                </button>
-              </article>
-            </div>
           </section>
         </div>
         </>
@@ -3300,11 +4692,12 @@ export function ReportsWorkspace({
             />
             {tabsNavigation}
             {activeView === "control" ? (
-              <div className="-mt-1">{controlWorkspaceContent}</div>
+              <div>{controlWorkspaceContent}</div>
             ) : (
               <IncidentsWorkspace
                 incidents={incidents}
                 hasGeminiKey={hasGeminiKey}
+                canManageEvidence={canManageEvidence}
                 embedded
                 headerActionsPortalTarget={incidentsHeaderActionsPortalTarget}
                 drawerPortalTarget={incidentsDrawerPortalTarget}
@@ -3312,11 +4705,32 @@ export function ReportsWorkspace({
               />
             )}
           </div>
+          {hasNonSummaryDrawer && (
+            <div
+              className="fixed inset-0 z-30 bg-black/40 2xl:hidden"
+              onClick={() => {
+                if (activeView === "control") {
+                  setSelectedReportId(null);
+                  setEditingReportId(null);
+                } else {
+                  setSelectedEmbeddedIncidentId(null);
+                }
+              }}
+            />
+          )}
           {activeView === "control" ? selectedReportDrawer : hasEmbeddedIncidentDrawer ? (
             <div ref={setIncidentsDrawerPortalTarget} className="min-w-0 self-start" />
           ) : null}
         </div>
       )}
+
+      <input
+        ref={desktopEvidenceInputRef}
+        type="file"
+        accept="image/png,image/jpeg,image/webp,image/jpg"
+        className="hidden"
+        onChange={handleReportEvidenceInputChange}
+      />
     </div>
   );
 }

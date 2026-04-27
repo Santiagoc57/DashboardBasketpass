@@ -4,9 +4,18 @@ export const appEnv = {
   supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY ?? "",
   appTimezone: process.env.NEXT_PUBLIC_APP_TIMEZONE ?? "America/Bogota",
   appUrl: process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000",
+  supportEmail:
+    process.env.NEXT_PUBLIC_SUPPORT_EMAIL ?? "soporte@basketproduction.pro",
   allowGuestMiJornadaAccess: process.env.ALLOW_GUEST_MI_JORNADA === "true",
   portalGeminiApiKey: process.env.PORTAL_GEMINI_API_KEY ?? "",
   portalGeminiModel: process.env.PORTAL_GEMINI_MODEL ?? "gemini-2.5-flash",
+  telegramBotToken: process.env.TELEGRAM_BOT_TOKEN ?? "",
+  telegramChatId: process.env.TELEGRAM_CHAT_ID ?? "",
+  operationalAlertWebhookUrl: process.env.OPERATION_ALERT_WEBHOOK_URL ?? "",
+  robomotionWhatsAppWebhookUrl:
+    process.env.ROBOMOTION_WHATSAPP_WEBHOOK_URL ?? "",
+  robomotionWhatsAppWebhookToken:
+    process.env.ROBOMOTION_WHATSAPP_WEBHOOK_TOKEN ?? "",
 };
 
 export const isSupabaseConfigured = Boolean(

@@ -74,6 +74,17 @@ export function getDayRange(dateInput: string, timezone = DEFAULT_TIMEZONE) {
   };
 }
 
+export function getDateRangeWindow(
+  startDate: string,
+  endDate: string,
+  timezone = DEFAULT_TIMEZONE,
+) {
+  return {
+    startUtc: fromZonedTime(`${startDate}T00:00:00.000`, timezone).toISOString(),
+    endUtc: fromZonedTime(`${endDate}T23:59:59.999`, timezone).toISOString(),
+  };
+}
+
 export function getDateInputValue(date = new Date()) {
   return format(date, "yyyy-MM-dd");
 }

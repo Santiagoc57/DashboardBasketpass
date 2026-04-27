@@ -26,9 +26,9 @@ export const AI_COPY = {
   assistantIdentity: `Eres un asistente interno de ${PRODUCT_COPY.appName}.`,
   portalCaptureContext: `para la plataforma de ${PRODUCT_COPY.appName}.`,
   globalGeminiHint:
-    "Configura Gemini en Configuración. Si el admin ya cargó la clave global de la plataforma, la IA también quedará disponible para colaboradores.",
+    "Pide al administrador que abra Configuración > Gemini y cargue la API key global de la plataforma. Cuando quede guardada, la IA también estará disponible para colaboradores.",
   globalGeminiCaptureHint:
-    "Configura Gemini en Configuración. Si el admin ya cargó la clave global de la plataforma, la lectura de capturas también quedará disponible para colaboradores.",
+    "Pide al administrador que abra Configuración > Gemini y cargue la API key global de la plataforma. Cuando quede guardada, la lectura de capturas también estará disponible para colaboradores.",
 } as const;
 
 export const SECTION_COPY = {

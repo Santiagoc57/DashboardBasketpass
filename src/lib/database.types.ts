@@ -18,7 +18,14 @@ export interface Database {
         | "viewer";
       match_status: "Pendiente" | "Confirmado" | "Realizado";
     };
-    Functions: Record<string, never>;
+    Functions: {
+      confirm_collaborator_assignment: {
+        Args: {
+          target_assignment_id: string;
+        };
+        Returns: undefined;
+      };
+    };
     Tables: {
       app_settings: {
         Relationships: [];
@@ -58,6 +65,13 @@ export interface Database {
           title: string;
           body: string;
           active: boolean;
+          eyebrow_label: string | null;
+          dismiss_label: string | null;
+          starts_at: string | null;
+          ends_at: string | null;
+          audience_type: string;
+          target_role_names: string[];
+          target_person_ids: string[];
           created_at: string;
           updated_at: string;
           created_by: string | null;
@@ -68,6 +82,13 @@ export interface Database {
           title: string;
           body: string;
           active?: boolean;
+          eyebrow_label?: string | null;
+          dismiss_label?: string | null;
+          starts_at?: string | null;
+          ends_at?: string | null;
+          audience_type?: string;
+          target_role_names?: string[];
+          target_person_ids?: string[];
           created_at?: string;
           updated_at?: string;
           created_by?: string | null;
@@ -77,6 +98,13 @@ export interface Database {
           title?: string;
           body?: string;
           active?: boolean;
+          eyebrow_label?: string | null;
+          dismiss_label?: string | null;
+          starts_at?: string | null;
+          ends_at?: string | null;
+          audience_type?: string;
+          target_role_names?: string[];
+          target_person_ids?: string[];
           updated_at?: string;
           created_by?: string | null;
           updated_by?: string | null;
@@ -250,6 +278,9 @@ export interface Database {
           role_id: string;
           person_id: string | null;
           confirmed: boolean;
+          confirmation_status: string;
+          confirmation_token: string | null;
+          confirmation_responded_at: string | null;
           notes: string | null;
           created_at: string;
           updated_at: string;
@@ -262,6 +293,9 @@ export interface Database {
           role_id: string;
           person_id?: string | null;
           confirmed?: boolean;
+          confirmation_status?: string;
+          confirmation_token?: string | null;
+          confirmation_responded_at?: string | null;
           notes?: string | null;
           created_at?: string;
           updated_at?: string;
@@ -271,6 +305,9 @@ export interface Database {
         Update: {
           person_id?: string | null;
           confirmed?: boolean;
+          confirmation_status?: string;
+          confirmation_token?: string | null;
+          confirmation_responded_at?: string | null;
           notes?: string | null;
           updated_at?: string;
           created_by?: string | null;
@@ -381,6 +418,65 @@ export interface Database {
           updated_by?: string | null;
         };
       };
+      team_issue_reports: {
+        Relationships: [];
+        Row: {
+          id: string;
+          team_id: string;
+          team_official_name: string;
+          team_display_name: string;
+          competition: string;
+          reason: string;
+          detail: string;
+          status: "new" | "resolved";
+          reporter_profile_id: string | null;
+          reporter_name: string | null;
+          reporter_email: string | null;
+          resolved_at: string | null;
+          resolved_by: string | null;
+          created_at: string;
+          updated_at: string;
+          created_by: string | null;
+          updated_by: string | null;
+        };
+        Insert: {
+          id?: string;
+          team_id: string;
+          team_official_name: string;
+          team_display_name: string;
+          competition: string;
+          reason: string;
+          detail: string;
+          status?: "new" | "resolved";
+          reporter_profile_id?: string | null;
+          reporter_name?: string | null;
+          reporter_email?: string | null;
+          resolved_at?: string | null;
+          resolved_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+          created_by?: string | null;
+          updated_by?: string | null;
+        };
+        Update: {
+          team_id?: string;
+          team_official_name?: string;
+          team_display_name?: string;
+          competition?: string;
+          reason?: string;
+          detail?: string;
+          status?: "new" | "resolved";
+          reporter_profile_id?: string | null;
+          reporter_name?: string | null;
+          reporter_email?: string | null;
+          resolved_at?: string | null;
+          resolved_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+          created_by?: string | null;
+          updated_by?: string | null;
+        };
+      };
       audit_log: {
         Relationships: [];
         Row: {
@@ -431,5 +527,7 @@ export type RoleRow = Database["public"]["Tables"]["roles"]["Row"];
 export type AssignmentRow = Database["public"]["Tables"]["assignments"]["Row"];
 export type CollaboratorReportRow =
   Database["public"]["Tables"]["collaborator_reports"]["Row"];
+export type TeamIssueReportRow =
+  Database["public"]["Tables"]["team_issue_reports"]["Row"];
 export type AuditRow = Database["public"]["Tables"]["audit_log"]["Row"];
 export type ProfileRow = Database["public"]["Tables"]["profiles"]["Row"];
