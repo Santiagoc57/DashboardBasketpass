@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { Maximize2, Pencil, X } from "lucide-react";
 
 import { useGridInsightsDock } from "@/components/grid/grid-insights-dock";
@@ -66,7 +67,7 @@ export function ProductionPlainWorkspace({
         <Maximize2 className="size-4" />
       </button>
 
-      {open ? (
+      {open && typeof document !== "undefined" ? createPortal(
         <div className="fixed inset-0 z-[80] flex flex-col bg-[#f8fafc] text-[#1f2937]">
           <div className="flex min-h-[4.25rem] items-center justify-between border-b border-[#d8dee8] bg-white px-5">
             <div className="min-w-0">
@@ -119,7 +120,8 @@ export function ProductionPlainWorkspace({
               redirectTo={redirectTo}
             />
           </div>
-        </div>
+        </div>,
+        document.body,
       ) : null}
     </>
   );

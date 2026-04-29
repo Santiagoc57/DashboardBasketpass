@@ -2,6 +2,7 @@
 
 import type React from "react";
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { Maximize2, X } from "lucide-react";
 
 type PlainFullscreenWorkspaceProps = {
@@ -56,7 +57,7 @@ export function PlainFullscreenWorkspace({
         <Maximize2 className="size-4" />
       </button>
 
-      {open ? (
+      {open && typeof document !== "undefined" ? createPortal(
         <div className="fixed inset-0 z-[80] flex flex-col bg-[#f8fafc] text-[#1f2937]">
           <div className="flex min-h-[4.25rem] items-center justify-between border-b border-[#d8dee8] bg-white px-5">
             <div className="min-w-0">
@@ -83,7 +84,8 @@ export function PlainFullscreenWorkspace({
             </div>
           </div>
           <div className="min-h-0 flex-1 p-3">{children}</div>
-        </div>
+        </div>,
+        document.body,
       ) : null}
     </>
   );
