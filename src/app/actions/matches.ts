@@ -569,6 +569,125 @@ export async function quickUpdateMatchFieldAction(formData: FormData) {
   }
 }
 
+export async function quickUpdateMatchFlatFieldAction(formData: FormData) {
+  const redirectTo = getRedirectTarget(formData, "/grid");
+  await requireEditor();
+
+  const matchId = String(formData.get("matchId") ?? "");
+  const field = String(formData.get("field") ?? "");
+  const rawValue = String(formData.get("value") ?? "").trim();
+
+  try {
+    const supabase = await createSupabaseServerClient();
+    const payload: MatchUpdate = {};
+
+    switch (field) {
+      case "time": {
+        const matchResult = await supabase
+          .from("matches")
+          .select("kickoff_at, timezone")
+          .eq("id", matchId)
+          .single();
+
+        if (matchResult.error) {
+          throw matchResult.error;
+        }
+
+        const date = new Intl.DateTimeFormat("en-CA", {
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+          timeZone: matchResult.data.timezone,
+        }).format(new Date(matchResult.data.kickoff_at));
+
+        payload.kickoff_at = buildKickoffAt({
+          date,
+          time: rawValue,
+          timezone: matchResult.data.timezone,
+        });
+        break;
+      }
+      case "venue":
+        payload.venue = maybeNull(rawValue);
+        break;
+      case "productionCode":
+        payload.production_code = maybeNull(rawValue);
+        break;
+      case "productionMode":
+        payload.production_mode = assertProductionMode(rawValue);
+        break;
+      case "owner":
+        payload.owner_id = normalizeSelectedPersonId(rawValue);
+        break;
+      case "status":
+        payload.status = assertMatchStatus(rawValue);
+        break;
+      default:
+        throw new Error("Campo de edición plana no soportado.");
+    }
+
+    if (Object.keys(payload).length) {
+      const updateResult = await updateMatchWithOptionalColumnFallback(
+        supabase,
+        matchId,
+        payload,
+      );
+
+      if (updateResult.error) {
+        throw updateResult.error;
+      }
+    }
+
+    if (field === "owner") {
+      const roleResult = await supabase
+        .from("roles")
+        .select("id")
+        .eq("name", "Responsable")
+        .maybeSingle();
+
+      if (roleResult.error) {
+        throw roleResult.error;
+      }
+
+      if (roleResult.data?.id) {
+        const assignmentResult = await supabase.from("assignments").upsert(
+          {
+            match_id: matchId,
+            role_id: roleResult.data.id,
+            person_id: normalizeSelectedPersonId(rawValue),
+            confirmed: false,
+            confirmation_status: "pending",
+            confirmation_responded_at: null,
+            notes: null,
+          },
+          { onConflict: "match_id,role_id" },
+        );
+
+        if (assignmentResult.error) {
+          throw assignmentResult.error;
+        }
+      }
+    }
+
+    revalidatePath("/grid");
+    revalidatePath(`/match/${matchId}`);
+    revalidatePath(`/match/${matchId}/notificar`);
+    redirectWithNotice({
+      redirectTo,
+      intent: "success",
+      notice: "Campo actualizado.",
+    });
+  } catch (error) {
+    rethrowNavigationError(error);
+    await reportMatchesFailure(error, { action: "quick-flat-update", field });
+    redirectWithNotice({
+      redirectTo,
+      intent: "error",
+      notice: ensureErrorMessage(error),
+    });
+  }
+}
+
 export async function deleteMatchAction(formData: FormData) {
   const redirectTo = getRedirectTarget(formData, "/grid");
   await requireEditor();

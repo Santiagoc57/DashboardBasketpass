@@ -48,6 +48,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { ExpandDivider } from "@/components/ui/expand-divider";
 import { InsightBarRow } from "@/components/ui/insight-bar-row";
 import { PersonRoleStack } from "@/components/ui/person-role-stack";
+import { PlainViewToggle } from "@/components/ui/plain-view-toggle";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { SeverityBadge } from "@/components/ui/severity-badge";
 import { SectionTableCard } from "@/components/ui/section-table-card";
@@ -3343,7 +3344,85 @@ export function ReportsWorkspace({
     />
   );
 
-  const controlWorkspaceContent = (
+  const reportPlainWorkspaceContent = (
+    <div className="overflow-hidden border border-[#d8dee8] bg-[#fbfcfe]">
+      {queryFilteredReports.length ? (
+        <div className="overflow-x-auto">
+          <table className="min-w-[1540px] border-collapse font-mono text-[12px] text-[#1f2937]">
+            <thead>
+              <tr className="border-b border-[#d8dee8] bg-[#f4f6f9] text-left text-[11px] font-bold uppercase tracking-[0.12em] text-[#64748b]">
+                <th className="w-[92px] border-r border-[#e1e7f0] px-2 py-2">Fecha</th>
+                <th className="w-[72px] border-r border-[#e1e7f0] px-2 py-2">Hora</th>
+                <th className="w-[140px] border-r border-[#e1e7f0] px-2 py-2">Liga</th>
+                <th className="w-[130px] border-r border-[#e1e7f0] px-2 py-2">ID feed</th>
+                <th className="w-[120px] border-r border-[#e1e7f0] px-2 py-2">ID BP</th>
+                <th className="w-[300px] border-r border-[#e1e7f0] px-2 py-2">Partido</th>
+                <th className="w-[190px] border-r border-[#e1e7f0] px-2 py-2">Responsable</th>
+                <th className="w-[80px] border-r border-[#e1e7f0] px-2 py-2">Pago</th>
+                <th className="w-[80px] border-r border-[#e1e7f0] px-2 py-2">Feed</th>
+                <th className="w-[130px] border-r border-[#e1e7f0] px-2 py-2">Gravedad</th>
+                <th className="w-[280px] border-r border-[#e1e7f0] px-2 py-2">Problema</th>
+                <th className="w-[130px] px-2 py-2">Actualizado</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sortedReports.map((report) => {
+                const selected = selectedReport?.id_feed === report.id_feed;
+                return (
+                  <tr
+                    key={report.id_feed}
+                    onClick={() => toggleReportDrawer(report.id_feed)}
+                    className={cn(
+                      "cursor-pointer border-b border-[#e6ebf2] odd:bg-white even:bg-[#fbfcfe] hover:bg-[#f3f7ff]",
+                      selected && "bg-[#fff1f4] outline outline-1 outline-[#f3b5c2]",
+                    )}
+                  >
+                    <td className="border-r border-[#e6ebf2] px-2 py-1.5 text-[#64748b]">{report.event_date}</td>
+                    <td className="border-r border-[#e6ebf2] px-2 py-1.5 text-[#64748b]">{report.event_time || "-"}</td>
+                    <td className="border-r border-[#e6ebf2] px-2 py-1.5">
+                      <span title={report.league} className="block truncate">{report.league}</span>
+                    </td>
+                    <td className="border-r border-[#e6ebf2] px-2 py-1.5 font-semibold text-[var(--accent)]">{report.id_feed}</td>
+                    <td className="border-r border-[#e6ebf2] px-2 py-1.5 font-semibold text-[#2563eb]">{report.id_bp}</td>
+                    <td className="border-r border-[#e6ebf2] px-2 py-1.5 font-semibold">
+                      <span title={report.match_label} className="block truncate">{report.match_label}</span>
+                    </td>
+                    <td className="border-r border-[#e6ebf2] px-2 py-1.5">
+                      <span title={report.responsible_name} className="block truncate">{report.responsible_name || "TBD"}</span>
+                    </td>
+                    <td className="border-r border-[#e6ebf2] px-2 py-1.5">{report.paid ? "Sí" : "No"}</td>
+                    <td className="border-r border-[#e6ebf2] px-2 py-1.5">{report.feed_detected ? "Sí" : "No"}</td>
+                    <td className="border-r border-[#e6ebf2] px-2 py-1.5">{report.severity}</td>
+                    <td className="border-r border-[#e6ebf2] px-2 py-1.5">
+                      <span title={report.problem} className="block truncate">{report.problem || "-"}</span>
+                    </td>
+                    <td className="px-2 py-1.5 text-[#64748b]">{report.updated_relative || "-"}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div className="p-8">
+          <EmptyState
+            title={
+              reports.length
+                ? "No encontramos reportes con esa búsqueda"
+                : "Todavía no hay reportes cargados"
+            }
+            description={
+              reports.length
+                ? "Prueba con otro ID, responsable o liga para volver al tablero completo de cierres."
+                : "Cuando el primer colaborador envíe su reporte desde Mi jornada, aparecerá aquí con su detalle operativo."
+            }
+          />
+        </div>
+      )}
+    </div>
+  );
+
+  const controlVisualWorkspaceContent = (
     <div className="flex min-w-0 flex-col gap-0">
       <section className="grid gap-4 pb-6 pt-5 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard
@@ -3515,6 +3594,14 @@ export function ReportsWorkspace({
         </SectionTableCard>
       </section>
     </div>
+  );
+
+  const controlWorkspaceContent = (
+    <PlainViewToggle
+      storageKey="basket-production.reports.control-view-mode"
+      visual={controlVisualWorkspaceContent}
+      plain={reportPlainWorkspaceContent}
+    />
   );
 
   const selectedReportDrawer = selectedReport ? (

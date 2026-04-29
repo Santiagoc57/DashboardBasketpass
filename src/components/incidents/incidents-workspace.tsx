@@ -46,6 +46,7 @@ import { MatchSummaryCell } from "@/components/shared/match-summary-cell";
 import { badgeBaseClassName } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PersonRoleStack } from "@/components/ui/person-role-stack";
+import { PlainViewToggle } from "@/components/ui/plain-view-toggle";
 import { SeverityBadge } from "@/components/ui/severity-badge";
 import { SectionTableCard } from "@/components/ui/section-table-card";
 import { UnderlineTabs } from "@/components/ui/underline-tabs";
@@ -1884,7 +1885,99 @@ export function IncidentsWorkspace({
     }, {} as Record<IncidentControlColumn, string>);
   }, [columnOrder, selectedIncident, isWideScreen]);
 
-  const workspaceContent = (
+  const incidentPlainWorkspaceContent = (
+    <div className="overflow-hidden border border-[#d8dee8] bg-[#fbfcfe]">
+      {filteredIncidents.length ? (
+        <div className="overflow-x-auto">
+          <table className="min-w-[1500px] border-collapse font-mono text-[12px] text-[#1f2937]">
+            <thead>
+              <tr className="border-b border-[#d8dee8] bg-[#f4f6f9] text-left text-[11px] font-bold uppercase tracking-[0.12em] text-[#64748b]">
+                <th className="w-[92px] border-r border-[#e1e7f0] px-2 py-2">Fecha</th>
+                <th className="w-[72px] border-r border-[#e1e7f0] px-2 py-2">Hora</th>
+                <th className="w-[140px] border-r border-[#e1e7f0] px-2 py-2">Liga</th>
+                <th className="w-[130px] border-r border-[#e1e7f0] px-2 py-2">ID</th>
+                <th className="w-[300px] border-r border-[#e1e7f0] px-2 py-2">Partido</th>
+                <th className="w-[180px] border-r border-[#e1e7f0] px-2 py-2">Operador</th>
+                <th className="w-[180px] border-r border-[#e1e7f0] px-2 py-2">Streamer</th>
+                <th className="w-[120px] border-r border-[#e1e7f0] px-2 py-2">Gravedad</th>
+                <th className="w-[280px] border-r border-[#e1e7f0] px-2 py-2">Problema principal</th>
+                <th className="w-[210px] border-r border-[#e1e7f0] px-2 py-2">Checks técnicos</th>
+                <th className="w-[130px] px-2 py-2">Actualizado</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sortedIncidents.map((incident) => {
+                const active = selectedIncident?.id === incident.id;
+                const mainProblem =
+                  incident.problems.find((problem) => problem.active)?.label ??
+                  incident.mainIssue ??
+                  "-";
+                const checks = [
+                  `Prueba: ${getBinaryIncidentCheckState(incident.testCheck).label}`,
+                  `Inicio: ${getBinaryIncidentCheckState(incident.startCheck).label}`,
+                  `Gráfica: ${getBinaryIncidentCheckState(incident.graphicsCheck).label}`,
+                ].join(" · ");
+
+                return (
+                  <tr
+                    key={incident.id}
+                    onClick={() => toggleIncidentDrawer(incident.id)}
+                    className={cn(
+                      "cursor-pointer border-b border-[#e6ebf2] odd:bg-white even:bg-[#fbfcfe] hover:bg-[#f3f7ff]",
+                      active && "bg-[#fff1f4] outline outline-1 outline-[#f3b5c2]",
+                    )}
+                  >
+                    <td className="border-r border-[#e6ebf2] px-2 py-1.5 text-[#64748b]">{incident.eventDate}</td>
+                    <td className="border-r border-[#e6ebf2] px-2 py-1.5 text-[#64748b]">{incident.eventTime || getIncidentTimeLabel(incident.updatedAt)}</td>
+                    <td className="border-r border-[#e6ebf2] px-2 py-1.5">
+                      <span title={getIncidentLeagueLabel(incident.competition)} className="block truncate">
+                        {getIncidentLeagueLabel(incident.competition)}
+                      </span>
+                    </td>
+                    <td className="border-r border-[#e6ebf2] px-2 py-1.5 font-semibold text-[var(--accent)]">{incident.id}</td>
+                    <td className="border-r border-[#e6ebf2] px-2 py-1.5 font-semibold">
+                      <span title={incident.matchLabel} className="block truncate">{incident.matchLabel}</span>
+                    </td>
+                    <td className="border-r border-[#e6ebf2] px-2 py-1.5">
+                      <span title={incident.operatorControl} className="block truncate">{incident.operatorControl || "TBD"}</span>
+                    </td>
+                    <td className="border-r border-[#e6ebf2] px-2 py-1.5">
+                      <span title={incident.streamer} className="block truncate">{incident.streamer || "TBD"}</span>
+                    </td>
+                    <td className="border-r border-[#e6ebf2] px-2 py-1.5">{incident.severity}</td>
+                    <td className="border-r border-[#e6ebf2] px-2 py-1.5">
+                      <span title={mainProblem} className="block truncate">{mainProblem}</span>
+                    </td>
+                    <td className="border-r border-[#e6ebf2] px-2 py-1.5">
+                      <span title={checks} className="block truncate">{checks}</span>
+                    </td>
+                    <td className="px-2 py-1.5 text-[#64748b]">{incident.updatedRelative}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div className="p-8">
+          <EmptyState
+            title={
+              incidents.length
+                ? "No encontramos incidencias con ese filtro"
+                : "Todavía no hay incidencias cargadas"
+            }
+            description={
+              incidents.length
+                ? "Prueba con otra liga o búsqueda para volver al tablero completo."
+                : "Cuando un colaborador reporte una incidencia desde Mi jornada, aparecerá aquí con su detalle técnico."
+            }
+          />
+        </div>
+      )}
+    </div>
+  );
+
+  const workspaceVisualContent = (
     <div className="flex min-w-0 flex-col gap-0">
       {embedded && !headerActionsPortal ? workspaceActions : null}
       <section
@@ -2061,6 +2154,14 @@ export function IncidentsWorkspace({
         </SectionTableCard>
       </div>
     </div>
+  );
+
+  const workspaceContent = (
+    <PlainViewToggle
+      storageKey="basket-production.incidents.view-mode"
+      visual={workspaceVisualContent}
+      plain={incidentPlainWorkspaceContent}
+    />
   );
 
   const selectedIncidentDrawer = selectedIncident ? (
