@@ -60,7 +60,7 @@ export function ProductionPlainWorkspace({
           setOpen(true);
         }}
         disabled={!matches.length}
-        className="panel-surface inline-flex size-[52px] items-center justify-center rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--surface)] text-[#607089] transition hover:text-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-50"
+        className="panel-surface inline-flex size-12 items-center justify-center rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--surface)] text-[#607089] transition hover:text-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-50"
         aria-label="Abrir planilla"
         title="Abrir planilla"
       >
