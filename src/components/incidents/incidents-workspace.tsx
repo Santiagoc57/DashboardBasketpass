@@ -16,6 +16,7 @@ import {
   AlertTriangle,
   ArrowUpDown,
   Building2,
+  CalendarDays,
   Check,
   CheckCircle2,
   CircleHelp,
@@ -48,6 +49,7 @@ import { badgeBaseClassName } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PersonRoleStack } from "@/components/ui/person-role-stack";
 import { PlainFullscreenWorkspace } from "@/components/ui/plain-fullscreen-workspace";
+import { SegmentedControl } from "@/components/ui/segmented-control";
 import { SeverityBadge } from "@/components/ui/severity-badge";
 import { SectionTableCard } from "@/components/ui/section-table-card";
 import { UnderlineTabs } from "@/components/ui/underline-tabs";
@@ -112,9 +114,40 @@ type IncidentControlColumn =
   | "streamer"
   | "issue"
   | "updated";
+type IncidentPeriodMode = "day" | "week" | "month";
 
 const INCIDENT_CONTROL_COLUMNS_STORAGE_KEY =
   "basket-production.incidents.control-columns";
+
+const MONTHS_ES = [
+  "enero",
+  "febrero",
+  "marzo",
+  "abril",
+  "mayo",
+  "junio",
+  "julio",
+  "agosto",
+  "septiembre",
+  "octubre",
+  "noviembre",
+  "diciembre",
+] as const;
+
+const MONTHS_ABBR_ES = [
+  "ENE",
+  "FEB",
+  "MAR",
+  "ABR",
+  "MAY",
+  "JUN",
+  "JUL",
+  "AGO",
+  "SEP",
+  "OCT",
+  "NOV",
+  "DIC",
+] as const;
 const DEFAULT_INCIDENT_CONTROL_COLUMNS: IncidentControlColumn[] = [
   "league",
   "id",
@@ -395,43 +428,51 @@ function parseIncidentEventDate(value: string) {
   }
 
   const [, day, monthLabel, year] = match;
-  const monthIndex = {
-    enero: 0,
-    febrero: 1,
-    marzo: 2,
-    abril: 3,
-    mayo: 4,
-    junio: 5,
-    julio: 6,
-    agosto: 7,
-    septiembre: 8,
-    octubre: 9,
-    noviembre: 10,
-    diciembre: 11,
-  }[monthLabel];
+  const monthIndex = MONTHS_ES.findIndex((month) => month === monthLabel);
 
-  return new Date(Number(year), monthIndex ?? 0, Number(day));
+  return new Date(Number(year), Math.max(monthIndex, 0), Number(day));
+}
+
+function getIncidentDateKey(date: Date) {
+  return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, "0"),
+    String(date.getDate()).padStart(2, "0"),
+  ].join("-");
+}
+
+function getIncidentMonthKey(date: Date) {
+  return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, "0"),
+  ].join("-");
+}
+
+function getIncidentWeekIndexInMonth(date: Date) {
+  return Math.floor((date.getDate() - 1) / 7) + 1;
+}
+
+function getIncidentWeekKey(date: Date) {
+  return `${getIncidentMonthKey(date)}-w${getIncidentWeekIndexInMonth(date)}`;
+}
+
+function getIncidentWeekLabelFromDate(date: Date) {
+  return `SEM ${getIncidentWeekIndexInMonth(date)} ${MONTHS_ABBR_ES[date.getMonth()]} ${String(
+    date.getFullYear(),
+  ).slice(-2)}`;
+}
+
+function getIncidentShortDayLabel(date: Date) {
+  return `${String(date.getDate()).padStart(2, "0")} ${MONTHS_ABBR_ES[date.getMonth()]} ${String(
+    date.getFullYear(),
+  ).slice(-2)}`;
 }
 
 function formatCompactIncidentDate(value: string) {
   const date = parseIncidentEventDate(value);
   const day = String(date.getDate()).padStart(2, "0");
-  const months = [
-    "ENE",
-    "FEB",
-    "MAR",
-    "ABR",
-    "MAY",
-    "JUN",
-    "JUL",
-    "AGO",
-    "SEP",
-    "OCT",
-    "NOV",
-    "DIC",
-  ] as const;
 
-  return `${day} ${months[date.getMonth()] ?? ""}`;
+  return `${day} ${MONTHS_ABBR_ES[date.getMonth()] ?? ""}`;
 }
 
 function splitIncidentMatchLabel(matchLabel: string) {
@@ -996,6 +1037,23 @@ export function IncidentsWorkspace({
     "details" | "activity" | "notes" | "images"
   >("details");
   const [query, setQuery] = useState(initialQuery);
+  const [leagueFilter, setLeagueFilter] = useState("Todas las ligas");
+  const latestIncidentDate = useMemo(() => {
+    return incidents.reduce((latest, incident) => {
+      const incidentDate = parseIncidentEventDate(incident.eventDate);
+      return incidentDate > latest ? incidentDate : latest;
+    }, parseIncidentEventDate(incidents[0]?.eventDate ?? "1 enero 2026"));
+  }, [incidents]);
+  const [periodMode, setPeriodMode] = useState<IncidentPeriodMode>("month");
+  const [selectedDayKey, setSelectedDayKey] = useState(() =>
+    getIncidentDateKey(latestIncidentDate),
+  );
+  const [selectedWeekKey, setSelectedWeekKey] = useState(() =>
+    getIncidentWeekKey(latestIncidentDate),
+  );
+  const [selectedMonthKey, setSelectedMonthKey] = useState(() =>
+    getIncidentMonthKey(latestIncidentDate),
+  );
   const [sortBy, setSortBy] = useState<IncidentSortKey>("severity");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [columnOrder, setColumnOrder] = useState<IncidentControlColumn[]>(() => {
@@ -1117,14 +1175,122 @@ export function IncidentsWorkspace({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [selectedId]);
 
+  const leagueOptions = useMemo(() => {
+    return [
+      "Todas las ligas",
+      ...new Set(incidents.map((incident) => getIncidentLeagueLabel(incident.competition))),
+    ];
+  }, [incidents]);
+
+  const dayOptions = useMemo(() => {
+    const options = new Map<string, string>();
+
+    incidents.forEach((incident) => {
+      const date = parseIncidentEventDate(incident.eventDate);
+      options.set(getIncidentDateKey(date), getIncidentShortDayLabel(date));
+    });
+
+    return Array.from(options.entries())
+      .map(([value, label]) => ({ value, label }))
+      .sort((left, right) => right.value.localeCompare(left.value));
+  }, [incidents]);
+
+  const weekOptions = useMemo(() => {
+    const options = new Map<string, { label: string; sortValue: number }>();
+
+    incidents.forEach((incident) => {
+      const date = parseIncidentEventDate(incident.eventDate);
+      options.set(getIncidentWeekKey(date), {
+        label: getIncidentWeekLabelFromDate(date),
+        sortValue: date.getTime(),
+      });
+    });
+
+    return Array.from(options.entries())
+      .map(([value, meta]) => ({
+        value,
+        label: meta.label,
+        sortValue: meta.sortValue,
+      }))
+      .sort((left, right) => right.sortValue - left.sortValue);
+  }, [incidents]);
+
+  const monthOptions = useMemo(() => {
+    const year = latestIncidentDate.getFullYear();
+
+    return MONTHS_ES.map((_, monthIndex) => ({
+      value: `${year}-${String(monthIndex + 1).padStart(2, "0")}`,
+      label: `${MONTHS_ABBR_ES[monthIndex]} ${String(year).slice(-2)}`,
+    }));
+  }, [latestIncidentDate]);
+
+  const activePeriodOptions =
+    periodMode === "day"
+      ? dayOptions
+      : periodMode === "week"
+        ? weekOptions
+        : monthOptions;
+  const activePeriodValue =
+    periodMode === "day"
+      ? selectedDayKey
+      : periodMode === "week"
+        ? selectedWeekKey
+        : selectedMonthKey;
+  const activeIncidentPeriodLabel =
+    activePeriodOptions.find((option) => option.value === activePeriodValue)
+      ?.label ?? plainPeriodLabel;
+
+  const baseFilteredIncidents = useMemo(() => {
+    return incidents.filter((incident) => {
+      const incidentDate = parseIncidentEventDate(incident.eventDate);
+
+      if (
+        leagueFilter !== "Todas las ligas" &&
+        getIncidentLeagueLabel(incident.competition) !== leagueFilter
+      ) {
+        return false;
+      }
+
+      if (
+        periodMode === "day" &&
+        getIncidentDateKey(incidentDate) !== selectedDayKey
+      ) {
+        return false;
+      }
+
+      if (
+        periodMode === "week" &&
+        getIncidentWeekKey(incidentDate) !== selectedWeekKey
+      ) {
+        return false;
+      }
+
+      if (
+        periodMode === "month" &&
+        getIncidentMonthKey(incidentDate) !== selectedMonthKey
+      ) {
+        return false;
+      }
+
+      return true;
+    });
+  }, [
+    incidents,
+    leagueFilter,
+    periodMode,
+    selectedDayKey,
+    selectedMonthKey,
+    selectedWeekKey,
+  ]);
+
   const filteredIncidents = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
 
     if (!normalizedQuery) {
-      return incidents;
+      return baseFilteredIncidents;
     }
 
-    return incidents.filter((incident) =>
+    return baseFilteredIncidents.filter((incident) =>
       [
         incident.id,
         incident.matchCode,
@@ -1138,7 +1304,7 @@ export function IncidentsWorkspace({
         .toLowerCase()
         .includes(normalizedQuery),
     );
-  }, [incidents, query]);
+  }, [baseFilteredIncidents, query]);
 
   const sortedIncidents = useMemo(() => {
     const nextItems = [...filteredIncidents];
@@ -1865,6 +2031,71 @@ export function IncidentsWorkspace({
       />
 
       <div className="flex shrink-0 items-center gap-3">
+        <div className="relative">
+          <select
+            value={leagueFilter}
+            onChange={(event) => setLeagueFilter(event.target.value)}
+            className="h-12 min-w-[176px] appearance-none rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--surface)] px-4 pr-9 text-sm font-bold text-[#617187] outline-none shadow-sm transition hover:bg-[#fafbfd]"
+          >
+            {leagueOptions.map((league) => (
+              <option key={league} value={league}>
+                {league}
+              </option>
+            ))}
+          </select>
+          <ChevronDown className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-[#94a3b8]" />
+        </div>
+        <SegmentedControl
+          items={[
+            {
+              key: "day",
+              label: "Día",
+              active: periodMode === "day",
+              onClick: () => setPeriodMode("day"),
+            },
+            {
+              key: "week",
+              label: "Semana",
+              active: periodMode === "week",
+              onClick: () => setPeriodMode("week"),
+            },
+            {
+              key: "month",
+              label: "Mes",
+              active: periodMode === "month",
+              onClick: () => setPeriodMode("month"),
+            },
+          ]}
+        />
+        <div className="relative">
+          <CalendarDays className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[var(--accent)]" />
+          <select
+            value={activePeriodValue}
+            onChange={(event) => {
+              const value = event.target.value;
+
+              if (periodMode === "day") {
+                setSelectedDayKey(value);
+                return;
+              }
+
+              if (periodMode === "week") {
+                setSelectedWeekKey(value);
+                return;
+              }
+
+              setSelectedMonthKey(value);
+            }}
+            className="h-12 appearance-none rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--surface)] pl-10 pr-10 text-sm font-bold text-[#617187] outline-none transition hover:bg-[#fafbfd]"
+          >
+            {activePeriodOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+          <ChevronDown className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-[#94a3b8]" />
+        </div>
         <SectionAiAssistant
           section="Incidencias"
           title="Consulta las incidencias visibles"
@@ -1885,7 +2116,7 @@ export function IncidentsWorkspace({
         <PlainFullscreenWorkspace
           eyebrow="Incidencias"
           title="Planilla de incidencias"
-          periodLabel={plainPeriodLabel}
+          periodLabel={activeIncidentPeriodLabel}
           countLabel={`${sortedIncidents.length} incidencias`}
           disabled={!sortedIncidents.length}
           canEdit={canManageEvidence}
