@@ -11,13 +11,12 @@ import {
   GridInsightsDockTrigger,
 } from "@/components/grid/grid-insights-dock";
 import { MatchCard } from "@/components/grid/match-card";
-import { ProductionPlainTable } from "@/components/grid/production-plain-table";
+import { ProductionPlainWorkspace } from "@/components/grid/production-plain-workspace";
 import { ProductionInsightsPanel } from "@/components/grid/production-insights-panel";
 import { SectionPageHeader } from "@/components/layout/section-page-header";
 import { SetupPanel } from "@/components/layout/setup-panel";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageMessage } from "@/components/ui/page-message";
-import { PlainViewToggle } from "@/components/ui/plain-view-toggle";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { ToolbarSearchField } from "@/components/ui/toolbar-search-field";
 import { SECTION_COPY } from "@/lib/copy";
@@ -377,17 +376,7 @@ export default async function GridPage({ searchParams }: PageProps) {
 
           <section className="min-w-0 space-y-6">
             {sortedDayGroups.length ? (
-              <PlainViewToggle
-                storageKey="basket-production.grid.view-mode"
-                plain={
-                  <ProductionPlainTable
-                    matches={visibleMatches}
-                    people={owners}
-                    canEdit={user.canEdit}
-                    redirectTo={redirectTo}
-                  />
-                }
-                visual={sortedDayGroups.map((group, groupIndex) => (
+              sortedDayGroups.map((group, groupIndex) => (
                 <div key={group.key} className="space-y-4">
                   <div className="flex flex-wrap items-center justify-between gap-4">
                     <div className="flex items-center gap-3">
@@ -434,6 +423,13 @@ export default async function GridPage({ searchParams }: PageProps) {
                             initialSummary={initialCalendarSummary}
                             baseSearchParams={baseSearchParams}
                           />
+                          <ProductionPlainWorkspace
+                            matches={visibleMatches}
+                            people={owners}
+                            canEdit={user.canEdit}
+                            redirectTo={redirectTo}
+                            periodLabel={summaryDateLabel}
+                          />
                           <GridInsightsDockTrigger />
                         </>
                       ) : null}
@@ -451,8 +447,7 @@ export default async function GridPage({ searchParams }: PageProps) {
                     ))}
                   </div>
                 </div>
-              ))}
-              />
+              ))
             ) : (
               <EmptyState
                 title={
