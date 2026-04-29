@@ -2175,8 +2175,12 @@ export function IncidentsWorkspace({
     const stopPropagation = (event: SyntheticEvent) => {
       event.stopPropagation();
     };
+    const centeredHeaderClassName =
+      "border-r border-[#e1e7f0] px-2 py-2 text-center";
+    const centeredCellClassName =
+      "border-r border-[#e6ebf2] px-2 py-1.5 text-center";
     const inputClassName =
-      "h-7 w-full rounded-none border border-[#94a3b8] bg-white px-1 font-mono text-[12px] text-[#1f2937] outline-none";
+      "h-7 w-full rounded-none border border-[#94a3b8] bg-white px-1 text-center font-mono text-[12px] text-[#1f2937] outline-none";
     const renderEditableText = (
       incident: IncidentRecord,
       value: string,
@@ -2251,24 +2255,24 @@ export function IncidentsWorkspace({
                 <th className="w-[270px] border-r border-[#e1e7f0] px-2 py-2">Observaciones Técnicas</th>
                 <th className="w-[260px] border-r border-[#e1e7f0] px-2 py-2">Observaciones Edilicias</th>
                 <th className="w-[260px] border-r border-[#e1e7f0] px-2 py-2">Observaciones Generales</th>
-                <th className="w-[70px] border-r border-[#e1e7f0] px-2 py-2">OTRO</th>
-                <th className="w-[70px] border-r border-[#e1e7f0] px-2 py-2">ST</th>
-                <th className="w-[80px] border-r border-[#e1e7f0] px-2 py-2">CLUB</th>
-                <th className="w-[120px] border-r border-[#e1e7f0] px-2 py-2">Speedtest</th>
-                <th className="w-[100px] border-r border-[#e1e7f0] px-2 py-2">PING</th>
-                <th className="w-[100px] border-r border-[#e1e7f0] px-2 py-2">GPU</th>
-                <th className="w-[120px] border-r border-[#e1e7f0] px-2 py-2">Hora Prueba</th>
-                <th className="w-[140px] border-r border-[#e1e7f0] px-2 py-2">Prueba</th>
-                <th className="w-[150px] border-r border-[#e1e7f0] px-2 py-2">Inicio</th>
-                <th className="w-[170px] border-r border-[#e1e7f0] px-2 py-2">Gráfica</th>
-                <th className="w-[140px] border-r border-[#e1e7f0] px-2 py-2">Problema Internet</th>
-                <th className="w-[120px] border-r border-[#e1e7f0] px-2 py-2">Problema FEED</th>
-                <th className="w-[80px] border-r border-[#e1e7f0] px-2 py-2">OCR</th>
-                <th className="w-[140px] border-r border-[#e1e7f0] px-2 py-2">Overlays (GES)</th>
-                <th className="w-[170px] border-r border-[#e1e7f0] px-2 py-2">Tipo de transmisión</th>
-                <th className="w-[150px] border-r border-[#e1e7f0] px-2 py-2">Envíos de señal</th>
-                <th className="w-[100px] border-r border-[#e1e7f0] px-2 py-2">Imágenes</th>
-                <th className="w-[110px] px-2 py-2">Apto Lineal</th>
+                <th className={`w-[70px] ${centeredHeaderClassName}`}>OTRO</th>
+                <th className={`w-[70px] ${centeredHeaderClassName}`}>ST</th>
+                <th className={`w-[80px] ${centeredHeaderClassName}`}>CLUB</th>
+                <th className={`w-[120px] ${centeredHeaderClassName}`}>Speedtest</th>
+                <th className={`w-[100px] ${centeredHeaderClassName}`}>PING</th>
+                <th className={`w-[100px] ${centeredHeaderClassName}`}>GPU</th>
+                <th className={`w-[120px] ${centeredHeaderClassName}`}>Hora Prueba</th>
+                <th className={`w-[140px] ${centeredHeaderClassName}`}>Prueba</th>
+                <th className={`w-[150px] ${centeredHeaderClassName}`}>Inicio</th>
+                <th className={`w-[170px] ${centeredHeaderClassName}`}>Gráfica</th>
+                <th className={`w-[140px] ${centeredHeaderClassName}`}>Problema Internet</th>
+                <th className={`w-[120px] ${centeredHeaderClassName}`}>Problema FEED</th>
+                <th className={`w-[80px] ${centeredHeaderClassName}`}>OCR</th>
+                <th className={`w-[140px] ${centeredHeaderClassName}`}>Overlays (GES)</th>
+                <th className={`w-[170px] ${centeredHeaderClassName}`}>Tipo de transmisión</th>
+                <th className={`w-[150px] ${centeredHeaderClassName}`}>Envíos de señal</th>
+                <th className={`w-[100px] ${centeredHeaderClassName}`}>Imágenes</th>
+                <th className="w-[110px] px-2 py-2 text-center">Apto Lineal</th>
               </tr>
             </thead>
             <tbody>
@@ -2354,44 +2358,44 @@ export function IncidentsWorkspace({
                         "generalObservations",
                       )}
                     </td>
-                    <td className="border-r border-[#e6ebf2] px-2 py-1.5">{isProblemActive("OTRO")}</td>
-                    <td className="border-r border-[#e6ebf2] px-2 py-1.5">{isProblemActive("ST")}</td>
-                    <td className="border-r border-[#e6ebf2] px-2 py-1.5">{isProblemActive("CLUB")}</td>
-                    <td className="border-r border-[#e6ebf2] px-2 py-1.5">{incident.speedtest}</td>
-                    <td className="border-r border-[#e6ebf2] px-2 py-1.5">{incident.ping}</td>
-                    <td className="border-r border-[#e6ebf2] px-2 py-1.5">{incident.gpuLoad}</td>
-                    <td className="border-r border-[#e6ebf2] px-2 py-1.5">
+                    <td className={centeredCellClassName}>{isProblemActive("OTRO")}</td>
+                    <td className={centeredCellClassName}>{isProblemActive("ST")}</td>
+                    <td className={centeredCellClassName}>{isProblemActive("CLUB")}</td>
+                    <td className={centeredCellClassName}>{incident.speedtest}</td>
+                    <td className={centeredCellClassName}>{incident.ping}</td>
+                    <td className={centeredCellClassName}>{incident.gpuLoad}</td>
+                    <td className={centeredCellClassName}>
                       {renderEditableText(incident, incident.testTime, "testTime")}
                     </td>
-                    <td className="border-r border-[#e6ebf2] px-2 py-1.5">
+                    <td className={centeredCellClassName}>
                       {renderEditableBoolean(
                         incident,
                         getBinaryIncidentCheckState(incident.testCheck).label === "Sí",
                         "testCheck",
                       )}
                     </td>
-                    <td className="border-r border-[#e6ebf2] px-2 py-1.5">
+                    <td className={centeredCellClassName}>
                       {renderEditableBoolean(
                         incident,
                         getBinaryIncidentCheckState(incident.startCheck).label === "Sí",
                         "startCheck",
                       )}
                     </td>
-                    <td className="border-r border-[#e6ebf2] px-2 py-1.5">
+                    <td className={centeredCellClassName}>
                       {renderEditableBoolean(
                         incident,
                         getBinaryIncidentCheckState(incident.graphicsCheck).label === "Sí",
                         "graphicsCheck",
                       )}
                     </td>
-                    <td className="border-r border-[#e6ebf2] px-2 py-1.5">{isProblemActive("Problema Internet")}</td>
-                    <td className="border-r border-[#e6ebf2] px-2 py-1.5">{isProblemActive("Problema IMG")}</td>
-                    <td className="border-r border-[#e6ebf2] px-2 py-1.5">{isProblemActive("OCR")}</td>
-                    <td className="border-r border-[#e6ebf2] px-2 py-1.5">{isProblemActive("Overlays (GES)")}</td>
-                    <td className="border-r border-[#e6ebf2] px-2 py-1.5">{incident.transmissionType}</td>
-                    <td className="border-r border-[#e6ebf2] px-2 py-1.5">{incident.signalDelivery}</td>
-                    <td className="border-r border-[#e6ebf2] px-2 py-1.5">{incident.venueImages?.length ?? 0}</td>
-                    <td className="px-2 py-1.5">
+                    <td className={centeredCellClassName}>{isProblemActive("Problema Internet")}</td>
+                    <td className={centeredCellClassName}>{isProblemActive("Problema IMG")}</td>
+                    <td className={centeredCellClassName}>{isProblemActive("OCR")}</td>
+                    <td className={centeredCellClassName}>{isProblemActive("Overlays (GES)")}</td>
+                    <td className={centeredCellClassName}>{incident.transmissionType}</td>
+                    <td className={centeredCellClassName}>{incident.signalDelivery}</td>
+                    <td className={centeredCellClassName}>{incident.venueImages?.length ?? 0}</td>
+                    <td className="px-2 py-1.5 text-center">
                       {renderEditableBoolean(incident, incident.aptoLineal, "aptoLineal")}
                     </td>
                   </tr>
