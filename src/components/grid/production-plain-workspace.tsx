@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Maximize2, X } from "lucide-react";
 
+import { useGridInsightsDock } from "@/components/grid/grid-insights-dock";
 import { ProductionPlainTable } from "@/components/grid/production-plain-table";
 import type { MatchListItem } from "@/lib/types";
 
@@ -25,6 +26,7 @@ export function ProductionPlainWorkspace({
   periodLabel,
 }: ProductionPlainWorkspaceProps) {
   const [open, setOpen] = useState(false);
+  const { close: closeInsightsDock } = useGridInsightsDock();
 
   useEffect(() => {
     if (!open) {
@@ -50,7 +52,10 @@ export function ProductionPlainWorkspace({
     <>
       <button
         type="button"
-        onClick={() => setOpen(true)}
+        onClick={() => {
+          closeInsightsDock();
+          setOpen(true);
+        }}
         disabled={!matches.length}
         className="inline-flex size-10 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--surface)] text-[#617187] shadow-[0_8px_18px_rgba(15,23,42,0.06)] transition hover:border-[rgba(230,18,56,0.24)] hover:text-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-50"
         aria-label="Abrir planilla"

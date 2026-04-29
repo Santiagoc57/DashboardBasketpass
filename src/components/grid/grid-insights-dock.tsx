@@ -17,7 +17,7 @@ type GridInsightsDockContextValue = {
 const GridInsightsDockContext =
   createContext<GridInsightsDockContextValue | null>(null);
 
-function useGridInsightsDockContext() {
+export function useGridInsightsDock() {
   const context = useContext(GridInsightsDockContext);
 
   if (!context) {
@@ -79,7 +79,7 @@ export function GridInsightsDockProvider({
 }
 
 export function GridInsightsDockTrigger() {
-  const { isOpen, toggle, isXlOnlyViewport } = useGridInsightsDockContext();
+  const { isOpen, toggle, isXlOnlyViewport } = useGridInsightsDock();
   const label = isOpen ? "Cerrar resumen de producción" : "Abrir resumen de producción";
 
   return (
@@ -106,7 +106,7 @@ export function GridInsightsDock({
 }: {
   children: ReactNode;
 }) {
-  const { isOpen, isXlOnlyViewport, close } = useGridInsightsDockContext();
+  const { isOpen, isXlOnlyViewport, close } = useGridInsightsDock();
 
   if (!isXlOnlyViewport) {
     return null;
