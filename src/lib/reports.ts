@@ -24,6 +24,7 @@ export type ReportRecord = {
   event_time: string;
   venue: string;
   responsible_name: string;
+  realizer_name?: string;
   paid: boolean;
   feed_detected: boolean;
   severity: ReportSeverity;

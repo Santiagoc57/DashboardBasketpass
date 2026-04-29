@@ -3,7 +3,7 @@
 import type React from "react";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { Maximize2, X } from "lucide-react";
+import { Maximize2, Pencil, X } from "lucide-react";
 
 type PlainFullscreenWorkspaceProps = {
   title: string;
@@ -11,7 +11,8 @@ type PlainFullscreenWorkspaceProps = {
   periodLabel: string;
   countLabel: string;
   disabled?: boolean;
-  children: React.ReactNode;
+  canEdit?: boolean;
+  children: React.ReactNode | ((state: { isEditing: boolean }) => React.ReactNode);
 };
 
 export function PlainFullscreenWorkspace({
@@ -20,9 +21,11 @@ export function PlainFullscreenWorkspace({
   periodLabel,
   countLabel,
   disabled,
+  canEdit = false,
   children,
 }: PlainFullscreenWorkspaceProps) {
   const [open, setOpen] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
 
   useEffect(() => {
     if (!open) {
@@ -31,6 +34,7 @@ export function PlainFullscreenWorkspace({
 
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
+        setIsEditing(false);
         setOpen(false);
       }
     }
@@ -72,9 +76,27 @@ export function PlainFullscreenWorkspace({
               <span className="hidden rounded-full border border-[#d8e0eb] bg-[#f8fafc] px-3 py-1.5 text-xs font-bold text-[#64748b] sm:inline-flex">
                 {periodLabel} · {countLabel}
               </span>
+              {canEdit ? (
+                <button
+                  type="button"
+                  onClick={() => setIsEditing((current) => !current)}
+                  className={`inline-flex h-10 items-center gap-2 rounded-[var(--panel-radius)] border px-3 text-xs font-black uppercase tracking-[0.14em] transition ${
+                    isEditing
+                      ? "border-[var(--accent)] bg-[#fff1f4] text-[var(--accent)]"
+                      : "border-[#d8e0eb] bg-white text-[#64748b] hover:border-[#f3b5c2] hover:text-[var(--accent)]"
+                  }`}
+                  aria-pressed={isEditing}
+                >
+                  <Pencil className="size-4" />
+                  Editar
+                </button>
+              ) : null}
               <button
                 type="button"
-                onClick={() => setOpen(false)}
+                onClick={() => {
+                  setIsEditing(false);
+                  setOpen(false);
+                }}
                 className="inline-flex size-10 items-center justify-center rounded-[var(--panel-radius)] border border-[#d8e0eb] bg-white text-[#64748b] hover:border-[#f3b5c2] hover:text-[var(--accent)]"
                 aria-label={`Cerrar ${title}`}
                 title={`Cerrar ${title}`}
@@ -83,7 +105,9 @@ export function PlainFullscreenWorkspace({
               </button>
             </div>
           </div>
-          <div className="min-h-0 flex-1 p-3">{children}</div>
+          <div className="min-h-0 flex-1 p-3">
+            {typeof children === "function" ? children({ isEditing }) : children}
+          </div>
         </div>,
         document.body,
       ) : null}

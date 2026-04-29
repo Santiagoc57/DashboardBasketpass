@@ -4,6 +4,8 @@ import { useRouter } from "next/navigation";
 import {
   type ChangeEvent,
   type DragEvent,
+  type MouseEvent as ReactMouseEvent,
+  type SyntheticEvent,
   useEffect,
   useMemo,
   useRef,
@@ -119,11 +121,25 @@ type ReportRankingColumn =
   | "critical"
   | "high"
   | "medium";
+type ReportPlanillaColumn =
+  | "date"
+  | "time"
+  | "league"
+  | "idFeed"
+  | "idBp"
+  | "match"
+  | "realizer"
+  | "paid"
+  | "feed"
+  | "severity"
+  | "technicalObservation";
 
 const REPORT_CONTROL_COLUMNS_STORAGE_KEY =
   "basket-production.reports.control-columns";
 const REPORT_RANKING_COLUMNS_STORAGE_KEY =
   "basket-production.reports.ranking-columns";
+const REPORT_PLANILLA_WIDTHS_STORAGE_KEY =
+  "basket-production.reports.planilla-widths";
 const REPORT_SUMMARY_AI_GUIDANCE = [
   "Si el usuario pide un análisis, informe, resumen ejecutivo, diagnóstico o recomendaciones, responde SIEMPRE con esta estructura y en este orden:",
   "1. Resumen ejecutivo.",
@@ -159,6 +175,24 @@ const DEFAULT_REPORT_RANKING_COLUMNS: ReportRankingColumn[] = [
   "high",
   "medium",
 ];
+const REPORT_PLANILLA_COLUMNS: Array<{
+  key: ReportPlanillaColumn;
+  label: string;
+  width: number;
+}> = [
+  { key: "date", label: "Fecha", width: 110 },
+  { key: "time", label: "Hora", width: 80 },
+  { key: "league", label: "Liga", width: 170 },
+  { key: "idFeed", label: "ID feed", width: 140 },
+  { key: "idBp", label: "ID BP", width: 130 },
+  { key: "match", label: "Partido", width: 300 },
+  { key: "realizer", label: "Realizador", width: 210 },
+  { key: "paid", label: "Pago", width: 90 },
+  { key: "feed", label: "Feed", width: 90 },
+  { key: "severity", label: "Gravedad", width: 130 },
+  { key: "technicalObservation", label: "Observaciones técnicas", width: 360 },
+];
+const REPORT_PLANILLA_MIN_COLUMN_WIDTH = 64;
 const REPORT_CONTROL_COLUMN_SORT_KEY: Partial<
   Record<ReportControlColumn, ReportSortKey>
 > = {
@@ -1118,6 +1152,53 @@ export function ReportsWorkspace({
   const [dragOverColumn, setDragOverColumn] = useState<ReportControlColumn | null>(
     null,
   );
+  const resizeStateRef = useRef<{
+    column: ReportPlanillaColumn;
+    startX: number;
+    startWidth: number;
+  } | null>(null);
+  const [resizingPlanillaColumn, setResizingPlanillaColumn] =
+    useState<ReportPlanillaColumn | null>(null);
+  const [reportPlanillaWidths, setReportPlanillaWidths] = useState<
+    Record<ReportPlanillaColumn, number>
+  >(() => {
+    const defaults = REPORT_PLANILLA_COLUMNS.reduce(
+      (accumulator, column) => {
+        accumulator[column.key] = column.width;
+        return accumulator;
+      },
+      {} as Record<ReportPlanillaColumn, number>,
+    );
+
+    if (typeof window === "undefined") {
+      return defaults;
+    }
+
+    try {
+      const parsed = JSON.parse(
+        window.localStorage.getItem(REPORT_PLANILLA_WIDTHS_STORAGE_KEY) ?? "null",
+      ) as Partial<Record<ReportPlanillaColumn, number>> | null;
+
+      if (!parsed) {
+        return defaults;
+      }
+
+      return REPORT_PLANILLA_COLUMNS.reduce(
+        (accumulator, column) => {
+          const width = parsed[column.key];
+          accumulator[column.key] =
+            typeof width === "number" && Number.isFinite(width)
+              ? Math.max(REPORT_PLANILLA_MIN_COLUMN_WIDTH, width)
+              : column.width;
+          return accumulator;
+        },
+        {} as Record<ReportPlanillaColumn, number>,
+      );
+    } catch {
+      window.localStorage.removeItem(REPORT_PLANILLA_WIDTHS_STORAGE_KEY);
+      return defaults;
+    }
+  });
   const [rankingColumnOrder, setRankingColumnOrder] = useState<
     ReportRankingColumn[]
   >(() => {
@@ -1367,6 +1448,57 @@ export function ReportsWorkspace({
       JSON.stringify(columnOrder),
     );
   }, [columnOrder]);
+
+  useEffect(() => {
+    window.localStorage.setItem(
+      REPORT_PLANILLA_WIDTHS_STORAGE_KEY,
+      JSON.stringify(reportPlanillaWidths),
+    );
+  }, [reportPlanillaWidths]);
+
+  useEffect(() => {
+    if (!resizingPlanillaColumn) {
+      return undefined;
+    }
+
+    function handleMouseMove(event: MouseEvent) {
+      const state = resizeStateRef.current;
+
+      if (!state) {
+        return;
+      }
+
+      const delta = event.clientX - state.startX;
+      const width = Math.max(
+        REPORT_PLANILLA_MIN_COLUMN_WIDTH,
+        state.startWidth + delta,
+      );
+
+      setReportPlanillaWidths((current) => ({
+        ...current,
+        [state.column]: width,
+      }));
+    }
+
+    function handleMouseUp() {
+      resizeStateRef.current = null;
+      setResizingPlanillaColumn(null);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    }
+
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+  }, [resizingPlanillaColumn]);
 
   useEffect(() => {
     setEditingReportId(null);
@@ -2919,6 +3051,181 @@ export function ReportsWorkspace({
     });
   }
 
+  function startReportPlanillaResize(
+    column: ReportPlanillaColumn,
+    event: ReactMouseEvent<HTMLButtonElement>,
+  ) {
+    event.preventDefault();
+    event.stopPropagation();
+    resizeStateRef.current = {
+      column,
+      startX: event.clientX,
+      startWidth: reportPlanillaWidths[column],
+    };
+    setResizingPlanillaColumn(column);
+  }
+
+  async function updateReportPlanillaField(
+    report: ReportRecord,
+    payload: {
+      paid?: boolean;
+      feedDetected?: boolean;
+      severity?: ReportSeverity;
+      technicalObservations?: string;
+    },
+  ) {
+    const response = await fetch("/api/collaborator-reports", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        reportId: report.sourceReportId,
+        ...payload,
+      }),
+    });
+
+    if (!response.ok) {
+      const body = (await response.json().catch(() => null)) as {
+        error?: string;
+      } | null;
+      throw new Error(body?.error ?? "No pudimos actualizar el reporte.");
+    }
+
+    router.refresh();
+  }
+
+  function renderReportPlanillaCell(
+    report: ReportRecord,
+    column: ReportPlanillaColumn,
+    isEditing: boolean,
+  ) {
+    const stopPropagation = (event: SyntheticEvent) => {
+      event.stopPropagation();
+    };
+    const baseInputClass =
+      "h-7 w-full rounded-none border border-[#94a3b8] bg-white px-1 font-mono text-[12px] text-[#1f2937] outline-none";
+
+    switch (column) {
+      case "date":
+        return report.event_date;
+      case "time":
+        return report.event_time || "-";
+      case "league":
+        return (
+          <span title={report.league} className="block truncate">
+            {report.league}
+          </span>
+        );
+      case "idFeed":
+        return (
+          <span className="font-semibold text-[var(--accent)]">
+            {report.id_feed}
+          </span>
+        );
+      case "idBp":
+        return <span className="font-semibold text-[#2563eb]">{report.id_bp}</span>;
+      case "match":
+        return (
+          <span title={report.match_label} className="block truncate font-semibold">
+            {report.match_label}
+          </span>
+        );
+      case "realizer":
+        return (
+          <span title={report.realizer_name ?? "Sin realizador"} className="block truncate">
+            {report.realizer_name ?? "Sin realizador"}
+          </span>
+        );
+      case "paid":
+        return isEditing ? (
+          <select
+            defaultValue={report.paid ? "si" : "no"}
+            onClick={stopPropagation}
+            onChange={(event) =>
+              void updateReportPlanillaField(report, {
+                paid: event.target.value === "si",
+              })
+            }
+            className={baseInputClass}
+          >
+            <option value="si">Sí</option>
+            <option value="no">No</option>
+          </select>
+        ) : report.paid ? (
+          "Sí"
+        ) : (
+          "No"
+        );
+      case "feed":
+        return isEditing ? (
+          <select
+            defaultValue={report.feed_detected ? "si" : "no"}
+            onClick={stopPropagation}
+            onChange={(event) =>
+              void updateReportPlanillaField(report, {
+                feedDetected: event.target.value === "si",
+              })
+            }
+            className={baseInputClass}
+          >
+            <option value="si">Sí</option>
+            <option value="no">No</option>
+          </select>
+        ) : report.feed_detected ? (
+          "Sí"
+        ) : (
+          "No"
+        );
+      case "severity":
+        return isEditing ? (
+          <select
+            defaultValue={report.severity}
+            onClick={stopPropagation}
+            onChange={(event) =>
+              void updateReportPlanillaField(report, {
+                severity: event.target.value as ReportSeverity,
+              })
+            }
+            className={baseInputClass}
+          >
+            {["Sin incidencia", "Baja", "Media", "Alta", "Crítica"].map((severity) => (
+              <option key={severity} value={severity}>
+                {severity}
+              </option>
+            ))}
+          </select>
+        ) : (
+          report.severity
+        );
+      case "technicalObservation":
+        return isEditing ? (
+          <input
+            defaultValue={report.technicalObservation}
+            onClick={stopPropagation}
+            onBlur={(event) =>
+              void updateReportPlanillaField(report, {
+                technicalObservations: event.target.value,
+              })
+            }
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.currentTarget.blur();
+              }
+            }}
+            className={baseInputClass}
+          />
+        ) : (
+          <span
+            title={report.technicalObservation || "-"}
+            className="block truncate"
+          >
+            {report.technicalObservation || "-"}
+          </span>
+        );
+      default:
+        return null;
+    }
+  }
+
   async function exportVisibleReports(sourceReports: ReportRecord[], format: "excel" | "pdf") {
     if (!sourceReports.length || isExporting) {
       return;
@@ -3344,25 +3651,43 @@ export function ReportsWorkspace({
     />
   );
 
-  const reportPlainWorkspaceContent = (
+  const renderReportPlainWorkspaceContent = (isEditing: boolean) => (
     <div className="h-full min-h-0 overflow-hidden border border-[#d8dee8] bg-[#fbfcfe]">
       {queryFilteredReports.length ? (
         <div className="h-full min-h-0 overflow-auto">
-          <table className="min-w-[1540px] border-collapse font-mono text-[12px] text-[#1f2937]">
+          <table
+            className="border-collapse font-mono text-[12px] text-[#1f2937]"
+            style={{
+              minWidth: `${REPORT_PLANILLA_COLUMNS.reduce(
+                (sum, column) => sum + reportPlanillaWidths[column.key],
+                0,
+              )}px`,
+            }}
+          >
+            <colgroup>
+              {REPORT_PLANILLA_COLUMNS.map((column) => (
+                <col
+                  key={column.key}
+                  style={{ width: `${reportPlanillaWidths[column.key]}px` }}
+                />
+              ))}
+            </colgroup>
             <thead className="sticky top-0 z-10">
               <tr className="border-b border-[#d8dee8] bg-[#f4f6f9] text-left text-[11px] font-bold uppercase tracking-[0.12em] text-[#64748b]">
-                <th className="w-[92px] border-r border-[#e1e7f0] px-2 py-2">Fecha</th>
-                <th className="w-[72px] border-r border-[#e1e7f0] px-2 py-2">Hora</th>
-                <th className="w-[140px] border-r border-[#e1e7f0] px-2 py-2">Liga</th>
-                <th className="w-[130px] border-r border-[#e1e7f0] px-2 py-2">ID feed</th>
-                <th className="w-[120px] border-r border-[#e1e7f0] px-2 py-2">ID BP</th>
-                <th className="w-[300px] border-r border-[#e1e7f0] px-2 py-2">Partido</th>
-                <th className="w-[190px] border-r border-[#e1e7f0] px-2 py-2">Responsable</th>
-                <th className="w-[80px] border-r border-[#e1e7f0] px-2 py-2">Pago</th>
-                <th className="w-[80px] border-r border-[#e1e7f0] px-2 py-2">Feed</th>
-                <th className="w-[130px] border-r border-[#e1e7f0] px-2 py-2">Gravedad</th>
-                <th className="w-[280px] border-r border-[#e1e7f0] px-2 py-2">Problema</th>
-                <th className="w-[130px] px-2 py-2">Actualizado</th>
+                {REPORT_PLANILLA_COLUMNS.map((column) => (
+                  <th
+                    key={column.key}
+                    className="relative border-r border-[#e1e7f0] px-2 py-2 last:border-r-0"
+                  >
+                    <span className="block truncate">{column.label}</span>
+                    <button
+                      type="button"
+                      onMouseDown={(event) => startReportPlanillaResize(column.key, event)}
+                      className="absolute right-0 top-0 h-full w-2 cursor-col-resize"
+                      aria-label={`Ajustar ancho de ${column.label}`}
+                    />
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
@@ -3377,26 +3702,14 @@ export function ReportsWorkspace({
                       selected && "bg-[#fff1f4] outline outline-1 outline-[#f3b5c2]",
                     )}
                   >
-                    <td className="border-r border-[#e6ebf2] px-2 py-1.5 text-[#64748b]">{report.event_date}</td>
-                    <td className="border-r border-[#e6ebf2] px-2 py-1.5 text-[#64748b]">{report.event_time || "-"}</td>
-                    <td className="border-r border-[#e6ebf2] px-2 py-1.5">
-                      <span title={report.league} className="block truncate">{report.league}</span>
-                    </td>
-                    <td className="border-r border-[#e6ebf2] px-2 py-1.5 font-semibold text-[var(--accent)]">{report.id_feed}</td>
-                    <td className="border-r border-[#e6ebf2] px-2 py-1.5 font-semibold text-[#2563eb]">{report.id_bp}</td>
-                    <td className="border-r border-[#e6ebf2] px-2 py-1.5 font-semibold">
-                      <span title={report.match_label} className="block truncate">{report.match_label}</span>
-                    </td>
-                    <td className="border-r border-[#e6ebf2] px-2 py-1.5">
-                      <span title={report.responsible_name} className="block truncate">{report.responsible_name || "TBD"}</span>
-                    </td>
-                    <td className="border-r border-[#e6ebf2] px-2 py-1.5">{report.paid ? "Sí" : "No"}</td>
-                    <td className="border-r border-[#e6ebf2] px-2 py-1.5">{report.feed_detected ? "Sí" : "No"}</td>
-                    <td className="border-r border-[#e6ebf2] px-2 py-1.5">{report.severity}</td>
-                    <td className="border-r border-[#e6ebf2] px-2 py-1.5">
-                      <span title={report.problem} className="block truncate">{report.problem || "-"}</span>
-                    </td>
-                    <td className="px-2 py-1.5 text-[#64748b]">{report.updated_relative || "-"}</td>
+                    {REPORT_PLANILLA_COLUMNS.map((column) => (
+                      <td
+                        key={column.key}
+                        className="border-r border-[#e6ebf2] px-2 py-1.5 last:border-r-0"
+                      >
+                        {renderReportPlanillaCell(report, column.key, isEditing)}
+                      </td>
+                    ))}
                   </tr>
                 );
               })}
@@ -3526,8 +3839,9 @@ export function ReportsWorkspace({
                 periodLabel={activePeriodLabel}
                 countLabel={`${sortedReports.length} reportes`}
                 disabled={!sortedReports.length}
+                canEdit={canManageEvidence}
               >
-                {reportPlainWorkspaceContent}
+                {({ isEditing }) => renderReportPlainWorkspaceContent(isEditing)}
               </PlainFullscreenWorkspace>
             </div>
           }

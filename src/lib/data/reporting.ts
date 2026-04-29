@@ -606,6 +606,11 @@ function buildReportRecord(params: {
       ? params.profileMap.get(params.report.reporter_profile_id)?.full_name
       : null) ??
     "Sin responsable";
+  const realizerName =
+    pickRoleAssignee(
+      params.matchAssignments,
+      (row) => normalizeName(row.role?.name) === "realizador",
+    ) ?? "Sin realizador";
 
   return {
     id_feed: buildFeedId(params.match, params.report.id),
@@ -624,6 +629,7 @@ function buildReportRecord(params: {
       : formatEventTime(params.report.submitted_at, timezone),
     venue: params.match?.venue?.trim() || "Sede sin confirmar",
     responsible_name: responsibleName,
+    realizer_name: realizerName,
     paid: params.report.paid,
     feed_detected: params.report.feed_detected,
     severity: mapReportSeverity(params.report.incident_level),

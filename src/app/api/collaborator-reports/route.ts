@@ -242,3 +242,147 @@ export async function POST(request: Request) {
     );
   }
 }
+
+const reportPatchSchema = z.object({
+  reportId: z.string().trim().min(1),
+  paid: z.boolean().optional(),
+  feedDetected: z.boolean().optional(),
+  severity: z.enum(["Sin incidencia", "Baja", "Media", "Alta", "Crítica"]).optional(),
+  technicalObservations: z.string().optional(),
+  buildingObservations: z.string().optional(),
+  generalObservations: z.string().optional(),
+  aptoLineal: z.boolean().optional(),
+  testTime: z.string().optional(),
+  testCheck: z.boolean().optional(),
+  startCheck: z.boolean().optional(),
+  graphicsCheck: z.boolean().optional(),
+});
+
+function mapSeverityToIncidentLevel(
+  severity: z.infer<typeof reportPatchSchema>["severity"],
+) {
+  switch (severity) {
+    case "Crítica":
+      return "critica";
+    case "Alta":
+      return "alta";
+    case "Media":
+    case "Baja":
+      return "baja";
+    case "Sin incidencia":
+      return "sin";
+    default:
+      return undefined;
+  }
+}
+
+export async function PATCH(request: Request) {
+  let payload: unknown;
+
+  try {
+    payload = await request.json();
+  } catch {
+    return NextResponse.json(
+      { error: "No pudimos leer el cambio enviado." },
+      { status: 400 },
+    );
+  }
+
+  const parsed = reportPatchSchema.safeParse(payload);
+
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: "El formato del cambio no es válido." },
+      { status: 400 },
+    );
+  }
+
+  try {
+    const user = await getUserContext();
+
+    if (!user.canEdit) {
+      return NextResponse.json(
+        { error: "No tienes permisos para editar reportes." },
+        { status: 403 },
+      );
+    }
+
+    const updatePayload: Record<string, unknown> = {};
+    const severity = mapSeverityToIncidentLevel(parsed.data.severity);
+
+    if (typeof parsed.data.paid === "boolean") {
+      updatePayload.paid = parsed.data.paid;
+    }
+
+    if (typeof parsed.data.feedDetected === "boolean") {
+      updatePayload.feed_detected = parsed.data.feedDetected;
+    }
+
+    if (severity) {
+      updatePayload.incident_level = severity;
+    }
+
+    if (typeof parsed.data.technicalObservations === "string") {
+      updatePayload.technical_observations =
+        parsed.data.technicalObservations.trim() || null;
+    }
+
+    if (typeof parsed.data.buildingObservations === "string") {
+      updatePayload.building_observations =
+        parsed.data.buildingObservations.trim() || null;
+    }
+
+    if (typeof parsed.data.generalObservations === "string") {
+      updatePayload.general_observations =
+        parsed.data.generalObservations.trim() || null;
+    }
+
+    if (typeof parsed.data.aptoLineal === "boolean") {
+      updatePayload.apto_lineal = parsed.data.aptoLineal;
+    }
+
+    if (typeof parsed.data.testTime === "string") {
+      updatePayload.test_time = parsed.data.testTime.trim() || null;
+    }
+
+    if (typeof parsed.data.testCheck === "boolean") {
+      updatePayload.test_check = parsed.data.testCheck;
+    }
+
+    if (typeof parsed.data.startCheck === "boolean") {
+      updatePayload.start_check = parsed.data.startCheck;
+    }
+
+    if (typeof parsed.data.graphicsCheck === "boolean") {
+      updatePayload.graphics_check = parsed.data.graphicsCheck;
+    }
+
+    if (!Object.keys(updatePayload).length) {
+      return NextResponse.json({ ok: true });
+    }
+
+    const supabase = await createSupabaseServerClient();
+    const result = await supabase
+      .from("collaborator_reports")
+      .update(updatePayload)
+      .eq("id", parsed.data.reportId)
+      .select("id")
+      .single();
+
+    if (result.error) {
+      throw result.error;
+    }
+
+    revalidatePath("/reports");
+    revalidatePath("/incidents");
+    revalidatePath("/grid");
+
+    return NextResponse.json({ ok: true, reportId: result.data.id });
+  } catch (error) {
+    await reportCollaboratorReportsFailure(error, "patch-report");
+    return NextResponse.json(
+      { error: ensureErrorMessage(error) },
+      { status: 500 },
+    );
+  }
+}

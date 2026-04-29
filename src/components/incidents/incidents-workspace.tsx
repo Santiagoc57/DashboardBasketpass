@@ -8,6 +8,7 @@ import {
   useState,
   useTransition,
   type ChangeEvent,
+  type SyntheticEvent,
 } from "react";
 import { useRouter } from "next/navigation";
 import { createPortal } from "react-dom";
@@ -1295,6 +1296,39 @@ export function IncidentsWorkspace({
     }));
   }
 
+  async function updateIncidentPlanillaField(
+    incident: IncidentRecord,
+    payload: {
+      severity?: string;
+      technicalObservations?: string;
+      buildingObservations?: string;
+      generalObservations?: string;
+      testTime?: string;
+      testCheck?: boolean;
+      startCheck?: boolean;
+      graphicsCheck?: boolean;
+      aptoLineal?: boolean;
+    },
+  ) {
+    const response = await fetch("/api/collaborator-reports", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        reportId: incident.sourceReportId,
+        ...payload,
+      }),
+    });
+
+    if (!response.ok) {
+      const body = (await response.json().catch(() => null)) as {
+        error?: string;
+      } | null;
+      throw new Error(body?.error ?? "No pudimos actualizar la incidencia.");
+    }
+
+    router.refresh();
+  }
+
   function openEvidencePreview(
     title: string,
     attachment: IncidentAttachment | null | undefined,
@@ -1854,8 +1888,9 @@ export function IncidentsWorkspace({
           periodLabel={plainPeriodLabel}
           countLabel={`${sortedIncidents.length} incidencias`}
           disabled={!sortedIncidents.length}
+          canEdit={canManageEvidence}
         >
-          {renderIncidentPlainWorkspaceContent()}
+          {({ isEditing }) => renderIncidentPlainWorkspaceContent(isEditing)}
         </PlainFullscreenWorkspace>
         <ToolbarIconButton
           type="button"
@@ -1896,39 +1931,116 @@ export function IncidentsWorkspace({
     }, {} as Record<IncidentControlColumn, string>);
   }, [columnOrder, selectedIncident, isWideScreen]);
 
-  function renderIncidentPlainWorkspaceContent() {
+  function renderIncidentPlainWorkspaceContent(isEditing: boolean) {
+    const stopPropagation = (event: SyntheticEvent) => {
+      event.stopPropagation();
+    };
+    const inputClassName =
+      "h-7 w-full rounded-none border border-[#94a3b8] bg-white px-1 font-mono text-[12px] text-[#1f2937] outline-none";
+    const renderEditableText = (
+      incident: IncidentRecord,
+      value: string,
+      payloadKey:
+        | "technicalObservations"
+        | "buildingObservations"
+        | "generalObservations"
+        | "testTime",
+    ) =>
+      isEditing ? (
+        <input
+          defaultValue={value}
+          onClick={stopPropagation}
+          onBlur={(event) =>
+            void updateIncidentPlanillaField(incident, {
+              [payloadKey]: event.target.value,
+            })
+          }
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.currentTarget.blur();
+            }
+          }}
+          className={inputClassName}
+        />
+      ) : (
+        <span title={value || "-"} className="block truncate">
+          {value || "-"}
+        </span>
+      );
+    const renderEditableBoolean = (
+      incident: IncidentRecord,
+      value: boolean,
+      payloadKey: "testCheck" | "startCheck" | "graphicsCheck" | "aptoLineal",
+    ) =>
+      isEditing ? (
+        <select
+          defaultValue={value ? "si" : "no"}
+          onClick={stopPropagation}
+          onChange={(event) =>
+            void updateIncidentPlanillaField(incident, {
+              [payloadKey]: event.target.value === "si",
+            })
+          }
+          className={inputClassName}
+        >
+          <option value="si">Sí</option>
+          <option value="no">No</option>
+        </select>
+      ) : value ? (
+        "Sí"
+      ) : (
+        "No"
+      );
+
     return (
       <div className="h-full min-h-0 overflow-hidden border border-[#d8dee8] bg-[#fbfcfe]">
       {filteredIncidents.length ? (
         <div className="h-full min-h-0 overflow-auto">
-          <table className="min-w-[1500px] border-collapse font-mono text-[12px] text-[#1f2937]">
+          <table className="min-w-[3300px] border-collapse font-mono text-[12px] text-[#1f2937]">
             <thead className="sticky top-0 z-10">
               <tr className="border-b border-[#d8dee8] bg-[#f4f6f9] text-left text-[11px] font-bold uppercase tracking-[0.12em] text-[#64748b]">
                 <th className="w-[92px] border-r border-[#e1e7f0] px-2 py-2">Fecha</th>
                 <th className="w-[72px] border-r border-[#e1e7f0] px-2 py-2">Hora</th>
                 <th className="w-[140px] border-r border-[#e1e7f0] px-2 py-2">Liga</th>
                 <th className="w-[130px] border-r border-[#e1e7f0] px-2 py-2">ID</th>
-                <th className="w-[300px] border-r border-[#e1e7f0] px-2 py-2">Partido</th>
-                <th className="w-[180px] border-r border-[#e1e7f0] px-2 py-2">Operador</th>
+                <th className="w-[210px] border-r border-[#e1e7f0] px-2 py-2">Local</th>
+                <th className="w-[210px] border-r border-[#e1e7f0] px-2 py-2">Visitante</th>
+                <th className="w-[190px] border-r border-[#e1e7f0] px-2 py-2">Operador Control</th>
                 <th className="w-[180px] border-r border-[#e1e7f0] px-2 py-2">Streamer</th>
                 <th className="w-[120px] border-r border-[#e1e7f0] px-2 py-2">Gravedad</th>
-                <th className="w-[280px] border-r border-[#e1e7f0] px-2 py-2">Problema principal</th>
-                <th className="w-[210px] border-r border-[#e1e7f0] px-2 py-2">Checks técnicos</th>
-                <th className="w-[130px] px-2 py-2">Actualizado</th>
+                <th className="w-[270px] border-r border-[#e1e7f0] px-2 py-2">Observaciones Técnicas</th>
+                <th className="w-[260px] border-r border-[#e1e7f0] px-2 py-2">Observaciones Edilicias</th>
+                <th className="w-[260px] border-r border-[#e1e7f0] px-2 py-2">Observaciones Generales</th>
+                <th className="w-[70px] border-r border-[#e1e7f0] px-2 py-2">OTRO</th>
+                <th className="w-[70px] border-r border-[#e1e7f0] px-2 py-2">ST</th>
+                <th className="w-[80px] border-r border-[#e1e7f0] px-2 py-2">CLUB</th>
+                <th className="w-[120px] border-r border-[#e1e7f0] px-2 py-2">Speedtest</th>
+                <th className="w-[100px] border-r border-[#e1e7f0] px-2 py-2">PING</th>
+                <th className="w-[100px] border-r border-[#e1e7f0] px-2 py-2">GPU</th>
+                <th className="w-[120px] border-r border-[#e1e7f0] px-2 py-2">Hora Prueba</th>
+                <th className="w-[140px] border-r border-[#e1e7f0] px-2 py-2">Prueba</th>
+                <th className="w-[150px] border-r border-[#e1e7f0] px-2 py-2">Inicio</th>
+                <th className="w-[170px] border-r border-[#e1e7f0] px-2 py-2">Gráfica</th>
+                <th className="w-[140px] border-r border-[#e1e7f0] px-2 py-2">Problema Internet</th>
+                <th className="w-[120px] border-r border-[#e1e7f0] px-2 py-2">Problema FEED</th>
+                <th className="w-[80px] border-r border-[#e1e7f0] px-2 py-2">OCR</th>
+                <th className="w-[140px] border-r border-[#e1e7f0] px-2 py-2">Overlays (GES)</th>
+                <th className="w-[170px] border-r border-[#e1e7f0] px-2 py-2">Tipo de transmisión</th>
+                <th className="w-[150px] border-r border-[#e1e7f0] px-2 py-2">Envíos de señal</th>
+                <th className="w-[100px] border-r border-[#e1e7f0] px-2 py-2">Imágenes</th>
+                <th className="w-[110px] px-2 py-2">Apto Lineal</th>
               </tr>
             </thead>
             <tbody>
               {sortedIncidents.map((incident) => {
                 const active = selectedIncident?.id === incident.id;
-                const mainProblem =
-                  incident.problems.find((problem) => problem.active)?.label ??
-                  incident.mainIssue ??
-                  "-";
-                const checks = [
-                  `Prueba: ${getBinaryIncidentCheckState(incident.testCheck).label}`,
-                  `Inicio: ${getBinaryIncidentCheckState(incident.startCheck).label}`,
-                  `Gráfica: ${getBinaryIncidentCheckState(incident.graphicsCheck).label}`,
-                ].join(" · ");
+                const teams = splitIncidentMatchLabel(incident.matchLabel);
+                const isProblemActive = (label: string) =>
+                  incident.problems.some(
+                    (problem) => problem.label === label && problem.active,
+                  )
+                    ? "Sí"
+                    : "No";
 
                 return (
                   <tr
@@ -1948,7 +2060,10 @@ export function IncidentsWorkspace({
                     </td>
                     <td className="border-r border-[#e6ebf2] px-2 py-1.5 font-semibold text-[var(--accent)]">{incident.id}</td>
                     <td className="border-r border-[#e6ebf2] px-2 py-1.5 font-semibold">
-                      <span title={incident.matchLabel} className="block truncate">{incident.matchLabel}</span>
+                      <span title={teams.homeTeam} className="block truncate">{teams.homeTeam}</span>
+                    </td>
+                    <td className="border-r border-[#e6ebf2] px-2 py-1.5">
+                      <span title={teams.awayTeam} className="block truncate">{teams.awayTeam}</span>
                     </td>
                     <td className="border-r border-[#e6ebf2] px-2 py-1.5">
                       <span title={incident.operatorControl} className="block truncate">{incident.operatorControl || "TBD"}</span>
@@ -1956,14 +2071,89 @@ export function IncidentsWorkspace({
                     <td className="border-r border-[#e6ebf2] px-2 py-1.5">
                       <span title={incident.streamer} className="block truncate">{incident.streamer || "TBD"}</span>
                     </td>
-                    <td className="border-r border-[#e6ebf2] px-2 py-1.5">{incident.severity}</td>
                     <td className="border-r border-[#e6ebf2] px-2 py-1.5">
-                      <span title={mainProblem} className="block truncate">{mainProblem}</span>
+                      {isEditing ? (
+                        <select
+                          defaultValue={incident.severity}
+                          onClick={stopPropagation}
+                          onChange={(event) =>
+                            void updateIncidentPlanillaField(incident, {
+                              severity: event.target.value,
+                            })
+                          }
+                          className={inputClassName}
+                        >
+                          {["Sin incidencia", "Baja", "Media", "Alta", "Crítica"].map((severity) => (
+                            <option key={severity} value={severity}>
+                              {severity}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        incident.severity
+                      )}
                     </td>
                     <td className="border-r border-[#e6ebf2] px-2 py-1.5">
-                      <span title={checks} className="block truncate">{checks}</span>
+                      {renderEditableText(
+                        incident,
+                        incident.technicalObservation,
+                        "technicalObservations",
+                      )}
                     </td>
-                    <td className="px-2 py-1.5 text-[#64748b]">{incident.updatedRelative}</td>
+                    <td className="border-r border-[#e6ebf2] px-2 py-1.5">
+                      {renderEditableText(
+                        incident,
+                        incident.buildingObservation,
+                        "buildingObservations",
+                      )}
+                    </td>
+                    <td className="border-r border-[#e6ebf2] px-2 py-1.5">
+                      {renderEditableText(
+                        incident,
+                        incident.generalObservation,
+                        "generalObservations",
+                      )}
+                    </td>
+                    <td className="border-r border-[#e6ebf2] px-2 py-1.5">{isProblemActive("OTRO")}</td>
+                    <td className="border-r border-[#e6ebf2] px-2 py-1.5">{isProblemActive("ST")}</td>
+                    <td className="border-r border-[#e6ebf2] px-2 py-1.5">{isProblemActive("CLUB")}</td>
+                    <td className="border-r border-[#e6ebf2] px-2 py-1.5">{incident.speedtest}</td>
+                    <td className="border-r border-[#e6ebf2] px-2 py-1.5">{incident.ping}</td>
+                    <td className="border-r border-[#e6ebf2] px-2 py-1.5">{incident.gpuLoad}</td>
+                    <td className="border-r border-[#e6ebf2] px-2 py-1.5">
+                      {renderEditableText(incident, incident.testTime, "testTime")}
+                    </td>
+                    <td className="border-r border-[#e6ebf2] px-2 py-1.5">
+                      {renderEditableBoolean(
+                        incident,
+                        getBinaryIncidentCheckState(incident.testCheck).label === "Sí",
+                        "testCheck",
+                      )}
+                    </td>
+                    <td className="border-r border-[#e6ebf2] px-2 py-1.5">
+                      {renderEditableBoolean(
+                        incident,
+                        getBinaryIncidentCheckState(incident.startCheck).label === "Sí",
+                        "startCheck",
+                      )}
+                    </td>
+                    <td className="border-r border-[#e6ebf2] px-2 py-1.5">
+                      {renderEditableBoolean(
+                        incident,
+                        getBinaryIncidentCheckState(incident.graphicsCheck).label === "Sí",
+                        "graphicsCheck",
+                      )}
+                    </td>
+                    <td className="border-r border-[#e6ebf2] px-2 py-1.5">{isProblemActive("Problema Internet")}</td>
+                    <td className="border-r border-[#e6ebf2] px-2 py-1.5">{isProblemActive("Problema IMG")}</td>
+                    <td className="border-r border-[#e6ebf2] px-2 py-1.5">{isProblemActive("OCR")}</td>
+                    <td className="border-r border-[#e6ebf2] px-2 py-1.5">{isProblemActive("Overlays (GES)")}</td>
+                    <td className="border-r border-[#e6ebf2] px-2 py-1.5">{incident.transmissionType}</td>
+                    <td className="border-r border-[#e6ebf2] px-2 py-1.5">{incident.signalDelivery}</td>
+                    <td className="border-r border-[#e6ebf2] px-2 py-1.5">{incident.venueImages?.length ?? 0}</td>
+                    <td className="px-2 py-1.5">
+                      {renderEditableBoolean(incident, incident.aptoLineal, "aptoLineal")}
+                    </td>
                   </tr>
                 );
               })}
