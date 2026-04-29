@@ -3683,7 +3683,7 @@ export function ReportsWorkspace({
                     <button
                       type="button"
                       onMouseDown={(event) => startReportPlanillaResize(column.key, event)}
-                      className="absolute right-0 top-0 h-full w-2 cursor-col-resize"
+                      className="absolute right-0 top-0 h-full w-2 cursor-col-resize border-r border-transparent hover:border-[#94a3b8]"
                       aria-label={`Ajustar ancho de ${column.label}`}
                     />
                   </th>

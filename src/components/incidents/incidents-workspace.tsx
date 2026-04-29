@@ -8,6 +8,7 @@ import {
   useState,
   useTransition,
   type ChangeEvent,
+  type MouseEvent as ReactMouseEvent,
   type SyntheticEvent,
 } from "react";
 import { useRouter } from "next/navigation";
@@ -114,9 +115,42 @@ type IncidentControlColumn =
   | "issue"
   | "updated";
 type IncidentPeriodMode = "day" | "week" | "month";
+type IncidentPlanillaColumn =
+  | "date"
+  | "time"
+  | "league"
+  | "id"
+  | "home"
+  | "away"
+  | "operator"
+  | "streamer"
+  | "severity"
+  | "technicalObservation"
+  | "buildingObservation"
+  | "generalObservation"
+  | "other"
+  | "st"
+  | "club"
+  | "speedtest"
+  | "ping"
+  | "gpu"
+  | "testTime"
+  | "test"
+  | "start"
+  | "graphics"
+  | "internetProblem"
+  | "feedProblem"
+  | "ocr"
+  | "overlays"
+  | "transmissionType"
+  | "signalDelivery"
+  | "images"
+  | "aptoLineal";
 
 const INCIDENT_CONTROL_COLUMNS_STORAGE_KEY =
   "basket-production.incidents.control-columns";
+const INCIDENT_PLANILLA_WIDTHS_STORAGE_KEY =
+  "basket-production.incidents.planilla-widths";
 
 const MONTHS_ES = [
   "enero",
@@ -207,6 +241,43 @@ const INCIDENT_CONTROL_COMPACT_COLUMN_WIDTH_WEIGHT: Record<
   issue: 0.8,
   updated: 0.75,
 };
+const INCIDENT_PLANILLA_COLUMNS: Array<{
+  key: IncidentPlanillaColumn;
+  label: string;
+  width: number;
+}> = [
+  { key: "date", label: "Fecha", width: 92 },
+  { key: "time", label: "Hora", width: 72 },
+  { key: "league", label: "Liga", width: 140 },
+  { key: "id", label: "ID", width: 130 },
+  { key: "home", label: "Local", width: 210 },
+  { key: "away", label: "Visitante", width: 210 },
+  { key: "operator", label: "Operador Control", width: 190 },
+  { key: "streamer", label: "Streamer", width: 180 },
+  { key: "severity", label: "Gravedad", width: 120 },
+  { key: "technicalObservation", label: "Observaciones Técnicas", width: 270 },
+  { key: "buildingObservation", label: "Observaciones Edilicias", width: 260 },
+  { key: "generalObservation", label: "Observaciones Generales", width: 260 },
+  { key: "other", label: "OTRO", width: 70 },
+  { key: "st", label: "ST", width: 70 },
+  { key: "club", label: "CLUB", width: 80 },
+  { key: "speedtest", label: "Speedtest", width: 120 },
+  { key: "ping", label: "PING", width: 100 },
+  { key: "gpu", label: "GPU", width: 100 },
+  { key: "testTime", label: "Hora Prueba", width: 120 },
+  { key: "test", label: "Prueba", width: 140 },
+  { key: "start", label: "Inicio", width: 150 },
+  { key: "graphics", label: "Gráfica", width: 170 },
+  { key: "internetProblem", label: "Problema Internet", width: 140 },
+  { key: "feedProblem", label: "Problema FEED", width: 120 },
+  { key: "ocr", label: "OCR", width: 80 },
+  { key: "overlays", label: "Overlays (GES)", width: 140 },
+  { key: "transmissionType", label: "Tipo de transmisión", width: 170 },
+  { key: "signalDelivery", label: "Envíos de señal", width: 150 },
+  { key: "images", label: "Imágenes", width: 100 },
+  { key: "aptoLineal", label: "Apto Lineal", width: 110 },
+];
+const INCIDENT_PLANILLA_MIN_COLUMN_WIDTH = 56;
 
 function formatIncidentExportDate(value: string) {
   const date = parseIncidentEventDate(value);
@@ -1078,6 +1149,54 @@ export function IncidentsWorkspace({
     useState<IncidentControlColumn | null>(null);
   const [dragOverColumn, setDragOverColumn] =
     useState<IncidentControlColumn | null>(null);
+  const planillaResizeStateRef = useRef<{
+    column: IncidentPlanillaColumn;
+    startX: number;
+    startWidth: number;
+  } | null>(null);
+  const [resizingPlanillaColumn, setResizingPlanillaColumn] =
+    useState<IncidentPlanillaColumn | null>(null);
+  const [incidentPlanillaWidths, setIncidentPlanillaWidths] = useState<
+    Record<IncidentPlanillaColumn, number>
+  >(() => {
+    const defaults = INCIDENT_PLANILLA_COLUMNS.reduce(
+      (accumulator, column) => {
+        accumulator[column.key] = column.width;
+        return accumulator;
+      },
+      {} as Record<IncidentPlanillaColumn, number>,
+    );
+
+    if (typeof window === "undefined") {
+      return defaults;
+    }
+
+    try {
+      const parsed = JSON.parse(
+        window.localStorage.getItem(INCIDENT_PLANILLA_WIDTHS_STORAGE_KEY) ??
+          "null",
+      ) as Partial<Record<IncidentPlanillaColumn, number>> | null;
+
+      if (!parsed) {
+        return defaults;
+      }
+
+      return INCIDENT_PLANILLA_COLUMNS.reduce(
+        (accumulator, column) => {
+          const width = parsed[column.key];
+          accumulator[column.key] =
+            typeof width === "number" && Number.isFinite(width)
+              ? Math.max(INCIDENT_PLANILLA_MIN_COLUMN_WIDTH, width)
+              : column.width;
+          return accumulator;
+        },
+        {} as Record<IncidentPlanillaColumn, number>,
+      );
+    } catch {
+      window.localStorage.removeItem(INCIDENT_PLANILLA_WIDTHS_STORAGE_KEY);
+      return defaults;
+    }
+  });
   const [isExporting, setIsExporting] = useState(false);
   const [evidenceByIncident, setEvidenceByIncident] = useState<
     Record<string, IncidentEvidenceState>
@@ -1100,6 +1219,20 @@ export function IncidentsWorkspace({
 
     setSortBy(nextSortBy);
     setSortDirection(nextSortBy === "severity" || nextSortBy === "updated" ? "desc" : "asc");
+  }
+
+  function startIncidentPlanillaResize(
+    column: IncidentPlanillaColumn,
+    event: ReactMouseEvent<HTMLButtonElement>,
+  ) {
+    event.preventDefault();
+    event.stopPropagation();
+    planillaResizeStateRef.current = {
+      column,
+      startX: event.clientX,
+      startWidth: incidentPlanillaWidths[column],
+    };
+    setResizingPlanillaColumn(column);
   }
 
   function handleColumnDragStart(column: IncidentControlColumn) {
@@ -1149,6 +1282,57 @@ export function IncidentsWorkspace({
       JSON.stringify(columnOrder),
     );
   }, [columnOrder]);
+
+  useEffect(() => {
+    window.localStorage.setItem(
+      INCIDENT_PLANILLA_WIDTHS_STORAGE_KEY,
+      JSON.stringify(incidentPlanillaWidths),
+    );
+  }, [incidentPlanillaWidths]);
+
+  useEffect(() => {
+    if (!resizingPlanillaColumn) {
+      return undefined;
+    }
+
+    function handleMouseMove(event: MouseEvent) {
+      const state = planillaResizeStateRef.current;
+
+      if (!state) {
+        return;
+      }
+
+      const delta = event.clientX - state.startX;
+      const width = Math.max(
+        INCIDENT_PLANILLA_MIN_COLUMN_WIDTH,
+        state.startWidth + delta,
+      );
+
+      setIncidentPlanillaWidths((current) => ({
+        ...current,
+        [state.column]: width,
+      }));
+    }
+
+    function handleMouseUp() {
+      planillaResizeStateRef.current = null;
+      setResizingPlanillaColumn(null);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    }
+
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+  }, [resizingPlanillaColumn]);
 
   useEffect(() => {
     setEvidencePreview(null);
@@ -2240,39 +2424,41 @@ export function IncidentsWorkspace({
       <div className="h-full min-h-0 overflow-hidden border border-[#d8dee8] bg-[#fbfcfe]">
       {filteredIncidents.length ? (
         <div className="h-full min-h-0 overflow-auto">
-          <table className="min-w-[3300px] border-collapse font-mono text-[12px] text-[#1f2937]">
+          <table
+            className="border-collapse font-mono text-[12px] text-[#1f2937]"
+            style={{
+              minWidth: `${INCIDENT_PLANILLA_COLUMNS.reduce(
+                (sum, column) => sum + incidentPlanillaWidths[column.key],
+                0,
+              )}px`,
+            }}
+          >
+            <colgroup>
+              {INCIDENT_PLANILLA_COLUMNS.map((column) => (
+                <col
+                  key={column.key}
+                  style={{ width: `${incidentPlanillaWidths[column.key]}px` }}
+                />
+              ))}
+            </colgroup>
             <thead className="sticky top-0 z-10">
               <tr className="border-b border-[#d8dee8] bg-[#f4f6f9] text-[11px] font-bold uppercase tracking-[0.12em] text-[#64748b]">
-                <th className={`w-[92px] ${centeredHeaderClassName}`}>Fecha</th>
-                <th className={`w-[72px] ${centeredHeaderClassName}`}>Hora</th>
-                <th className={`w-[140px] ${centeredHeaderClassName}`}>Liga</th>
-                <th className={`w-[130px] ${centeredHeaderClassName}`}>ID</th>
-                <th className={`w-[210px] ${centeredHeaderClassName}`}>Local</th>
-                <th className={`w-[210px] ${centeredHeaderClassName}`}>Visitante</th>
-                <th className={`w-[190px] ${centeredHeaderClassName}`}>Operador Control</th>
-                <th className={`w-[180px] ${centeredHeaderClassName}`}>Streamer</th>
-                <th className={`w-[120px] ${centeredHeaderClassName}`}>Gravedad</th>
-                <th className={`w-[270px] ${centeredHeaderClassName}`}>Observaciones Técnicas</th>
-                <th className={`w-[260px] ${centeredHeaderClassName}`}>Observaciones Edilicias</th>
-                <th className={`w-[260px] ${centeredHeaderClassName}`}>Observaciones Generales</th>
-                <th className={`w-[70px] ${centeredHeaderClassName}`}>OTRO</th>
-                <th className={`w-[70px] ${centeredHeaderClassName}`}>ST</th>
-                <th className={`w-[80px] ${centeredHeaderClassName}`}>CLUB</th>
-                <th className={`w-[120px] ${centeredHeaderClassName}`}>Speedtest</th>
-                <th className={`w-[100px] ${centeredHeaderClassName}`}>PING</th>
-                <th className={`w-[100px] ${centeredHeaderClassName}`}>GPU</th>
-                <th className={`w-[120px] ${centeredHeaderClassName}`}>Hora Prueba</th>
-                <th className={`w-[140px] ${centeredHeaderClassName}`}>Prueba</th>
-                <th className={`w-[150px] ${centeredHeaderClassName}`}>Inicio</th>
-                <th className={`w-[170px] ${centeredHeaderClassName}`}>Gráfica</th>
-                <th className={`w-[140px] ${centeredHeaderClassName}`}>Problema Internet</th>
-                <th className={`w-[120px] ${centeredHeaderClassName}`}>Problema FEED</th>
-                <th className={`w-[80px] ${centeredHeaderClassName}`}>OCR</th>
-                <th className={`w-[140px] ${centeredHeaderClassName}`}>Overlays (GES)</th>
-                <th className={`w-[170px] ${centeredHeaderClassName}`}>Tipo de transmisión</th>
-                <th className={`w-[150px] ${centeredHeaderClassName}`}>Envíos de señal</th>
-                <th className={`w-[100px] ${centeredHeaderClassName}`}>Imágenes</th>
-                <th className="w-[110px] px-2 py-2 text-center">Apto Lineal</th>
+                {INCIDENT_PLANILLA_COLUMNS.map((column) => (
+                  <th
+                    key={column.key}
+                    className={`relative ${centeredHeaderClassName} last:border-r-0`}
+                  >
+                    <span className="block truncate">{column.label}</span>
+                    <button
+                      type="button"
+                      onMouseDown={(event) =>
+                        startIncidentPlanillaResize(column.key, event)
+                      }
+                      className="absolute right-0 top-0 h-full w-2 cursor-col-resize border-r border-transparent hover:border-[#94a3b8]"
+                      aria-label={`Ajustar ancho de ${column.label}`}
+                    />
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
