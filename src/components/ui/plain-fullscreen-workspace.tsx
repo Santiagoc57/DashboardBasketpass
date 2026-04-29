@@ -12,6 +12,7 @@ type PlainFullscreenWorkspaceProps = {
   countLabel: string;
   disabled?: boolean;
   canEdit?: boolean;
+  triggerClassName?: string;
   children: React.ReactNode | ((state: { isEditing: boolean }) => React.ReactNode);
 };
 
@@ -22,6 +23,7 @@ export function PlainFullscreenWorkspace({
   countLabel,
   disabled,
   canEdit = false,
+  triggerClassName = "size-12",
   children,
 }: PlainFullscreenWorkspaceProps) {
   const [open, setOpen] = useState(false);
@@ -54,7 +56,7 @@ export function PlainFullscreenWorkspace({
         type="button"
         onClick={() => setOpen(true)}
         disabled={disabled}
-        className="panel-surface inline-flex size-12 items-center justify-center rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--surface)] text-[#607089] transition hover:text-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-50"
+        className={`panel-surface inline-flex shrink-0 items-center justify-center rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--surface)] p-0 text-[#607089] transition hover:text-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-50 ${triggerClassName}`}
         aria-label={`Abrir ${title}`}
         title={`Abrir ${title}`}
       >

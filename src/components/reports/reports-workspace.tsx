@@ -3840,6 +3840,7 @@ export function ReportsWorkspace({
                 countLabel={`${sortedReports.length} reportes`}
                 disabled={!sortedReports.length}
                 canEdit={canManageEvidence}
+                triggerClassName="size-10"
               >
                 {({ isEditing }) => renderReportPlainWorkspaceContent(isEditing)}
               </PlainFullscreenWorkspace>
