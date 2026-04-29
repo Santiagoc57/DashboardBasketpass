@@ -50,11 +50,11 @@ export function PlainFullscreenWorkspace({
         type="button"
         onClick={() => setOpen(true)}
         disabled={disabled}
-        className="inline-flex size-10 items-center justify-center rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--surface)] text-[#617187] shadow-sm transition hover:border-[rgba(230,18,56,0.24)] hover:text-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-50"
+        className="panel-surface inline-flex size-[52px] items-center justify-center rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--surface)] text-[#607089] transition hover:text-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-50"
         aria-label={`Abrir ${title}`}
         title={`Abrir ${title}`}
       >
-        <Maximize2 className="size-4" />
+        <Maximize2 className="size-5" />
       </button>
 
       {open && typeof document !== "undefined" ? createPortal(
