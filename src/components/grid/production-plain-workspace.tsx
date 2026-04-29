@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Maximize2, Table2, X } from "lucide-react";
+import { Maximize2, X } from "lucide-react";
 
 import { ProductionPlainTable } from "@/components/grid/production-plain-table";
 import type { MatchListItem } from "@/lib/types";
@@ -52,11 +52,11 @@ export function ProductionPlainWorkspace({
         type="button"
         onClick={() => setOpen(true)}
         disabled={!matches.length}
-        className="inline-flex h-10 items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface)] px-4 text-sm font-bold text-[#617187] shadow-[0_8px_18px_rgba(15,23,42,0.06)] transition hover:border-[rgba(230,18,56,0.24)] hover:text-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-50"
+        className="inline-flex size-10 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--surface)] text-[#617187] shadow-[0_8px_18px_rgba(15,23,42,0.06)] transition hover:border-[rgba(230,18,56,0.24)] hover:text-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-50"
+        aria-label="Abrir planilla"
+        title="Abrir planilla"
       >
-        <Table2 className="size-4" />
-        Planilla
-        <Maximize2 className="size-3.5 text-[#94a3b8]" />
+        <Maximize2 className="size-4" />
       </button>
 
       {open ? (
