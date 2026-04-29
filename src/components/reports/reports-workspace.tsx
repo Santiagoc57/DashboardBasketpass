@@ -3925,7 +3925,7 @@ export function ReportsWorkspace({
 
   const selectedReportDrawer = selectedReport ? (
     <aside className="min-w-0 self-start 2xl:sticky 2xl:top-24">
-      <div className="panel-surface fixed inset-x-2 bottom-2 top-2 z-40 flex flex-col overflow-hidden border border-[var(--border)] bg-[var(--surface)] shadow-[0_28px_70px_rgba(15,23,42,0.18)] transition md:left-auto md:right-2 md:w-[25rem] md:max-w-[calc(100vw-1rem)] 2xl:static 2xl:h-[calc(100vh-8rem)] 2xl:w-full 2xl:shadow-none">
+      <div className="panel-surface fixed inset-x-2 bottom-2 top-2 z-40 flex flex-col overflow-hidden border border-[var(--border)] bg-[var(--surface)] shadow-[0_28px_70px_rgba(15,23,42,0.18)] transition md:left-auto md:right-2 md:w-[25rem] md:max-w-[calc(100vw-1rem)] 2xl:static 2xl:h-[calc(100vh-6rem)] 2xl:w-full 2xl:shadow-none">
         <div className="border-b border-[var(--border)] p-5">
           <div className="mb-4 flex items-center justify-between gap-4">
             <div className="flex flex-wrap items-center gap-2">
