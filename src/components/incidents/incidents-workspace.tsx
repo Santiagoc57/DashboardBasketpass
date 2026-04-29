@@ -45,7 +45,6 @@ import { SectionAiAssistant } from "@/components/ai/section-ai-assistant";
 import { LeagueLogoMarkClient } from "@/components/league-logo-mark-client";
 import { SectionPageHeader } from "@/components/layout/section-page-header";
 import { MatchSummaryCell } from "@/components/shared/match-summary-cell";
-import { badgeBaseClassName } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PersonRoleStack } from "@/components/ui/person-role-stack";
 import { PlainFullscreenWorkspace } from "@/components/ui/plain-fullscreen-workspace";
@@ -2031,71 +2030,6 @@ export function IncidentsWorkspace({
       />
 
       <div className="flex shrink-0 items-center gap-3">
-        <div className="relative">
-          <select
-            value={leagueFilter}
-            onChange={(event) => setLeagueFilter(event.target.value)}
-            className="h-12 min-w-[176px] appearance-none rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--surface)] px-4 pr-9 text-sm font-bold text-[#617187] outline-none shadow-sm transition hover:bg-[#fafbfd]"
-          >
-            {leagueOptions.map((league) => (
-              <option key={league} value={league}>
-                {league}
-              </option>
-            ))}
-          </select>
-          <ChevronDown className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-[#94a3b8]" />
-        </div>
-        <SegmentedControl
-          items={[
-            {
-              key: "day",
-              label: "Día",
-              active: periodMode === "day",
-              onClick: () => setPeriodMode("day"),
-            },
-            {
-              key: "week",
-              label: "Semana",
-              active: periodMode === "week",
-              onClick: () => setPeriodMode("week"),
-            },
-            {
-              key: "month",
-              label: "Mes",
-              active: periodMode === "month",
-              onClick: () => setPeriodMode("month"),
-            },
-          ]}
-        />
-        <div className="relative">
-          <CalendarDays className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[var(--accent)]" />
-          <select
-            value={activePeriodValue}
-            onChange={(event) => {
-              const value = event.target.value;
-
-              if (periodMode === "day") {
-                setSelectedDayKey(value);
-                return;
-              }
-
-              if (periodMode === "week") {
-                setSelectedWeekKey(value);
-                return;
-              }
-
-              setSelectedMonthKey(value);
-            }}
-            className="h-12 appearance-none rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--surface)] pl-10 pr-10 text-sm font-bold text-[#617187] outline-none transition hover:bg-[#fafbfd]"
-          >
-            {activePeriodOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-          <ChevronDown className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-[#94a3b8]" />
-        </div>
         <SectionAiAssistant
           section="Incidencias"
           title="Consulta las incidencias visibles"
@@ -2113,16 +2047,6 @@ export function IncidentsWorkspace({
           hasGeminiKey={hasGeminiKey}
           buttonVariant="icon"
         />
-        <PlainFullscreenWorkspace
-          eyebrow="Incidencias"
-          title="Planilla de incidencias"
-          periodLabel={activeIncidentPeriodLabel}
-          countLabel={`${sortedIncidents.length} incidencias`}
-          disabled={!sortedIncidents.length}
-          canEdit={canManageEvidence}
-        >
-          {({ isEditing }) => renderIncidentPlainWorkspaceContent(isEditing)}
-        </PlainFullscreenWorkspace>
         <ToolbarIconButton
           type="button"
           onClick={() => void exportVisibleIncidents(sortedIncidents)}
@@ -2133,6 +2057,91 @@ export function IncidentsWorkspace({
           <Download className="size-4" />
         </ToolbarIconButton>
       </div>
+    </div>
+  );
+
+  const incidentTableControls = (
+    <div className="flex flex-wrap items-center justify-end gap-3">
+      <div className="relative">
+        <select
+          value={leagueFilter}
+          onChange={(event) => setLeagueFilter(event.target.value)}
+          className="h-10 min-w-[176px] appearance-none rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--surface)] px-4 pr-9 text-sm font-bold text-[#617187] outline-none shadow-sm transition hover:bg-[#fafbfd]"
+        >
+          {leagueOptions.map((league) => (
+            <option key={league} value={league}>
+              {league}
+            </option>
+          ))}
+        </select>
+        <ChevronDown className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-[#94a3b8]" />
+      </div>
+
+      <SegmentedControl
+        size="sm"
+        items={[
+          {
+            key: "day",
+            label: "Día",
+            active: periodMode === "day",
+            onClick: () => setPeriodMode("day"),
+          },
+          {
+            key: "week",
+            label: "Semana",
+            active: periodMode === "week",
+            onClick: () => setPeriodMode("week"),
+          },
+          {
+            key: "month",
+            label: "Mes",
+            active: periodMode === "month",
+            onClick: () => setPeriodMode("month"),
+          },
+        ]}
+      />
+
+      <div className="relative">
+        <CalendarDays className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[var(--accent)]" />
+        <select
+          value={activePeriodValue}
+          onChange={(event) => {
+            const value = event.target.value;
+
+            if (periodMode === "day") {
+              setSelectedDayKey(value);
+              return;
+            }
+
+            if (periodMode === "week") {
+              setSelectedWeekKey(value);
+              return;
+            }
+
+            setSelectedMonthKey(value);
+          }}
+          className="h-10 appearance-none rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--surface)] pl-10 pr-10 text-sm font-bold text-[#617187] outline-none transition hover:bg-[#fafbfd]"
+        >
+          {activePeriodOptions.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+        <ChevronDown className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-[#94a3b8]" />
+      </div>
+
+      <PlainFullscreenWorkspace
+        eyebrow="Incidencias"
+        title="Planilla de incidencias"
+        periodLabel={activeIncidentPeriodLabel}
+        countLabel={`${sortedIncidents.length} incidencias`}
+        disabled={!sortedIncidents.length}
+        canEdit={canManageEvidence}
+        triggerClassName="size-10"
+      >
+        {({ isEditing }) => renderIncidentPlainWorkspaceContent(isEditing)}
+      </PlainFullscreenWorkspace>
     </div>
   );
   const headerActionsPortal =
@@ -2513,9 +2522,7 @@ export function IncidentsWorkspace({
           title="Control de Incidencias"
           icon={AlertTriangle}
           badge={
-            <span className={`${badgeBaseClassName} bg-[var(--background-soft)] text-[#617187]`}>
-              {filteredIncidents.length} visibles
-            </span>
+            incidentTableControls
           }
           footer={
             <>
