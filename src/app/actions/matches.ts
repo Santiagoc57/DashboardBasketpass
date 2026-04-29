@@ -616,6 +616,15 @@ export async function quickUpdateMatchFlatFieldAction(formData: FormData) {
       case "productionMode":
         payload.production_mode = assertProductionMode(rawValue);
         break;
+      case "commentaryPlan":
+        payload.commentary_plan = maybeNull(rawValue);
+        break;
+      case "transport":
+        payload.transport = maybeNull(rawValue);
+        break;
+      case "notes":
+        payload.notes = maybeNull(rawValue);
+        break;
       case "owner":
         payload.owner_id = normalizeSelectedPersonId(rawValue);
         break;
