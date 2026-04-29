@@ -2,7 +2,7 @@ import { z } from "zod";
 
 import { sanitizePhone } from "./utils";
 
-const robomotionWhatsAppRequestSchema = z.object({
+const evolutionWhatsAppRequestSchema = z.object({
   action: z.enum(["individual", "todos"]),
   message: z.string().trim().min(1),
   phone: z.string().trim().optional(),
@@ -11,7 +11,7 @@ const robomotionWhatsAppRequestSchema = z.object({
   matchLabel: z.string().trim().optional(),
 });
 
-export type NormalizedRobomotionWhatsAppRequest = {
+export type NormalizedEvolutionWhatsAppRequest = {
   action: "individual" | "todos";
   message: string;
   phone: string;
@@ -20,12 +20,12 @@ export type NormalizedRobomotionWhatsAppRequest = {
   matchLabel: string | null;
 };
 
-export function normalizeRobomotionWhatsAppRequest(
+export function normalizeEvolutionWhatsAppRequest(
   input: unknown,
 ):
-  | { ok: true; data: NormalizedRobomotionWhatsAppRequest }
+  | { ok: true; data: NormalizedEvolutionWhatsAppRequest }
   | { ok: false; error: string } {
-  const parsed = robomotionWhatsAppRequestSchema.safeParse(input);
+  const parsed = evolutionWhatsAppRequestSchema.safeParse(input);
 
   if (!parsed.success) {
     return {
@@ -63,14 +63,30 @@ export function normalizeRobomotionWhatsAppRequest(
   };
 }
 
-export function buildRobomotionWebhookHeaders(token: string) {
-  const headers: Record<string, string> = {
+export function buildEvolutionApiUrl(params: {
+  baseUrl: string;
+  instance: string;
+  endpoint: "sendText";
+}) {
+  const baseUrl = params.baseUrl.trim().replace(/\/+$/, "");
+  const instance = encodeURIComponent(params.instance.trim());
+
+  return `${baseUrl}/message/${params.endpoint}/${instance}`;
+}
+
+export function buildEvolutionHeaders(apiKey: string) {
+  return {
     "content-type": "application/json",
+    apikey: apiKey.trim(),
   };
+}
 
-  if (token.trim()) {
-    headers.authorization = `Bearer ${token.trim()}`;
-  }
-
-  return headers;
+export function buildEvolutionSendTextBody(input: {
+  phone: string;
+  message: string;
+}) {
+  return {
+    number: sanitizePhone(input.phone),
+    text: input.message,
+  };
 }

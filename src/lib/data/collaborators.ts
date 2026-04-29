@@ -451,7 +451,7 @@ async function getFallbackAssignmentForMatch(params: {
   profileName: string | null;
 }) {
   if (!isUuidLike(params.matchId)) {
-    const demoKickoffAt = `${new Date().toISOString().slice(0, 10)}T19:30:00-05:00`;
+    const temporaryKickoffAt = `${new Date().toISOString().slice(0, 10)}T19:30:00-05:00`;
 
     return buildAssignmentItem({
       assignmentId: `trial-${params.matchId}`,
@@ -464,21 +464,21 @@ async function getFallbackAssignmentForMatch(params: {
         away_team: "Atenas de Córdoba",
         venue: "Luis Conde, Buenos Aires",
         transport: "Llegar 45 minutos antes. La sede suele abrir tarde.",
-        notes: "Vista demo para validar el asistente de grupo y sus contactos.",
-        kickoff_at: demoKickoffAt,
+        notes: "Acceso temporal sin asignación vinculada.",
+        kickoff_at: temporaryKickoffAt,
         duration_minutes: 150,
         timezone: "America/Bogota",
         owner: {
           id: "trial-owner",
-          full_name: params.profileName ?? "Modo prueba",
+          full_name: params.profileName ?? "Acceso temporal",
           phone: null,
           email: null,
         },
       },
       roleName: "Colaborador",
       roleCategory: "Produccion",
-      notes: "Modo prueba habilitado temporalmente.",
-      responsibleName: params.profileName ?? "Modo prueba",
+      notes: "Acceso temporal sin asignación vinculada.",
+      responsibleName: params.profileName ?? "Acceso temporal",
       realizerName: null,
       operatorControlName: "Mauro Ruiz Díaz",
       supportTechName: "Fary Leonardo Urriaga",
@@ -492,7 +492,7 @@ async function getFallbackAssignmentForMatch(params: {
           roleName: "Responsable",
           roleCategory: "Coordinacion",
           sortOrder: 10,
-          personName: params.profileName ?? "Modo prueba",
+          personName: params.profileName ?? "Acceso temporal",
           phone: null,
           email: null,
         },
@@ -553,7 +553,7 @@ async function getFallbackAssignmentForMatch(params: {
     match,
     roleName: "Colaborador",
     roleCategory: "Produccion",
-    notes: "Modo prueba habilitado temporalmente.",
+    notes: "Acceso temporal sin asignación vinculada.",
     responsibleName:
       pickContextName(contextRows, "Responsable") ??
       match.owner?.full_name ??

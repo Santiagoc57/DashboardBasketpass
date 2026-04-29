@@ -61,7 +61,7 @@ export function MatchSummaryCell({
           competition={competition}
           className={cn(
             "rounded-full border-2 border-[var(--surface)] bg-[#f8fafc]",
-            compact ? "size-9" : "size-12",
+            compact ? "size-8" : "size-9",
           )}
           initialsClassName="text-[11px] tracking-[0.12em] text-[#70819b]"
         />
@@ -70,7 +70,7 @@ export function MatchSummaryCell({
           competition={competition}
           className={cn(
             "rounded-full border-2 border-[var(--surface)] bg-[#f8fafc]",
-            compact ? "size-9" : "size-12",
+            compact ? "size-8" : "size-9",
           )}
           initialsClassName="text-[11px] tracking-[0.12em] text-[#70819b]"
         />
@@ -93,10 +93,10 @@ export function MatchSummaryCell({
             </span>
           ) : null}
         </div>
-        <div className={cn(compact ? "space-y-0.5" : "space-y-1")}>
+        <div className="space-y-0">
           <p
             className={cn(
-              "block min-w-0 truncate font-bold leading-tight text-[var(--foreground)]",
+              "block min-w-0 truncate font-bold leading-tight text-[13px] text-[var(--foreground)]",
               compact && "text-[12px]",
             )}
           >
@@ -108,7 +108,7 @@ export function MatchSummaryCell({
             </p>
             <p
               className={cn(
-                "block min-w-0 truncate font-bold leading-tight text-[var(--foreground)]",
+                "block min-w-0 truncate font-bold leading-tight text-[13px] text-[var(--foreground)]",
                 compact && "text-[12px]",
               )}
             >
@@ -136,11 +136,7 @@ export function MatchSummaryCell({
               </span>
             ) : null}
           </div>
-        ) : (
-          <span className="mt-1 block text-xs font-medium text-[#70819b]">
-            {competition}
-          </span>
-        )}
+        ) : null}
       </div>
     </div>
   );

@@ -122,6 +122,15 @@ export function maybeNull(value: string | null | undefined) {
   return trimmed ? trimmed : null;
 }
 
+export function formatPersonShortName(fullName: string): string {
+  const parts = fullName.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return fullName;
+  const initial = (parts[0][0] ?? "").toUpperCase();
+  const lastName = parts.length > 1 ? parts[parts.length - 1] : parts[0];
+  const result = parts.length > 1 ? `${initial}. ${lastName}` : lastName;
+  return result.length > 15 ? result.slice(0, 12) + "…" : result;
+}
+
 export function toTitleCase(value: string) {
   return value
     .split(" ")

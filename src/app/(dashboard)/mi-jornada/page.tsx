@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { addDays, format, parseISO } from "date-fns";
+import { format, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
 import { Hash, Sparkles, UserRound } from "lucide-react";
 
@@ -12,7 +12,6 @@ import { SegmentedControl } from "@/components/ui/segmented-control";
 import { getUserContext } from "@/lib/auth";
 import {
   type CollaboratorAssignmentItem,
-  type CollaboratorGroupContact,
   getCollaboratorDayData,
 } from "@/lib/data/collaborators";
 import { getDateInputValue, getMonthInputValue, isInDisplayedMonth } from "@/lib/date";
@@ -39,12 +38,6 @@ function formatSelectedDate(dateValue: string) {
       locale: es,
     }),
   );
-}
-
-function formatCompactMatchDate(dateValue: string) {
-  return format(parseISO(`${dateValue}T00:00:00`), "dd MMM, yyyy", {
-    locale: es,
-  }).toUpperCase();
 }
 
 function formatAssignmentDateLabel(dateTimeValue: string) {
@@ -144,98 +137,6 @@ function DaySummaryCard({
   );
 }
 
-function buildDemoAssignment(params: {
-  date: string;
-  collaboratorName: string;
-}): CollaboratorAssignmentItem {
-  const contacts: CollaboratorGroupContact[] = [
-    {
-      roleName: "Responsable",
-      roleCategory: "Coordinacion",
-      sortOrder: 10,
-      personName: params.collaboratorName,
-      phone: "573000000000",
-      email: "santiago.demo@basketproduction.pro",
-    },
-    {
-      roleName: "Realizador",
-      roleCategory: "Produccion",
-      sortOrder: 20,
-      personName: params.collaboratorName,
-      phone: "573000000000",
-      email: "santiago.demo@basketproduction.pro",
-    },
-    {
-      roleName: "Operador de Control",
-      roleCategory: "Produccion",
-      sortOrder: 30,
-      personName: "Mauro Ruiz Díaz",
-      phone: "573001112233",
-      email: "mauro.ruiz@basketproduction.pro",
-    },
-    {
-      roleName: "Soporte tecnico",
-      roleCategory: "Produccion",
-      sortOrder: 40,
-      personName: "Fary Leonardo Urriaga",
-      phone: "573001112244",
-      email: "fary.urriaga@basketproduction.pro",
-    },
-    {
-      roleName: "Productor",
-      roleCategory: "Produccion",
-      sortOrder: 50,
-      personName: "M. Casella",
-      phone: "573001112255",
-      email: "casella@basketproduction.pro",
-    },
-    {
-      roleName: "Relator",
-      roleCategory: "Talento",
-      sortOrder: 60,
-      personName: "Matias Díaz",
-      phone: "573001112266",
-      email: "matias.diaz@basketproduction.pro",
-    },
-  ];
-
-  return {
-    assignmentId: "demo-assignment",
-    matchId: "demo-match-boca-atenas",
-    confirmed: false,
-    notes: "Vista demo para validar la tarjeta móvil de Mi jornada.",
-    roleName: "Realizador",
-    roleCategory: "Produccion",
-    competition: "Liga Nacional",
-    productionMode: "Encoder",
-    status: "Pendiente",
-    homeTeam: "Boca Juniors",
-    awayTeam: "Atenas de Córdoba",
-    venue: "Luis Conde, Buenos Aires",
-    kickoffAt: `${params.date}T19:30:00-05:00`,
-    durationMinutes: 150,
-    timezone: "America/Bogota",
-    ownerName: params.collaboratorName,
-    ownerPhone: "573000000000",
-    ownerEmail: "santiago.demo@basketproduction.pro",
-    responsibleName: params.collaboratorName,
-    realizerName: params.collaboratorName,
-    operatorControlName: "Mauro Ruiz Díaz",
-    supportTechName: "Fary Leonardo Urriaga",
-    producerName: "M. Casella",
-    encoderName: "Encoder HD",
-    relatorName: "Matias Díaz",
-    cameraCount: 4,
-    talentLabel: "L. Montero / G. Pérez",
-    commentaryPlan: "Relato principal con apoyo de comentario 1 en cierres de cuarto.",
-    transport: "Llegar 45 minutos antes. La sede suele abrir tarde.",
-    matchNotes: "Confirmar acceso a cabina y validar energía antes de entrar al aire.",
-    contacts,
-    dateLabel: formatCompactMatchDate(params.date),
-    timeLabel: "19:30",
-  };
-}
-
 function getClosestAssignmentDate(
   assignments: CollaboratorAssignmentItem[],
   referenceDate: string,
@@ -311,10 +212,6 @@ export default async function CollaboratorDayPage({ searchParams }: PageProps) {
     periodView === "month" ? `${selectedMonth}-01` : selectedDate;
   const fallbackCollaboratorName =
     user.profile?.full_name?.trim() || "Modo invitado";
-  const fallbackUpcomingDate = format(
-    addDays(parseISO(`${panelSelectedDate}T00:00:00`), 1),
-    "yyyy-MM-dd",
-  );
   const greetingName = capitalizeSentence(
     data.person?.full_name?.trim() || fallbackCollaboratorName,
   );
@@ -330,25 +227,10 @@ export default async function CollaboratorDayPage({ searchParams }: PageProps) {
   const closestAssignmentDate = hasAssignmentsOutsideSelection
     ? getClosestAssignmentDate(data.allAssignments, panelSelectedDate)
     : null;
-  const showDemoToday = guestMode || !data.person;
-  const primaryAssignments = showDemoToday
-    ? [
-        buildDemoAssignment({
-          date: panelSelectedDate,
-          collaboratorName: data.person?.full_name ?? fallbackCollaboratorName,
-        }),
-      ]
-    : rawPrimaryAssignments;
+  const primaryAssignments = rawPrimaryAssignments;
   const upcomingAssignments =
     periodView === "month"
       ? []
-      : (guestMode || !data.person) && data.upcomingAssignments.length === 0
-      ? [
-          buildDemoAssignment({
-            date: fallbackUpcomingDate,
-            collaboratorName: fallbackCollaboratorName,
-          }),
-        ]
       : data.upcomingAssignments;
   const totalToday = primaryAssignments.length;
   const pendingToday = primaryAssignments.filter((assignment) => !assignment.confirmed).length;
@@ -453,13 +335,11 @@ export default async function CollaboratorDayPage({ searchParams }: PageProps) {
   return (
     <div className="w-full max-w-none pb-10">
       <MyDayAssignmentsPanel
-        hasLinkedPerson={Boolean(data.person)}
         isSelectedDateToday={isSelectedDateToday}
         selectedDate={panelSelectedDate}
         periodView={periodView}
         primaryHeading={primaryHeading}
         primaryDescription={primaryDescription}
-        showDemoToday={showDemoToday}
         hasAssignmentsOutsideSelection={hasAssignmentsOutsideSelection}
         emptyStateActionHref={emptyStateActionHref}
         emptyStateActionLabel={emptyStateActionLabel}

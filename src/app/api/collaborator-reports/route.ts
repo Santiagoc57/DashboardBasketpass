@@ -106,7 +106,7 @@ export async function POST(request: Request) {
 
   if (!isUuidLike(assignmentId) || !isUuidLike(matchId)) {
     return NextResponse.json(
-      { error: "El envío real no está disponible en modo demo." },
+      { error: "El envío real requiere una asignación y un partido válidos." },
       { status: 400 },
     );
   }

@@ -119,7 +119,7 @@ export default async function CollaboratorReportPage({ params }: PageProps) {
         {data.trialAccess ? (
           <div className="rounded-[var(--panel-radius)] border border-[#cce8d7] bg-[#f2fbf6] px-4 py-3 text-sm text-[#256746]">
             <span className="font-black uppercase tracking-[0.18em] text-[11px]">
-              Modo prueba
+              Acceso temporal
             </span>
             <p className="mt-1 font-medium">
               Acceso temporal habilitado aunque tu usuario todavía no tenga una asignación

@@ -700,12 +700,7 @@ function LabeledField({
         )}
       >
         {label}
-        {required ? <span className="text-[var(--accent)]">*</span> : null}
-        {alert ? (
-          <span className="inline-flex items-center gap-1 rounded-full bg-[#fff4f6] px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.16em] text-[#c12d4d]">
-            Falta
-          </span>
-        ) : null}
+        {(required || alert) ? <span className="text-[var(--accent)]">*</span> : null}
       </span>
       {children}
     </label>
@@ -1514,9 +1509,9 @@ export function CreateMatchModal({
                           title="Identificación"
                           status={`${identificationCompleted}/${IDENTIFICATION_FIELDS.length + IDENTIFICATION_META_FIELDS.length} listos`}
                         >
-                          <div className="grid gap-4 lg:grid-cols-2">
+                          <div className="grid gap-4 lg:grid-cols-3">
                             <LabeledField
-                              label="ID"
+                              label="ID BP"
                               required
                               alert={highlightedMissingFields.includes("productionCode")}
                             >
@@ -1526,12 +1521,23 @@ export function CreateMatchModal({
                                 onChange={(event) =>
                                   updateField("productionCode", event.target.value)
                                 }
-                                placeholder="PRD-EC39-E909"
+                                placeholder=""
                                 className={cn(
                                   fieldSurfaceClass,
                                   highlightedMissingFields.includes("productionCode") &&
                                     missingFieldClass,
                                 )}
+                              />
+                            </LabeledField>
+                            <LabeledField label="ID FEED" required>
+                              <Input
+                                name="externalMatchId"
+                                value={fields.externalMatchId}
+                                onChange={(event) =>
+                                  updateField("externalMatchId", event.target.value)
+                                }
+                                placeholder=""
+                                className={fieldSurfaceClass}
                               />
                             </LabeledField>
                             <LabeledField

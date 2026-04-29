@@ -22,6 +22,7 @@ export type IncidentRecord = {
   matchLabel: string;
   competition: string;
   eventDate: string;
+  eventTime?: string;
   severity: IncidentSeverity;
   operatorControl: string;
   streamer: string;

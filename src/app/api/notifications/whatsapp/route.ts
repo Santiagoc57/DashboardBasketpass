@@ -2,11 +2,13 @@ import { NextResponse } from "next/server";
 
 import { getUserContext } from "@/lib/auth";
 import { appEnv } from "@/lib/env";
-import { emitOperationalAlert } from "@/lib/monitoring";
 import {
-  buildRobomotionWebhookHeaders,
-  normalizeRobomotionWhatsAppRequest,
-} from "@/lib/robomotion";
+  buildEvolutionApiUrl,
+  buildEvolutionHeaders,
+  buildEvolutionSendTextBody,
+  normalizeEvolutionWhatsAppRequest,
+} from "@/lib/evolution-whatsapp";
+import { emitOperationalAlert } from "@/lib/monitoring";
 import { ensureErrorMessage } from "@/lib/utils";
 
 export async function POST(request: Request) {
@@ -21,7 +23,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const normalized = normalizeRobomotionWhatsAppRequest(payload);
+  const normalized = normalizeEvolutionWhatsAppRequest(payload);
 
   if (!normalized.ok) {
     return NextResponse.json(
@@ -39,56 +41,66 @@ export async function POST(request: Request) {
     );
   }
 
-  if (!appEnv.robomotionWhatsAppWebhookUrl.trim()) {
+  const baseUrl = appEnv.evolutionApiBaseUrl.trim();
+  const apiKey = appEnv.evolutionApiKey.trim();
+  const instance = appEnv.evolutionApiInstance.trim();
+
+  if (!baseUrl || !apiKey || !instance) {
     return NextResponse.json(
       {
         ok: false,
         configured: false,
         error:
-          "Robomotion todavía no está configurado. Agrega ROBOMOTION_WHATSAPP_WEBHOOK_URL en .env.local.",
+          "Evolution API todavía no está configurado. Agrega EVOLUTION_API_BASE_URL, EVOLUTION_API_KEY y EVOLUTION_API_INSTANCE en .env.local.",
       },
       { status: 503 },
     );
   }
 
   try {
-    const response = await fetch(appEnv.robomotionWhatsAppWebhookUrl, {
-      method: "POST",
-      headers: buildRobomotionWebhookHeaders(appEnv.robomotionWhatsAppWebhookToken),
-      body: JSON.stringify({
-        action: normalized.data.action,
-        phone: normalized.data.phone,
-        phones: normalized.data.phones,
-        message: normalized.data.message,
-        meta: {
-          source: "dashboard-basketpass",
-          requestedAt: new Date().toISOString(),
-          requestedBy: {
-            userId: user.userId,
-            email: user.email,
-            fullName: user.profile?.full_name ?? null,
-          },
-          recipientName: normalized.data.recipientName,
-          matchLabel: normalized.data.matchLabel,
-        },
-      }),
-      cache: "no-store",
+    const sendUrl = buildEvolutionApiUrl({
+      baseUrl,
+      instance,
+      endpoint: "sendText",
     });
+    const results = [];
 
-    const responseText = await response.text().catch(() => "");
+    for (const phone of normalized.data.phones) {
+      const response = await fetch(sendUrl, {
+        method: "POST",
+        headers: buildEvolutionHeaders(apiKey),
+        body: JSON.stringify(
+          buildEvolutionSendTextBody({
+            phone,
+            message: normalized.data.message,
+          }),
+        ),
+        cache: "no-store",
+      });
+      const responseText = await response.text().catch(() => "");
+      results.push({
+        phone,
+        ok: response.ok,
+        status: response.status,
+        statusText: response.statusText,
+        responseText: responseText.slice(0, 300),
+      });
+    }
 
-    if (!response.ok) {
+    const failedResults = results.filter((result) => !result.ok);
+
+    if (failedResults.length) {
       await emitOperationalAlert({
         area: "matches",
         severity: "warning",
-        message: "Robomotion rechazó una solicitud de WhatsApp.",
+        message: "Evolution API rechazó una solicitud de WhatsApp.",
         details: {
           action: normalized.data.action,
           phones: normalized.data.phones.join(", "),
           requestedBy: user.email ?? user.userId,
           matchLabel: normalized.data.matchLabel,
-          responseStatus: response.status,
-          responseText: responseText.slice(0, 300),
+          failedCount: failedResults.length,
+          firstFailure: JSON.stringify(failedResults[0]),
         },
       });
 
@@ -96,7 +108,8 @@ export async function POST(request: Request) {
         {
           ok: false,
           configured: true,
-          error: `Robomotion respondió ${response.status} ${response.statusText}.`,
+          error: `Evolution API no pudo enviar ${failedResults.length} de ${results.length} mensajes.`,
+          results,
         },
         { status: 502 },
       );
@@ -105,18 +118,18 @@ export async function POST(request: Request) {
     return NextResponse.json({
       ok: true,
       configured: true,
-      queuedCount: normalized.data.phones.length,
+      queuedCount: results.length,
       detail:
         normalized.data.action === "individual"
-          ? "Robomotion recibió el chat individual."
-          : "Robomotion recibió la cola de chats.",
-      responseText: responseText.slice(0, 200),
+          ? "Evolution API envió el mensaje individual."
+          : `Evolution API envió ${results.length} mensajes.`,
+      results,
     });
   } catch (error) {
     await emitOperationalAlert({
       area: "matches",
       severity: "critical",
-      message: "Falló el envío del webhook de WhatsApp hacia Robomotion.",
+      message: "Falló el envío de WhatsApp hacia Evolution API.",
       error: ensureErrorMessage(error),
       details: {
         action: normalized.data.action,

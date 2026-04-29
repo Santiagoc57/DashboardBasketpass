@@ -696,6 +696,9 @@ function buildIncidentRecord(params: {
     eventDate: params.match
       ? formatEventDate(params.match.kickoff_at, timezone)
       : formatEventDate(params.report.submitted_at, timezone),
+    eventTime: params.match
+      ? formatEventTime(params.match.kickoff_at, timezone)
+      : formatEventTime(params.report.submitted_at, timezone),
     severity: mapIncidentSeverity(params.report.incident_level),
     operatorControl,
     streamer,

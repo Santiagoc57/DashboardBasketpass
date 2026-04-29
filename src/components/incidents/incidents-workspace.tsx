@@ -60,7 +60,7 @@ import type {
   IncidentRecord,
 } from "@/lib/incidents";
 import { getTeamLeagueColorSet } from "@/lib/team-directory";
-import { cn } from "@/lib/utils";
+import { cn, formatPersonShortName } from "@/lib/utils";
 
 type IncidentAttachment = {
   fileName: string;
@@ -141,12 +141,23 @@ const INCIDENT_CONTROL_COLUMN_WIDTH_WEIGHT: Record<IncidentControlColumn, number
   league: 0.75,
   id: 1,
   date: 0.55,
-  match: 2.65,
+  match: 1.6,
   severity: 1,
   operator: 1.25,
   streamer: 1.25,
   issue: 0.85,
   updated: 0.65,
+};
+const INCIDENT_CONTROL_WIDE_COLUMN_WIDTH_WEIGHT: Record<IncidentControlColumn, number> = {
+  league: 0.9,
+  id: 1.05,
+  date: 0.9,
+  match: 1.7,
+  severity: 1.1,
+  operator: 1.35,
+  streamer: 1.35,
+  issue: 1.0,
+  updated: 0.8,
 };
 const INCIDENT_CONTROL_COMPACT_COLUMN_WIDTH_WEIGHT: Record<
   IncidentControlColumn,
@@ -593,12 +604,14 @@ function getIncidentUpdatedOrder(updatedAt: string) {
 
 function SortHeader({
   label,
+  title,
   active,
   direction,
   onClick,
   align = "left",
 }: {
   label: string;
+  title?: string;
   active: boolean;
   direction: SortDirection;
   onClick: () => void;
@@ -608,6 +621,7 @@ function SortHeader({
     <button
       type="button"
       onClick={onClick}
+      title={title ?? label}
       className={cn(
         "inline-flex items-center gap-1.5 uppercase transition hover:text-[#617187]",
         align === "center" && "mx-auto",
@@ -1082,6 +1096,22 @@ export function IncidentsWorkspace({
   useEffect(() => {
     onSelectedIdChange?.(selectedId);
   }, [onSelectedIdChange, selectedId]);
+
+  useEffect(() => {
+    if (!selectedId) {
+      return;
+    }
+
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setSelectedId(null);
+        setDrawerTab("details");
+      }
+    }
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [selectedId]);
 
   const filteredIncidents = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -1590,6 +1620,17 @@ export function IncidentsWorkspace({
     }
   }
 
+  function toggleIncidentDrawer(incidentId: string) {
+    setSelectedId((current) => {
+      if (current === incidentId) {
+        return null;
+      }
+
+      setDrawerTab("details");
+      return incidentId;
+    });
+  }
+
   const renderIncidentControlHeader = (column: IncidentControlColumn) => {
     const sortKey = INCIDENT_CONTROL_COLUMN_SORT_KEY[column];
     const isDropTarget =
@@ -1614,6 +1655,14 @@ export function IncidentsWorkspace({
                   : column === "issue"
                     ? "PROBLEMAS"
                     : "ACT.";
+    const headerTooltip =
+      column === "severity"
+        ? "Gravedad de la incidencia"
+        : column === "issue"
+          ? "Problemas reportados"
+          : column === "updated"
+            ? "Última actualización"
+            : undefined;
 
     return (
       <th
@@ -1648,6 +1697,7 @@ export function IncidentsWorkspace({
           {sortKey ? (
             <SortHeader
               label={label}
+              title={headerTooltip}
               active={sortBy === sortKey}
               direction={sortDirection}
               onClick={() => handleSort(sortKey)}
@@ -1687,9 +1737,14 @@ export function IncidentsWorkspace({
         const [dateDay, dateMonth] = formatCompactIncidentDate(incident.eventDate).split(" ");
         return (
           <td key={column} className="px-2 py-2 text-center 2xl:px-5 2xl:py-3">
-            <span className="inline-flex flex-col items-center leading-none">
+            <span className="inline-flex flex-col items-center gap-0.5 leading-none">
               <span className="text-sm font-black uppercase tracking-[0.12em] text-[#617187]">{dateDay}</span>
               <span className="text-[10px] font-black uppercase tracking-[0.12em] text-[#94a3b8]">{dateMonth}</span>
+              {incident.eventTime ? (
+                <span className="text-[10px] font-semibold text-[#94a3b8]">
+                  {incident.eventTime}
+                </span>
+              ) : null}
             </span>
           </td>
         );
@@ -1707,7 +1762,6 @@ export function IncidentsWorkspace({
             <MatchSummaryCell
               matchLabel={incident.matchLabel}
               competition={incident.competition}
-              metaTime={getIncidentTimeLabel(incident.updatedAt)}
               compact={Boolean(selectedIncident)}
             />
           </td>
@@ -1726,7 +1780,7 @@ export function IncidentsWorkspace({
           <td key={column} className="px-3 py-2 2xl:px-5 2xl:py-3">
             <PersonRoleStack
               label="Operador"
-              value={incident.operatorControl}
+              value={formatPersonShortName(incident.operatorControl)}
               initials={getInitials(incident.operatorControl)}
               size="sm"
             />
@@ -1737,7 +1791,7 @@ export function IncidentsWorkspace({
           <td key={column} className="px-3 py-2 2xl:px-5 2xl:py-3">
             <PersonRoleStack
               label="Streamer"
-              value={incident.streamer}
+              value={formatPersonShortName(incident.streamer)}
               initials={getInitials(incident.streamer)}
               size="sm"
             />
@@ -1807,17 +1861,28 @@ export function IncidentsWorkspace({
     embedded && headerActionsPortalTarget
       ? createPortal(workspaceActions, headerActionsPortalTarget)
       : null;
+  const [isWideScreen, setIsWideScreen] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 1536px)");
+    setIsWideScreen(mq.matches);
+    const handler = (e: MediaQueryListEvent) => setIsWideScreen(e.matches);
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, []);
+
   const incidentColumnWidths = useMemo(() => {
     const weights = selectedIncident
       ? INCIDENT_CONTROL_COMPACT_COLUMN_WIDTH_WEIGHT
-      : INCIDENT_CONTROL_COLUMN_WIDTH_WEIGHT;
+      : isWideScreen
+        ? INCIDENT_CONTROL_WIDE_COLUMN_WIDTH_WEIGHT
+        : INCIDENT_CONTROL_COLUMN_WIDTH_WEIGHT;
     const totalWeight = columnOrder.reduce((sum, column) => sum + weights[column], 0);
 
     return columnOrder.reduce<Record<IncidentControlColumn, string>>((acc, column) => {
       acc[column] = `${((weights[column] / totalWeight) * 100).toFixed(2)}%`;
       return acc;
     }, {} as Record<IncidentControlColumn, string>);
-  }, [columnOrder, selectedIncident]);
+  }, [columnOrder, selectedIncident, isWideScreen]);
 
   const workspaceContent = (
     <div className="flex min-w-0 flex-col gap-0">
@@ -1960,10 +2025,7 @@ export function IncidentsWorkspace({
                     return (
                       <tr
                         key={incident.id}
-                        onClick={() => {
-                          setSelectedId(incident.id);
-                          setDrawerTab("details");
-                        }}
+                        onClick={() => toggleIncidentDrawer(incident.id)}
                         className={cn(
                           "cursor-pointer transition",
                           active
@@ -2003,7 +2065,7 @@ export function IncidentsWorkspace({
 
   const selectedIncidentDrawer = selectedIncident ? (
     <aside className="min-w-0 self-start 2xl:sticky 2xl:top-24">
-      <div className="panel-surface fixed inset-x-2 bottom-3 top-3 z-40 flex flex-col overflow-hidden border border-[var(--border)] bg-[var(--surface)] shadow-[0_28px_70px_rgba(15,23,42,0.18)] transition md:left-auto md:right-2 md:w-[25rem] md:max-w-[calc(100vw-1rem)] 2xl:static 2xl:h-[calc(100vh-8rem)] 2xl:w-full 2xl:shadow-none">
+      <div className="panel-surface fixed inset-x-2 bottom-2 top-2 z-40 flex flex-col overflow-hidden border border-[var(--border)] bg-[var(--surface)] shadow-[0_28px_70px_rgba(15,23,42,0.18)] transition md:left-auto md:right-2 md:w-[25rem] md:max-w-[calc(100vw-1rem)] 2xl:static 2xl:h-[calc(100vh-8rem)] 2xl:w-full 2xl:shadow-none">
         <div className="border-b border-[var(--border)] p-5">
         <div className="mb-4 flex items-center justify-between gap-4">
           <div className="flex flex-wrap items-center gap-2">

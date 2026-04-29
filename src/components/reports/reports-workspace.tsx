@@ -66,7 +66,7 @@ import type {
 } from "@/lib/collaborator-report-attachments";
 import type { IncidentRecord } from "@/lib/incidents";
 import { getTeamLeagueColorSet } from "@/lib/team-directory";
-import { cn } from "@/lib/utils";
+import { cn, formatPersonShortName } from "@/lib/utils";
 
 type ReportSortKey =
   | "league"
@@ -176,12 +176,24 @@ const REPORT_CONTROL_COLUMN_WIDTH_WEIGHT: Record<ReportControlColumn, number> = 
   id: 1.1,
   idBp: 0.75,
   date: 0.85,
-  match: 2.6,
+  match: 1.6,
   responsible: 1.55,
   paid: 0.35,
   feed: 0.35,
   severity: 1.05,
   action: 0.4,
+};
+const REPORT_CONTROL_WIDE_COLUMN_WIDTH_WEIGHT: Record<ReportControlColumn, number> = {
+  league: 0.9,
+  id: 1.05,
+  idBp: 0.95,
+  date: 0.95,
+  match: 1.65,
+  responsible: 1.35,
+  paid: 0.65,
+  feed: 0.65,
+  severity: 1.0,
+  action: 0.5,
 };
 const REPORT_CONTROL_COMPACT_COLUMN_WIDTH_WEIGHT: Record<
   ReportControlColumn,
@@ -821,12 +833,14 @@ function getLeagueLegendLabel(league: string) {
 
 function SortHeader({
   label,
+  title,
   active,
   direction,
   onClick,
   align = "left",
 }: {
   label: string;
+  title?: string;
   active: boolean;
   direction: SortDirection;
   onClick: () => void;
@@ -836,6 +850,7 @@ function SortHeader({
     <button
       type="button"
       onClick={onClick}
+      title={title ?? label}
       className={cn(
         "inline-flex items-center gap-1.5 uppercase transition hover:text-[#617187]",
         align === "center" && "mx-auto",
@@ -1060,6 +1075,7 @@ export function ReportsWorkspace({
   const [incidentChartMetric, setIncidentChartMetric] =
     useState<IncidentChartMetric>("count");
   const [chartTimeOffset, setChartTimeOffset] = useState(0);
+  const [selectedChartLeague, setSelectedChartLeague] = useState<string | null>(null);
   const incidentChartLimit = 5;
   const [selectedSummaryInsight, setSelectedSummaryInsight] =
     useState<SummaryInsightDetail>("evolution");
@@ -1132,6 +1148,7 @@ export function ReportsWorkspace({
     useState<ReportDrawerTab>("details");
   const [isExporting, setIsExporting] = useState(false);
   const [exportMenuOpen, setExportMenuOpen] = useState<"summary" | "incidents" | null>(null);
+  const [isWideScreen, setIsWideScreen] = useState(false);
   const exportMenuRef = useRef<HTMLDivElement | null>(null);
   const [showAllLeagueDistribution, setShowAllLeagueDistribution] = useState(false);
   const [showAllSeverityDistribution, setShowAllSeverityDistribution] =
@@ -1147,6 +1164,26 @@ export function ReportsWorkspace({
       setSelectedEmbeddedIncidentId(null);
     }
   }, [activeView]);
+
+  useEffect(() => {
+    if (!selectedReportId && !selectedEmbeddedIncidentId) {
+      return;
+    }
+
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key !== "Escape") {
+        return;
+      }
+
+      setSelectedReportId(null);
+      setEditingReportId(null);
+      setReportDrawerTab("details");
+      setSelectedEmbeddedIncidentId(null);
+    }
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [selectedEmbeddedIncidentId, selectedReportId]);
 
   useEffect(() => {
     const sidebar = summarySidebarRef.current;
@@ -1649,52 +1686,7 @@ export function ReportsWorkspace({
     };
   }, [baseFilteredReports, incidentChartLimit, incidentChartMetric, periodMode]);
 
-  // TEMP: datos falsos según periodMode
-  const incidentLeagueChartDebug = (() => {
-    if (periodMode === "day") {
-      const hours = ["06h","08h","10h","12h","14h","16h","18h","20h","22h"];
-      return {
-        labels: hours,
-        dayLabels: [] as string[],
-        maxValue: 5,
-        series: [
-          { league: "QP", color: "#e5366a", strokeWidth: 4,
-            points: hours.map((h, i) => ({ label: h, value: [1,0,2,3,1,5,4,2,3][i] })) },
-          { league: "Liga 1", color: "#3b82f6", strokeWidth: 2.5,
-            points: hours.map((h, i) => ({ label: h, value: [0,1,1,2,3,2,1,0,2][i] })) },
-        ],
-      };
-    }
-    if (periodMode === "month") {
-      const weeks = ["S1 ABR","S2 ABR","S3 ABR","S4 ABR","S1 MAY","S2 MAY","S3 MAY","S4 MAY"];
-      return {
-        labels: weeks,
-        dayLabels: [] as string[],
-        maxValue: 5,
-        series: [
-          { league: "QP", color: "#e5366a", strokeWidth: 4,
-            points: weeks.map((w, i) => ({ label: w, value: [2,4,3,5,1,3,2,4][i] })) },
-          { league: "Liga 1", color: "#3b82f6", strokeWidth: 2.5,
-            points: weeks.map((w, i) => ({ label: w, value: [1,2,4,2,3,1,2,3][i] })) },
-        ],
-      };
-    }
-    // week (default)
-    return {
-      labels: ["27 ABR","28 ABR","29 ABR","30 ABR","1 MAY","2 MAY","3 MAY"],
-      dayLabels: ["LUN","MAR","MIÉ","JUE","VIE","SÁB","DOM"],
-      maxValue: 5,
-      series: [
-        { league: "QP", color: "#e5366a", strokeWidth: 4,
-          points: ["27 ABR","28 ABR","29 ABR","30 ABR","1 MAY","2 MAY","3 MAY"]
-            .map((l, i) => ({ label: l, value: [1,3,2,5,4,2,3][i] })) },
-        { league: "Liga 1", color: "#3b82f6", strokeWidth: 2.5,
-          points: ["27 ABR","28 ABR","29 ABR","30 ABR","1 MAY","2 MAY","3 MAY"]
-            .map((l, i) => ({ label: l, value: [2,1,4,2,3,1,2][i] })) },
-      ],
-    };
-  })();
-  const incidentLeagueChartView = incidentLeagueChartDebug;
+  const incidentLeagueChartView = incidentLeagueChart;
 
   const periodEvolutionRows = useMemo(() => {
     const aggregate = new Map<
@@ -2546,6 +2538,14 @@ export function ReportsWorkspace({
       !!draggedColumn && draggedColumn !== column && dragOverColumn === column;
     const headerPadding =
       column === "match" ? "px-4 py-3" : "px-3 py-3";
+    const headerTooltip =
+      column === "paid"
+        ? "Pago de partido"
+        : column === "feed"
+          ? "Feed detectado"
+          : column === "severity"
+            ? "Gravedad del reporte"
+            : undefined;
 
     return (
       <th
@@ -2577,6 +2577,7 @@ export function ReportsWorkspace({
         >
           {sortableKey ? (
             <SortHeader
+              title={headerTooltip}
               label={
                 column === "league"
                   ? "LIGA"
@@ -2588,12 +2589,16 @@ export function ReportsWorkspace({
                       ? "F.A"
                       : column === "match"
                         ? "PARTIDO"
-                        : column === "responsible"
-                          ? "RESPONSABLE"
+                          : column === "responsible"
+                            ? "RESPONSABLE"
                           : column === "paid"
-                            ? "$"
+                            ? isWideScreen
+                              ? "PAGO"
+                              : "$"
                             : column === "feed"
-                              ? "F"
+                              ? isWideScreen
+                                ? "FEED"
+                                : "F"
                               : "GRAVEDAD"
               }
               active={sortBy === sortableKey}
@@ -2620,7 +2625,9 @@ export function ReportsWorkspace({
   const reportColumnWidths = useMemo(() => {
     const weights = selectedReport
       ? REPORT_CONTROL_COMPACT_COLUMN_WIDTH_WEIGHT
-      : REPORT_CONTROL_COLUMN_WIDTH_WEIGHT;
+      : isWideScreen
+        ? REPORT_CONTROL_WIDE_COLUMN_WIDTH_WEIGHT
+        : REPORT_CONTROL_COLUMN_WIDTH_WEIGHT;
     const totalWeight = columnOrder.reduce(
       (sum, column) => sum + weights[column],
       0,
@@ -2630,7 +2637,7 @@ export function ReportsWorkspace({
       acc[column] = `${(((weights[column] / totalWeight) * 100)).toFixed(2)}%`;
       return acc;
     }, {} as Record<ReportControlColumn, string>);
-  }, [columnOrder, selectedReport]);
+  }, [columnOrder, selectedReport, isWideScreen]);
 
   const renderReportControlCell = (report: ReportRecord, column: ReportControlColumn) => {
     const cellClassName = "";
@@ -2671,8 +2678,15 @@ export function ReportsWorkspace({
               cellClassName,
             )}
           >
-            <span className="inline-flex text-sm font-black uppercase tracking-[0.12em] text-[#617187]">
-              {formatCompactReportDate(report.event_date)}
+            <span className="inline-flex flex-col items-center gap-0.5 leading-none">
+              <span className="text-sm font-black uppercase tracking-[0.12em] text-[#617187]">
+                {formatCompactReportDate(report.event_date)}
+              </span>
+              {report.event_time ? (
+                <span className="text-[10px] font-semibold text-[#94a3b8]">
+                  {report.event_time}
+                </span>
+              ) : null}
             </span>
           </td>
         );
@@ -2690,7 +2704,6 @@ export function ReportsWorkspace({
             <MatchSummaryCell
               matchLabel={report.match_label}
               competition={report.competition}
-              metaTime={report.event_time}
               compact={Boolean(selectedReport)}
             />
           </td>
@@ -2700,7 +2713,7 @@ export function ReportsWorkspace({
           <td key={column} className={cn("px-3 py-3 2xl:px-5 2xl:py-5", cellClassName)}>
             <PersonRoleStack
               label="Responsable"
-              value={report.responsible_name}
+              value={formatPersonShortName(report.responsible_name)}
               initials={getInitials(report.responsible_name)}
               size="sm"
             />
@@ -2894,6 +2907,17 @@ export function ReportsWorkspace({
       ? getReportLeagueCanvasTone(leagueFilter)
       : null;
 
+  function toggleReportDrawer(reportId: string) {
+    setSelectedReportId((current) => {
+      if (current === reportId) {
+        return null;
+      }
+
+      setReportDrawerTab("details");
+      return reportId;
+    });
+  }
+
   async function exportVisibleReports(sourceReports: ReportRecord[], format: "excel" | "pdf") {
     if (!sourceReports.length || isExporting) {
       return;
@@ -3016,6 +3040,14 @@ export function ReportsWorkspace({
       setIsExporting(false);
     }
   }
+
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 1536px)");
+    setIsWideScreen(mq.matches);
+    const handler = (e: MediaQueryListEvent) => setIsWideScreen(e.matches);
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, []);
 
   useEffect(() => {
     if (!exportMenuOpen) return;
@@ -3445,10 +3477,7 @@ export function ReportsWorkspace({
                     return (
                       <tr
                         key={report.id_feed}
-                        onClick={() => {
-                          setSelectedReportId(report.id_feed);
-                          setReportDrawerTab("details");
-                        }}
+                        onClick={() => toggleReportDrawer(report.id_feed)}
                         className={cn(
                           "cursor-pointer transition",
                           selected
@@ -3490,7 +3519,7 @@ export function ReportsWorkspace({
 
   const selectedReportDrawer = selectedReport ? (
     <aside className="min-w-0 self-start 2xl:sticky 2xl:top-24">
-      <div className="panel-surface fixed inset-x-2 bottom-3 top-3 z-40 flex flex-col overflow-hidden border border-[var(--border)] bg-[var(--surface)] shadow-[0_28px_70px_rgba(15,23,42,0.18)] transition md:left-auto md:right-2 md:w-[25rem] md:max-w-[calc(100vw-1rem)] 2xl:static 2xl:h-[calc(100vh-8rem)] 2xl:w-full 2xl:shadow-none">
+      <div className="panel-surface fixed inset-x-2 bottom-2 top-2 z-40 flex flex-col overflow-hidden border border-[var(--border)] bg-[var(--surface)] shadow-[0_28px_70px_rgba(15,23,42,0.18)] transition md:left-auto md:right-2 md:w-[25rem] md:max-w-[calc(100vw-1rem)] 2xl:static 2xl:h-[calc(100vh-8rem)] 2xl:w-full 2xl:shadow-none">
         <div className="border-b border-[var(--border)] p-5">
           <div className="mb-4 flex items-center justify-between gap-4">
             <div className="flex flex-wrap items-center gap-2">
@@ -4164,17 +4193,20 @@ export function ReportsWorkspace({
         />
       )
     ) : incidentLeagueChartView.series.length ? (
-      <div className="space-y-4">
-        <div className="overflow-hidden rounded-[var(--panel-radius)] bg-white">
+      <div className="flex h-full min-h-[28rem] flex-col gap-4">
+        <div className="min-h-0 flex-1 overflow-hidden rounded-[var(--panel-radius)] bg-white">
           {(() => {
+            const activeSeries = selectedChartLeague
+              ? incidentLeagueChartView.series.filter((s) => s.league === selectedChartLeague)
+              : incidentLeagueChartView.series;
             const ticks: number[] =
               incidentChartMax <= 6
                 ? Array.from({ length: incidentChartMax + 1 }, (_, i) => i)
                 : [0, Math.round(incidentChartMax / 2), incidentChartMax];
 
             return (
-              <div className="px-1 pt-4">
-                <div className="relative h-[375px] xl:h-[425px] 2xl:h-[525px]">
+              <div className="flex h-full min-h-0 flex-col px-1 pt-4">
+                <div className="relative h-[375px] min-h-0 xl:h-[425px] 2xl:h-auto 2xl:flex-1">
                   {/* Grid lines */}
                   {ticks.map((value) => {
                     const bottomPct = (value / incidentChartMax) * 100;
@@ -4197,7 +4229,7 @@ export function ReportsWorkspace({
                   {/* Bars — absolute fill so % height works */}
                   <div className="absolute inset-0 flex items-end">
                     {incidentLeagueChartView.labels.map((label, colIndex) => {
-                      const colTotal = incidentLeagueChartView.series.reduce(
+                      const colTotal = activeSeries.reduce(
                         (sum, s) => sum + (s.points[colIndex]?.value ?? 0),
                         0,
                       );
@@ -4205,10 +4237,10 @@ export function ReportsWorkspace({
                       return (
                         <div key={label} className="flex flex-1 items-end justify-center" style={{ height: "100%" }}>
                           <div
-                            className="flex w-1/2 flex-col-reverse overflow-hidden rounded-t-sm"
+                            className="flex w-1/2 flex-col-reverse overflow-hidden rounded-t-sm transition-all duration-300"
                             style={{ height: `${colHeightPct}%` }}
                           >
-                            {incidentLeagueChartView.series.map((s) => {
+                            {activeSeries.map((s) => {
                               const value = s.points[colIndex]?.value ?? 0;
                               const segPct = colTotal > 0 ? (value / colTotal) * 100 : 0;
                               return (
@@ -4231,7 +4263,9 @@ export function ReportsWorkspace({
                       className="flex flex-1 flex-col items-center gap-0.5"
                     >
                       <span className="text-[9px] font-black uppercase tracking-[0.06em] text-[#94a3b8]">
-                        {("dayLabels" in incidentLeagueChartView ? (incidentLeagueChartView as typeof incidentLeagueChartDebug).dayLabels[i] : "")}
+                        {periodMode === "week"
+                          ? ["LUN", "MAR", "MIÉ", "JUE", "VIE", "SÁB", "DOM"][i] ?? ""
+                          : ""}
                       </span>
                       <span className="text-[9px] font-medium text-[#b0bcc9]">
                         {label}
@@ -4245,21 +4279,35 @@ export function ReportsWorkspace({
         </div>
 
         <div className="flex flex-wrap gap-2">
-          {incidentLeagueChartView.series.map((item) => (
-            <div
-              key={item.league}
-              title={item.league}
-              className="inline-flex items-center gap-1.5 rounded-full border border-[#edf1f6] bg-white px-2 py-1"
-            >
-              <span
-                className="size-1.5 rounded-full"
-                style={{ backgroundColor: item.color }}
-              />
-              <span className="text-[11px] font-bold text-[var(--foreground)]">
-                {getLeagueLegendLabel(item.league)}
-              </span>
-            </div>
-          ))}
+          {incidentLeagueChartView.series.map((item) => {
+            const isActive = selectedChartLeague === item.league;
+            const isDimmed = selectedChartLeague !== null && !isActive;
+            return (
+              <button
+                key={item.league}
+                type="button"
+                title={isActive ? `Quitar filtro: ${item.league}` : `Filtrar por ${item.league}`}
+                onClick={() => setSelectedChartLeague(isActive ? null : item.league)}
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-full border px-2 py-1 transition-all",
+                  isActive
+                    ? "border-transparent shadow-sm scale-105"
+                    : isDimmed
+                      ? "border-[#edf1f6] bg-white opacity-35"
+                      : "border-[#edf1f6] bg-white hover:border-[#d0d8e4] hover:shadow-sm",
+                )}
+                style={isActive ? { borderColor: item.color, backgroundColor: `${item.color}18` } : undefined}
+              >
+                <span
+                  className="size-1.5 rounded-full transition-transform"
+                  style={{ backgroundColor: item.color }}
+                />
+                <span className={cn("text-[11px] font-bold", isActive ? "text-[var(--foreground)]" : "text-[var(--foreground)]")}>
+                  {getLeagueLegendLabel(item.league)}
+                </span>
+              </button>
+            );
+          })}
         </div>
       </div>
         ) : (
@@ -4290,7 +4338,7 @@ export function ReportsWorkspace({
           <section className="grid items-start gap-8 xl:grid-cols-[minmax(0,1.62fr)_minmax(19.5rem,0.98fr)] 2xl:grid-cols-[minmax(0,1.7fr)_minmax(320px,1fr)]">
             <div
               className="space-y-8 xl:flex xl:min-h-0 xl:flex-col xl:overflow-hidden"
-              style={summarySidebarHeight ? { minHeight: `${summarySidebarHeight}px` } : undefined}
+              style={summarySidebarHeight ? { height: `${summarySidebarHeight}px` } : undefined}
             >
               <section className="space-y-4 xl:shrink-0">
                 <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -4313,7 +4361,9 @@ export function ReportsWorkspace({
                 </div>
               </section>
 
-              <article className="panel-surface border border-[var(--border)] bg-[var(--surface)] p-5 xl:flex xl:min-h-0 xl:flex-1 xl:flex-col xl:p-6">
+              <article
+                className="panel-surface border border-[var(--border)] bg-[var(--surface)] p-5 xl:flex xl:min-h-0 xl:flex-1 xl:flex-col xl:p-6"
+              >
                 <div className="mb-6 flex items-start justify-between gap-4">
                   <div>
                     <div className="flex items-center gap-3">
@@ -4350,7 +4400,7 @@ export function ReportsWorkspace({
                   {summaryPanelControls}
                 </div>
 
-                <div className="rounded-[var(--panel-radius)] bg-transparent">
+                <div className="min-h-0 flex-1 rounded-[var(--panel-radius)] bg-transparent">
                   {summaryPanelContent}
                 </div>
               </article>

@@ -12,10 +12,9 @@ export const appEnv = {
   telegramBotToken: process.env.TELEGRAM_BOT_TOKEN ?? "",
   telegramChatId: process.env.TELEGRAM_CHAT_ID ?? "",
   operationalAlertWebhookUrl: process.env.OPERATION_ALERT_WEBHOOK_URL ?? "",
-  robomotionWhatsAppWebhookUrl:
-    process.env.ROBOMOTION_WHATSAPP_WEBHOOK_URL ?? "",
-  robomotionWhatsAppWebhookToken:
-    process.env.ROBOMOTION_WHATSAPP_WEBHOOK_TOKEN ?? "",
+  evolutionApiBaseUrl: process.env.EVOLUTION_API_BASE_URL ?? "",
+  evolutionApiKey: process.env.EVOLUTION_API_KEY ?? "",
+  evolutionApiInstance: process.env.EVOLUTION_API_INSTANCE ?? "",
 };
 
 export const isSupabaseConfigured = Boolean(

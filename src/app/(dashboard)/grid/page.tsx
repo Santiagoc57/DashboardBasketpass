@@ -286,12 +286,15 @@ export default async function GridPage({ searchParams }: PageProps) {
   );
   const visibleMatches = sortedDayGroups.flatMap((group) => group.items);
   const insightsPanelProps = {
-    matches: dayGroups.flatMap((group) => group.items),
+    matches: visibleMatches,
     timezone: filters.timezone,
     currentDateLabel: summaryDateLabel,
     previousDateHref,
     nextDateHref,
   };
+  const hasActiveGridFilters = Boolean(
+    filters.q || filters.league || filters.mode || filters.status || filters.owner,
+  );
 
   return (
     <GridInsightsDockProvider>
@@ -439,8 +442,16 @@ export default async function GridPage({ searchParams }: PageProps) {
               ))
             ) : (
               <EmptyState
-                title="No hay partidos cargados para esta vista"
-                description="Crea un partido desde Nuevo partido o cambia entre Hoy y Mes para revisar otra jornada."
+                title={
+                  hasActiveGridFilters
+                    ? "No hay partidos visibles con esos filtros"
+                    : "No hay partidos cargados para esta vista"
+                }
+                description={
+                  hasActiveGridFilters
+                    ? "Falta aplicar otros filtros o limpiar la búsqueda para volver a ver la grilla de producción."
+                    : "Crea un partido desde Nuevo partido o cambia entre Hoy y Mes para revisar otra jornada."
+                }
               />
             )}
           </section>

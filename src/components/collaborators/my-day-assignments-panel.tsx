@@ -49,13 +49,11 @@ import { getCompactRoleDisplayName, getRoleDisplayName } from "@/lib/display";
 import { buildWhatsAppUrl, cn, normalizeText } from "@/lib/utils";
 
 type MyDayAssignmentsPanelProps = {
-  hasLinkedPerson: boolean;
   isSelectedDateToday: boolean;
   selectedDate: string;
   periodView: "day" | "month";
   primaryHeading: string;
   primaryDescription: string;
-  showDemoToday: boolean;
   hasAssignmentsOutsideSelection?: boolean;
   emptyStateActionHref?: string;
   emptyStateActionLabel?: string;
@@ -1559,13 +1557,11 @@ function ReportAssistantDrawer({
 }
 
 export function MyDayAssignmentsPanel({
-  hasLinkedPerson,
   isSelectedDateToday,
   selectedDate,
   periodView,
   primaryHeading,
   primaryDescription,
-  showDemoToday,
   emptyStateActionHref,
   emptyStateActionLabel,
   todayAssignments,
@@ -1636,15 +1632,6 @@ export function MyDayAssignmentsPanel({
     >
       <div className="space-y-3 md:space-y-8">
         {topContent}
-
-        {showDemoToday ? (
-          <div className="rounded-[var(--panel-radius)] border border-[#d9dff2] bg-[#f7f9ff] px-4 py-3 text-sm font-semibold text-[#5e6f8c]">
-            {!hasLinkedPerson ? "Aún no encontramos tu vínculo en Personal. " : null}
-            Te dejamos una{" "}
-            <span className="font-black text-[var(--accent)]">vista demo</span>{" "}
-            para que valides cómo se ve `Mi jornada`.
-          </div>
-        ) : null}
 
         <section className="space-y-4">
           <div className="space-y-0 md:space-y-3">

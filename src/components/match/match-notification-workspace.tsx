@@ -168,7 +168,7 @@ export function MatchNotificationWorkspace({
     window.open(recipient.whatsappHref, "_blank", "noopener,noreferrer");
   }
 
-  async function dispatchWhatsAppViaRobomotion(input: {
+  async function dispatchWhatsAppViaEvolution(input: {
     action: "individual" | "todos";
     message: string;
     phone?: string | null;
@@ -202,8 +202,8 @@ export function MatchNotificationWorkspace({
           message:
             result.detail ??
             (input.action === "individual"
-              ? "Robomotion abrió el chat individual."
-              : `Robomotion recibió ${result.queuedCount ?? 0} chats para WhatsApp.`),
+              ? "Evolution API envió el mensaje individual."
+              : `Evolution API envió ${result.queuedCount ?? 0} mensajes por WhatsApp.`),
         });
         return true;
       }
@@ -212,20 +212,20 @@ export function MatchNotificationWorkspace({
         setWhatsAppDispatchFeedback({
           tone: "warning",
           message:
-            "Robomotion no está configurado todavía. Abrimos WhatsApp Web directamente en el navegador.",
+            "Evolution API no está configurado todavía. Abrimos WhatsApp Web directamente en el navegador.",
         });
         return false;
       }
 
       setWhatsAppDispatchFeedback({
         tone: "error",
-        message: result?.error ?? "No fue posible enviar la solicitud a Robomotion.",
+        message: result?.error ?? "No fue posible enviar la solicitud a Evolution API.",
       });
       return null;
     } catch {
       setWhatsAppDispatchFeedback({
         tone: "error",
-        message: "No fue posible conectar el dashboard con Robomotion.",
+        message: "No fue posible conectar el dashboard con Evolution API.",
       });
       return null;
     } finally {
@@ -241,14 +241,14 @@ export function MatchNotificationWorkspace({
         continue;
       }
 
-      const usedRobomotion = await dispatchWhatsAppViaRobomotion({
+      const usedEvolution = await dispatchWhatsAppViaEvolution({
         action: "individual",
         phone: recipient.phone,
         message: recipient.personalMessage || activeBatchMessage,
         recipientName: recipient.fullName,
       });
 
-      if (usedRobomotion !== true) {
+      if (usedEvolution !== true) {
         shouldOpenBrowserFallback = true;
       }
     }
@@ -263,14 +263,14 @@ export function MatchNotificationWorkspace({
       return;
     }
 
-    const usedRobomotion = await dispatchWhatsAppViaRobomotion({
+    const usedEvolution = await dispatchWhatsAppViaEvolution({
       action: "individual",
       phone: recipient.phone,
       message: recipient.personalMessage || activeBatchMessage,
       recipientName: recipient.fullName,
     });
 
-    if (usedRobomotion === false) {
+    if (usedEvolution === false) {
       openIndividualWhatsAppInBrowser(recipient);
     }
   }
@@ -366,8 +366,8 @@ export function MatchNotificationWorkspace({
               compact && "max-w-none",
             )}
           >
-            El correo se abre con Gmail. WhatsApp usa Robomotion si el webhook
-            está configurado; si no, abre el chat web persona por persona.
+            El correo se abre con Gmail. WhatsApp usa Evolution API si la
+            instancia está conectada; si falta configuración, abre WhatsApp Web.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">

@@ -6,6 +6,8 @@ import {
   CalendarClock,
   ChevronLeft,
   ChevronRight,
+  ClipboardCheck,
+  Clock3,
   Hash,
   MapPin,
   UserRound,
@@ -14,7 +16,7 @@ import Link from "next/link";
 
 import { Card } from "@/components/ui/card";
 import { ExpandDivider } from "@/components/ui/expand-divider";
-import { RESPONSIBLE_DISPLAY_LABEL } from "@/lib/constants";
+import { DEFAULT_MATCH_DURATION_MINUTES } from "@/lib/constants";
 import { formatMatchTime } from "@/lib/date";
 import { getRoleDisplayName } from "@/lib/display";
 import type { MatchListItem } from "@/lib/types";
@@ -28,69 +30,6 @@ type ProductionInsightsPanelProps = {
   previousDateHref: string;
   nextDateHref: string;
 };
-
-const SAMPLE_TOP_PEOPLE = [
-  {
-    id: "sample-marco-rossi",
-    fullName: "Marco Rossi",
-    totalMatches: 4,
-    roleLabel: "Director técnico",
-  },
-  {
-    id: "sample-elena-beltran",
-    fullName: "Elena Beltrán",
-    totalMatches: 6,
-    roleLabel: "Coord. logística",
-  },
-  {
-    id: "sample-lucas-mendez",
-    fullName: "Lucas Méndez",
-    totalMatches: 2,
-    roleLabel: "Operador de cámara",
-  },
-  {
-    id: "sample-valentina-castro",
-    fullName: "Valentina Castro",
-    totalMatches: 3,
-    roleLabel: "Productora",
-  },
-  {
-    id: "sample-diego-herrera",
-    fullName: "Diego Herrera",
-    totalMatches: 2,
-    roleLabel: "Operador de control",
-  },
-  {
-    id: "sample-natalia-ramirez",
-    fullName: "Natalia Ramírez",
-    totalMatches: 5,
-    roleLabel: RESPONSIBLE_DISPLAY_LABEL,
-  },
-  {
-    id: "sample-sergio-mora",
-    fullName: "Sergio Mora",
-    totalMatches: 4,
-    roleLabel: "Relator",
-  },
-  {
-    id: "sample-lucia-pineda",
-    fullName: "Lucía Pineda",
-    totalMatches: 2,
-    roleLabel: "Soporte técnico",
-  },
-  {
-    id: "sample-camilo-vega",
-    fullName: "Camilo Vega",
-    totalMatches: 3,
-    roleLabel: "Camarógrafo",
-  },
-  {
-    id: "sample-ana-torres",
-    fullName: "Ana Torres",
-    totalMatches: 1,
-    roleLabel: "Productora",
-  },
-] as const;
 
 const NAME_CONNECTORS = new Set([
   "de",
@@ -262,6 +201,101 @@ function buildMissingHighlights(matches: MatchListItem[]) {
   ];
 }
 
+const REQUIRED_GRID_ROLES = ["Responsable", "Realizador", "Operador de Control"] as const;
+
+function hasAssignedRole(match: MatchListItem, roleName: string) {
+  const targetRole = normalizeText(roleName);
+
+  return match.assignments.some(
+    (assignment) =>
+      normalizeText(assignment.role.name) === targetRole && Boolean(assignment.person),
+  );
+}
+
+function isRejectedConfirmation(status: string | null | undefined) {
+  const normalized = normalizeText(status ?? "");
+  return (
+    normalized === "rechazado" ||
+    normalized === "rechazada" ||
+    normalized === "rejected" ||
+    normalized === "declined"
+  );
+}
+
+function buildOperationalQuality(matches: MatchListItem[]) {
+  const missingCoreFields = matches.filter(
+    (match) =>
+      !match.competition?.trim() ||
+      !match.venue?.trim() ||
+      !match.production_code?.trim() ||
+      !match.external_match_id?.trim(),
+  ).length;
+  const missingKeyAssignments = matches.filter((match) =>
+    REQUIRED_GRID_ROLES.some((roleName) => !hasAssignedRole(match, roleName)),
+  ).length;
+  const assignments = matches.flatMap((match) =>
+    match.assignments
+      .filter((assignment) => assignment.person)
+      .map((assignment) => ({ match, assignment })),
+  );
+  const pendingConfirmations = assignments.filter(
+    ({ assignment }) =>
+      !assignment.confirmed && !isRejectedConfirmation(assignment.confirmation_status),
+  ).length;
+  const rejectedConfirmations = assignments.filter(({ assignment }) =>
+    isRejectedConfirmation(assignment.confirmation_status),
+  ).length;
+  const matchesByPerson = new Map<
+    string,
+    Array<{ start: number; end: number; label: string }>
+  >();
+  const loadByPerson = new Map<string, { name: string; total: number }>();
+
+  assignments.forEach(({ match, assignment }) => {
+    const person = assignment.person;
+    if (!person) return;
+
+    const currentLoad = loadByPerson.get(person.id) ?? {
+      name: person.full_name,
+      total: 0,
+    };
+    currentLoad.total += 1;
+    loadByPerson.set(person.id, currentLoad);
+
+    const start = new Date(match.kickoff_at).getTime();
+    const duration = match.duration_minutes ?? DEFAULT_MATCH_DURATION_MINUTES;
+    const end = start + duration * 60_000;
+    const bucket = matchesByPerson.get(person.id) ?? [];
+    bucket.push({
+      start,
+      end,
+      label: `${match.home_team} vs ${match.away_team}`,
+    });
+    matchesByPerson.set(person.id, bucket);
+  });
+
+  const overloadedPeople = [...loadByPerson.values()].filter((person) => person.total >= 4);
+  let overlapCount = 0;
+
+  matchesByPerson.forEach((items) => {
+    const ordered = [...items].sort((left, right) => left.start - right.start);
+    for (let index = 1; index < ordered.length; index += 1) {
+      if (ordered[index].start < ordered[index - 1].end) {
+        overlapCount += 1;
+      }
+    }
+  });
+
+  return {
+    missingCoreFields,
+    missingKeyAssignments,
+    pendingConfirmations,
+    rejectedConfirmations,
+    overloadedPeopleCount: overloadedPeople.length,
+    overlapCount,
+  };
+}
+
 function getAttentionTone(emphasis: "critical" | "warning", value: number) {
   if (value <= 0) {
     return {
@@ -292,32 +326,57 @@ function formatOperationalHourLabel(time: string) {
   return `${hours} HS`;
 }
 
-function buildDisplayedTopPeople(topPeople: ReturnType<typeof buildTopPeople>) {
-  const normalized = [...topPeople];
-  const existingIds = new Set(normalized.map((person) => person.id));
-
-  for (const sample of SAMPLE_TOP_PEOPLE) {
-    if (normalized.length >= 10) {
-      break;
-    }
-
-    if (existingIds.has(sample.id)) {
-      continue;
-    }
-
-    normalized.push(sample);
-    existingIds.add(sample.id);
-  }
-
-  return normalized
-    .sort((left, right) => {
-      if (right.totalMatches !== left.totalMatches) {
-        return right.totalMatches - left.totalMatches;
+function AssignmentPlaceholderRow({ withBorder }: { withBorder: boolean }) {
+  return (
+    <div
+      className={
+        withBorder
+          ? "flex items-center justify-between gap-3 border-b border-[var(--border)] pb-3"
+          : "flex items-center justify-between gap-3"
       }
+    >
+      <div className="flex min-w-0 items-center gap-3">
+        <div className="inline-flex size-10 shrink-0 rounded-full bg-[#f0f3f8]" />
+        <div className="min-w-0 flex-1 space-y-2">
+          <div className="h-2 w-24 rounded-full bg-[#edf1f6]" />
+          <div className="h-3 w-32 rounded-full bg-[#edf1f6]" />
+        </div>
+      </div>
+      <div className="h-7 w-[4.5rem] shrink-0 rounded-full bg-[#f6f8fb]" />
+    </div>
+  );
+}
 
-      return left.fullName.localeCompare(right.fullName, "es");
-    })
-    .slice(0, Math.max(5, Math.min(10, normalized.length)));
+function QualityChecklistRow({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string;
+  tone: "ok" | "warning" | "critical" | "neutral";
+}) {
+  const toneClassName =
+    tone === "ok"
+      ? "border-[#c9ead8] bg-[#eefbf3] text-[#1b8b56]"
+      : tone === "critical"
+        ? "border-[#f4d3d9] bg-[#fff5f7] text-[#bc3556]"
+        : tone === "warning"
+          ? "border-[#f7e3c0] bg-[#fff8eb] text-[#b97712]"
+          : "border-[var(--border)] bg-[var(--background-soft)] text-[var(--muted)]";
+
+  return (
+    <div className="flex items-center justify-between gap-3 border-b border-[var(--border)] pb-3 last:border-b-0 last:pb-0">
+      <span className="min-w-0 truncate text-[0.86rem] font-bold text-[var(--foreground)]">
+        {label}
+      </span>
+      <span
+        className={`shrink-0 rounded-full border px-3 py-1 text-[10px] font-extrabold uppercase tracking-[0.16em] ${toneClassName}`}
+      >
+        {value}
+      </span>
+    </div>
+  );
 }
 
 export function ProductionInsightsPanel({
@@ -327,6 +386,10 @@ export function ProductionInsightsPanel({
   previousDateHref,
   nextDateHref,
 }: ProductionInsightsPanelProps) {
+  const orderedMatches = [...matches].sort(
+    (left, right) =>
+      new Date(left.kickoff_at).getTime() - new Date(right.kickoff_at).getTime(),
+  );
   const competitions = [
     ...new Set(
       matches
@@ -334,22 +397,25 @@ export function ProductionInsightsPanel({
         .filter((value): value is string => Boolean(value)),
     ),
   ];
-  const startWindow = matches[0]
-    ? formatMatchTime(matches[0].kickoff_at, matches[0].timezone || timezone)
+  const startWindow = orderedMatches[0]
+    ? formatMatchTime(orderedMatches[0].kickoff_at, orderedMatches[0].timezone || timezone)
     : "--:--";
-  const endWindow = matches.at(-1)
+  const endWindow = orderedMatches.at(-1)
     ? formatMatchTime(
-        matches[matches.length - 1].kickoff_at,
-        matches[matches.length - 1].timezone || timezone,
+        orderedMatches[orderedMatches.length - 1].kickoff_at,
+        orderedMatches[orderedMatches.length - 1].timezone || timezone,
       )
     : "--:--";
   const topPeople = buildTopPeople(matches);
   const [showAllPeople, setShowAllPeople] = useState(false);
   const assignedPeopleCount = countAssignedPeople(matches);
-  const displayedTopPeople = buildDisplayedTopPeople(topPeople);
-  const visibleTopPeople = displayedTopPeople.slice(0, showAllPeople ? 10 : 5);
-  const canExpandPeople = displayedTopPeople.length > 5;
+  const visibleTopPeople = topPeople.slice(0, showAllPeople ? 10 : 5);
+  const canExpandPeople = topPeople.length > 5;
+  const assignmentPlaceholderCount = showAllPeople
+    ? 0
+    : Math.max(0, 5 - visibleTopPeople.length);
   const missingHighlights = buildMissingHighlights(matches);
+  const operationalQuality = buildOperationalQuality(matches);
   const startWindowLabel = formatOperationalHourLabel(startWindow);
   const endWindowLabel = formatOperationalHourLabel(endWindow);
   return (
@@ -424,6 +490,17 @@ export function ProductionInsightsPanel({
           </div>
         </div>
 
+        {!matches.length ? (
+          <div className="mt-4 rounded-[var(--panel-radius)] border border-dashed border-[var(--border)] bg-[var(--background-soft)] px-4 py-4">
+            <p className="text-sm font-extrabold text-[var(--foreground)]">
+              No hay partidos visibles
+            </p>
+            <p className="mt-1 text-xs leading-5 text-[var(--muted)]">
+              Ajusta fecha o filtros para reconstruir el resumen operativo.
+            </p>
+          </div>
+        ) : null}
+
       <section className="mt-4 space-y-3">
         <div className="flex items-center justify-between gap-3 border-b border-[var(--border)] pb-3">
           <h4 className="text-[11px] font-extrabold uppercase tracking-[0.28em] text-[var(--foreground)]">
@@ -438,11 +515,18 @@ export function ProductionInsightsPanel({
         <div className="space-y-3">
           {visibleTopPeople.map((person, index) => {
               const tone = getAssignmentLoadTone(person.totalMatches);
+              const hasFollowingPlaceholder = assignmentPlaceholderCount > 0;
+              const isLastVisibleRealRow =
+                index === visibleTopPeople.length - 1 && !hasFollowingPlaceholder;
 
               return (
                 <div
                   key={person.id}
-                  className={index === visibleTopPeople.length - 1 ? "flex items-center justify-between gap-3" : "flex items-center justify-between gap-3 border-b border-[var(--border)] pb-3"}
+                  className={
+                    isLastVisibleRealRow
+                      ? "flex items-center justify-between gap-3"
+                      : "flex items-center justify-between gap-3 border-b border-[var(--border)] pb-3"
+                  }
                 >
                   <div className="flex min-w-0 items-center gap-3">
                     <div
@@ -470,6 +554,12 @@ export function ProductionInsightsPanel({
                 </div>
               );
             })}
+          {Array.from({ length: assignmentPlaceholderCount }, (_, index) => (
+            <AssignmentPlaceholderRow
+              key={`assignment-placeholder-${index}`}
+              withBorder={index < assignmentPlaceholderCount - 1}
+            />
+          ))}
           {canExpandPeople ? (
             <ExpandDivider
               expanded={showAllPeople}
@@ -524,6 +614,99 @@ export function ProductionInsightsPanel({
               </div>
             );
           })}
+        </div>
+      </section>
+
+      <section className="mt-5 space-y-3 border-t border-[var(--border)] pt-4">
+        <div className="flex items-center gap-2">
+          <ClipboardCheck className="size-4 text-[#617187]" />
+          <h4 className="text-[11px] font-extrabold uppercase tracking-[0.28em] text-[var(--foreground)]">
+            Calidad de datos
+          </h4>
+        </div>
+        <div className="space-y-3 rounded-[var(--panel-radius)] border border-[var(--border)] bg-white px-4 py-4">
+          <QualityChecklistRow
+            label="Campos críticos incompletos"
+            value={`${operationalQuality.missingCoreFields}`}
+            tone={
+              matches.length === 0
+                ? "neutral"
+                : operationalQuality.missingCoreFields > 0
+                  ? "critical"
+                  : "ok"
+            }
+          />
+          <QualityChecklistRow
+            label="Sin asignaciones clave"
+            value={`${operationalQuality.missingKeyAssignments}`}
+            tone={
+              matches.length === 0
+                ? "neutral"
+                : operationalQuality.missingKeyAssignments > 0
+                  ? "critical"
+                  : "ok"
+            }
+          />
+          <QualityChecklistRow
+            label="Confirmaciones pendientes"
+            value={`${operationalQuality.pendingConfirmations}`}
+            tone={
+              operationalQuality.pendingConfirmations > 0
+                ? "warning"
+                : matches.length
+                  ? "ok"
+                  : "neutral"
+            }
+          />
+          <QualityChecklistRow
+            label="Rechazos reportados"
+            value={`${operationalQuality.rejectedConfirmations}`}
+            tone={operationalQuality.rejectedConfirmations > 0 ? "critical" : "neutral"}
+          />
+        </div>
+      </section>
+
+      <section className="mt-5 space-y-3 border-t border-[var(--border)] pt-4">
+        <div className="flex items-center gap-2">
+          <Clock3 className="size-4 text-[#617187]" />
+          <h4 className="text-[11px] font-extrabold uppercase tracking-[0.28em] text-[var(--foreground)]">
+            Presión operativa
+          </h4>
+        </div>
+        <div className="space-y-3 rounded-[var(--panel-radius)] border border-[var(--border)] bg-white px-4 py-4">
+          <QualityChecklistRow
+            label="Personas con 4+ partidos"
+            value={`${operationalQuality.overloadedPeopleCount}`}
+            tone={operationalQuality.overloadedPeopleCount > 0 ? "warning" : matches.length ? "ok" : "neutral"}
+          />
+          <QualityChecklistRow
+            label="Solapes de horarios"
+            value={`${operationalQuality.overlapCount}`}
+            tone={operationalQuality.overlapCount > 0 ? "critical" : matches.length ? "ok" : "neutral"}
+          />
+          <QualityChecklistRow
+            label="Checklist diario"
+            value={
+              operationalQuality.missingCoreFields +
+                operationalQuality.missingKeyAssignments +
+                operationalQuality.pendingConfirmations +
+                operationalQuality.overlapCount ===
+              0
+                ? "OK"
+                : "Revisar"
+            }
+            tone={
+              matches.length === 0
+                ? "neutral"
+                : operationalQuality.missingCoreFields +
+                    operationalQuality.missingKeyAssignments +
+                    operationalQuality.pendingConfirmations +
+                    operationalQuality.overlapCount ===
+                  0
+                  ? "ok"
+                  : "warning"
+            }
+          />
         </div>
       </section>
 
