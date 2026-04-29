@@ -3656,7 +3656,7 @@ export function ReportsWorkspace({
       {queryFilteredReports.length ? (
         <div className="h-full min-h-0 overflow-auto">
           <table
-            className="border-collapse font-mono text-[12px] text-[#1f2937]"
+            className="w-full border-collapse font-mono text-[12px] text-[#1f2937]"
             style={{
               minWidth: `${REPORT_PLANILLA_COLUMNS.reduce(
                 (sum, column) => sum + reportPlanillaWidths[column.key],
