@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Maximize2, X } from "lucide-react";
+import { Maximize2, Pencil, X } from "lucide-react";
 
 import { useGridInsightsDock } from "@/components/grid/grid-insights-dock";
 import { ProductionPlainTable } from "@/components/grid/production-plain-table";
@@ -26,6 +26,7 @@ export function ProductionPlainWorkspace({
   periodLabel,
 }: ProductionPlainWorkspaceProps) {
   const [open, setOpen] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
   const { close: closeInsightsDock } = useGridInsightsDock();
 
   useEffect(() => {
@@ -35,6 +36,7 @@ export function ProductionPlainWorkspace({
 
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
+        setIsEditing(false);
         setOpen(false);
       }
     }
@@ -57,7 +59,7 @@ export function ProductionPlainWorkspace({
           setOpen(true);
         }}
         disabled={!matches.length}
-        className="inline-flex size-10 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--surface)] text-[#617187] shadow-[0_8px_18px_rgba(15,23,42,0.06)] transition hover:border-[rgba(230,18,56,0.24)] hover:text-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-50"
+        className="inline-flex size-10 items-center justify-center rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--surface)] text-[#617187] shadow-sm transition hover:border-[rgba(230,18,56,0.24)] hover:text-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-50"
         aria-label="Abrir planilla"
         title="Abrir planilla"
       >
@@ -79,10 +81,28 @@ export function ProductionPlainWorkspace({
               <span className="hidden rounded-full border border-[#d8e0eb] bg-[#f8fafc] px-3 py-1.5 text-xs font-bold text-[#64748b] sm:inline-flex">
                 {periodLabel} · {matches.length} partidos
               </span>
+              {canEdit ? (
+                <button
+                  type="button"
+                  onClick={() => setIsEditing((current) => !current)}
+                  className={`inline-flex h-10 items-center gap-2 rounded-[var(--panel-radius)] border px-3 text-xs font-black uppercase tracking-[0.14em] transition ${
+                    isEditing
+                      ? "border-[var(--accent)] bg-[#fff1f4] text-[var(--accent)]"
+                      : "border-[#d8e0eb] bg-white text-[#64748b] hover:border-[#f3b5c2] hover:text-[var(--accent)]"
+                  }`}
+                  aria-pressed={isEditing}
+                >
+                  <Pencil className="size-4" />
+                  Editar
+                </button>
+              ) : null}
               <button
                 type="button"
-                onClick={() => setOpen(false)}
-                className="inline-flex size-10 items-center justify-center rounded-full border border-[#d8e0eb] bg-white text-[#64748b] hover:border-[#f3b5c2] hover:text-[var(--accent)]"
+                onClick={() => {
+                  setIsEditing(false);
+                  setOpen(false);
+                }}
+                className="inline-flex size-10 items-center justify-center rounded-[var(--panel-radius)] border border-[#d8e0eb] bg-white text-[#64748b] hover:border-[#f3b5c2] hover:text-[var(--accent)]"
                 aria-label="Cerrar planilla"
                 title="Cerrar planilla"
               >
@@ -95,6 +115,7 @@ export function ProductionPlainWorkspace({
               matches={matches}
               people={people}
               canEdit={canEdit}
+              isEditing={isEditing}
               redirectTo={redirectTo}
             />
           </div>

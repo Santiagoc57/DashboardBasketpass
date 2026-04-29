@@ -1,7 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { Pencil } from "lucide-react";
+import { useRef } from "react";
 
 import { quickUpdateMatchFlatFieldAction } from "@/app/actions/matches";
 import {
@@ -20,6 +19,7 @@ type ProductionPlainTableProps = {
     full_name: string;
   }>;
   canEdit: boolean;
+  isEditing: boolean;
   redirectTo: string;
 };
 
@@ -45,6 +45,7 @@ function EditableTextCell({
   field,
   value,
   canEdit,
+  isEditing,
   redirectTo,
   placeholder = "-",
   type = "text",
@@ -54,46 +55,19 @@ function EditableTextCell({
   field: string;
   value: string;
   canEdit: boolean;
+  isEditing: boolean;
   redirectTo: string;
   placeholder?: string;
   type?: "text" | "time";
   inputClassName?: string;
 }) {
-  const [editing, setEditing] = useState(false);
   const formRef = useRef<HTMLFormElement | null>(null);
-  const inputRef = useRef<HTMLInputElement | null>(null);
 
-  useEffect(() => {
-    if (editing) {
-      inputRef.current?.focus();
-      inputRef.current?.select();
-    }
-  }, [editing]);
-
-  if (!canEdit) {
+  if (!canEdit || !isEditing) {
     return (
       <span title={value || placeholder} className="block truncate">
         {value || placeholder}
       </span>
-    );
-  }
-
-  if (!editing) {
-    return (
-      <div className="flex min-w-0 items-center gap-1">
-        <span title={value || placeholder} className="block min-w-0 flex-1 truncate">
-          {value || placeholder}
-        </span>
-        <button
-          type="button"
-          onClick={() => setEditing(true)}
-          className="inline-flex size-6 shrink-0 items-center justify-center border border-transparent text-[#8a98aa] hover:border-[#d8e0eb] hover:bg-white hover:text-[#1f2937]"
-          aria-label={`Editar ${field}`}
-          title={`Editar ${field}`}
-        >
-          <Pencil className="size-3.5" />
-        </button>
-      </div>
     );
   }
 
@@ -103,7 +77,6 @@ function EditableTextCell({
       <input type="hidden" name="field" value={field} />
       <input type="hidden" name="redirectTo" value={redirectTo} />
       <input
-        ref={inputRef}
         type={type}
         name="value"
         defaultValue={value}
@@ -117,7 +90,7 @@ function EditableTextCell({
 
           if (event.key === "Escape") {
             event.preventDefault();
-            setEditing(false);
+            event.currentTarget.blur();
           }
         }}
         className={cn(
@@ -136,6 +109,7 @@ function EditableSelectCell({
   label,
   options,
   canEdit,
+  isEditing,
   redirectTo,
   selectClassName,
 }: {
@@ -145,43 +119,17 @@ function EditableSelectCell({
   label: string;
   options: Array<{ value: string; label: string }>;
   canEdit: boolean;
+  isEditing: boolean;
   redirectTo: string;
   selectClassName?: string;
 }) {
-  const [editing, setEditing] = useState(false);
   const formRef = useRef<HTMLFormElement | null>(null);
-  const selectRef = useRef<HTMLSelectElement | null>(null);
 
-  useEffect(() => {
-    if (editing) {
-      selectRef.current?.focus();
-    }
-  }, [editing]);
-
-  if (!canEdit) {
+  if (!canEdit || !isEditing) {
     return (
       <span title={label || "-"} className="block truncate">
         {label || "-"}
       </span>
-    );
-  }
-
-  if (!editing) {
-    return (
-      <div className="flex min-w-0 items-center gap-1">
-        <span title={label || "-"} className="block min-w-0 flex-1 truncate">
-          {label || "-"}
-        </span>
-        <button
-          type="button"
-          onClick={() => setEditing(true)}
-          className="inline-flex size-6 shrink-0 items-center justify-center border border-transparent text-[#8a98aa] hover:border-[#d8e0eb] hover:bg-white hover:text-[#1f2937]"
-          aria-label={`Editar ${field}`}
-          title={`Editar ${field}`}
-        >
-          <Pencil className="size-3.5" />
-        </button>
-      </div>
     );
   }
 
@@ -191,16 +139,14 @@ function EditableSelectCell({
       <input type="hidden" name="field" value={field} />
       <input type="hidden" name="redirectTo" value={redirectTo} />
       <select
-        ref={selectRef}
         name="value"
         defaultValue={value}
         title={label || "-"}
         onChange={() => formRef.current?.requestSubmit()}
-        onBlur={() => setEditing(false)}
         onKeyDown={(event) => {
           if (event.key === "Escape") {
             event.preventDefault();
-            setEditing(false);
+            event.currentTarget.blur();
           }
         }}
         className={cn(
@@ -222,6 +168,7 @@ export function ProductionPlainTable({
   matches,
   people,
   canEdit,
+  isEditing,
   redirectTo,
 }: ProductionPlainTableProps) {
   return (
@@ -267,6 +214,7 @@ export function ProductionPlainTable({
                       value={formatMatchTime(match.kickoff_at, match.timezone, "HH:mm")}
                       type="time"
                       canEdit={canEdit}
+                      isEditing={isEditing}
                       redirectTo={redirectTo}
                       inputClassName="w-[4.7rem]"
                     />
@@ -292,6 +240,7 @@ export function ProductionPlainTable({
                       field="venue"
                       value={match.venue ?? ""}
                       canEdit={canEdit}
+                      isEditing={isEditing}
                       redirectTo={redirectTo}
                       placeholder="Sin sede"
                       inputClassName="w-[12rem]"
@@ -311,6 +260,7 @@ export function ProductionPlainTable({
                         })),
                       ]}
                       canEdit={canEdit}
+                      isEditing={isEditing}
                       redirectTo={redirectTo}
                       selectClassName="w-[9rem]"
                     />
@@ -321,6 +271,7 @@ export function ProductionPlainTable({
                       field="productionCode"
                       value={match.production_code ?? ""}
                       canEdit={canEdit}
+                      isEditing={isEditing}
                       redirectTo={redirectTo}
                       placeholder="Sin ID"
                       inputClassName="w-[8.5rem]"
@@ -340,6 +291,7 @@ export function ProductionPlainTable({
                         })),
                       ]}
                       canEdit={canEdit}
+                      isEditing={isEditing}
                       redirectTo={redirectTo}
                       selectClassName="w-[12rem]"
                     />

@@ -46,7 +46,7 @@ import { MatchSummaryCell } from "@/components/shared/match-summary-cell";
 import { badgeBaseClassName } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PersonRoleStack } from "@/components/ui/person-role-stack";
-import { PlainViewToggle } from "@/components/ui/plain-view-toggle";
+import { PlainFullscreenWorkspace } from "@/components/ui/plain-fullscreen-workspace";
 import { SeverityBadge } from "@/components/ui/severity-badge";
 import { SectionTableCard } from "@/components/ui/section-table-card";
 import { UnderlineTabs } from "@/components/ui/underline-tabs";
@@ -962,6 +962,7 @@ export function IncidentsWorkspace({
   headerActionsPortalTarget = null,
   drawerPortalTarget = null,
   onSelectedIdChange,
+  plainPeriodLabel = "Corte visible",
 }: {
   incidents: IncidentRecord[];
   hasGeminiKey: boolean;
@@ -971,6 +972,7 @@ export function IncidentsWorkspace({
   headerActionsPortalTarget?: HTMLElement | null;
   drawerPortalTarget?: HTMLElement | null;
   onSelectedIdChange?: (selectedId: string | null) => void;
+  plainPeriodLabel?: string;
 }) {
   const router = useRouter();
   const desktopEvidenceInputRef = useRef<HTMLInputElement | null>(null);
@@ -1846,6 +1848,15 @@ export function IncidentsWorkspace({
           hasGeminiKey={hasGeminiKey}
           buttonVariant="icon"
         />
+        <PlainFullscreenWorkspace
+          eyebrow="Incidencias"
+          title="Planilla de incidencias"
+          periodLabel={plainPeriodLabel}
+          countLabel={`${sortedIncidents.length} incidencias`}
+          disabled={!sortedIncidents.length}
+        >
+          {renderIncidentPlainWorkspaceContent()}
+        </PlainFullscreenWorkspace>
         <ToolbarIconButton
           type="button"
           onClick={() => void exportVisibleIncidents(sortedIncidents)}
@@ -1885,12 +1896,13 @@ export function IncidentsWorkspace({
     }, {} as Record<IncidentControlColumn, string>);
   }, [columnOrder, selectedIncident, isWideScreen]);
 
-  const incidentPlainWorkspaceContent = (
-    <div className="overflow-hidden border border-[#d8dee8] bg-[#fbfcfe]">
+  function renderIncidentPlainWorkspaceContent() {
+    return (
+      <div className="h-full min-h-0 overflow-hidden border border-[#d8dee8] bg-[#fbfcfe]">
       {filteredIncidents.length ? (
-        <div className="overflow-x-auto">
+        <div className="h-full min-h-0 overflow-auto">
           <table className="min-w-[1500px] border-collapse font-mono text-[12px] text-[#1f2937]">
-            <thead>
+            <thead className="sticky top-0 z-10">
               <tr className="border-b border-[#d8dee8] bg-[#f4f6f9] text-left text-[11px] font-bold uppercase tracking-[0.12em] text-[#64748b]">
                 <th className="w-[92px] border-r border-[#e1e7f0] px-2 py-2">Fecha</th>
                 <th className="w-[72px] border-r border-[#e1e7f0] px-2 py-2">Hora</th>
@@ -1974,8 +1986,9 @@ export function IncidentsWorkspace({
           />
         </div>
       )}
-    </div>
-  );
+      </div>
+    );
+  }
 
   const workspaceVisualContent = (
     <div className="flex min-w-0 flex-col gap-0">
@@ -2156,13 +2169,7 @@ export function IncidentsWorkspace({
     </div>
   );
 
-  const workspaceContent = (
-    <PlainViewToggle
-      storageKey="basket-production.incidents.view-mode"
-      visual={workspaceVisualContent}
-      plain={incidentPlainWorkspaceContent}
-    />
-  );
+  const workspaceContent = workspaceVisualContent;
 
   const selectedIncidentDrawer = selectedIncident ? (
     <aside className="min-w-0 self-start 2xl:sticky 2xl:top-24">
