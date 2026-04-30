@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { Copy, Trash2 } from "lucide-react";
 
 import {
   createMatchAction,
@@ -238,11 +239,11 @@ export function ProductionPlainTable({
         </div>
       ) : null}
       <div className="h-full min-h-0 overflow-auto">
-        <table className="min-w-[3410px] border-collapse font-mono text-[12px] text-[#1f2937]">
+        <table className="min-w-[3340px] border-collapse font-mono text-[12px] text-[#1f2937]">
           <thead className="sticky top-0 z-10">
             <tr className="border-b border-[#d8dee8] bg-[#f4f6f9] text-left text-[11px] font-bold uppercase tracking-[0.12em] text-[#64748b]">
               {canEdit && isEditing ? (
-                <th className="w-[150px] border-r border-[#e1e7f0] px-2 py-2">
+                <th className="w-[80px] border-r border-[#e1e7f0] px-2 py-2 text-center">
                   Acciones
                 </th>
               ) : null}
@@ -367,7 +368,7 @@ export function ProductionPlainTable({
                 >
                   {canEdit && isEditing ? (
                     <td className="border-r border-[#e6ebf2] px-2 py-1">
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex items-center justify-center gap-1.5">
                         <form
                           action={createMatchAction}
                           onSubmit={(event) => {
@@ -386,9 +387,11 @@ export function ProductionPlainTable({
                           ))}
                           <button
                             type="submit"
-                            className="h-7 rounded-[var(--panel-radius)] border border-[#d8e0eb] bg-white px-2 text-[10px] font-black uppercase tracking-[0.1em] text-[#64748b] hover:border-[#b7e4c7] hover:text-[#15803d]"
+                            aria-label="Copiar fila"
+                            title="Copiar fila"
+                            className="inline-flex size-7 items-center justify-center rounded-[var(--panel-radius)] border border-[#d8e0eb] bg-white text-[#64748b] hover:border-[#b7e4c7] hover:text-[#15803d]"
                           >
-                            Copiar
+                            <Copy className="size-3.5" aria-hidden="true" />
                           </button>
                         </form>
                         <form
@@ -407,9 +410,11 @@ export function ProductionPlainTable({
                           <input type="hidden" name="redirectTo" value={redirectTo} />
                           <button
                             type="submit"
-                            className="h-7 rounded-[var(--panel-radius)] border border-[#ffd7df] bg-[#fff5f7] px-2 text-[10px] font-black uppercase tracking-[0.1em] text-[var(--accent)] hover:bg-[#ffe7ec]"
+                            aria-label="Eliminar fila"
+                            title="Eliminar fila"
+                            className="inline-flex size-7 items-center justify-center rounded-[var(--panel-radius)] border border-[#ffd7df] bg-[#fff5f7] text-[var(--accent)] hover:bg-[#ffe7ec]"
                           >
-                            Eliminar
+                            <Trash2 className="size-3.5" aria-hidden="true" />
                           </button>
                         </form>
                       </div>
