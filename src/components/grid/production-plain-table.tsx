@@ -1,8 +1,12 @@
 "use client";
 
-import { useRef } from "react";
+import { useRef, useState } from "react";
 
-import { quickUpdateMatchFlatFieldAction } from "@/app/actions/matches";
+import {
+  createMatchAction,
+  deleteMatchAction,
+  quickUpdateMatchFlatFieldAction,
+} from "@/app/actions/matches";
 import {
   COMMENTARY_PLAN_OPTIONS,
   normalizeCommentaryPlan,
@@ -42,6 +46,46 @@ function getResponsible(match: MatchListItem) {
 
 function getResponsibleId(match: MatchListItem) {
   return getAssignment(match, "Responsable")?.person_id ?? match.owner?.id ?? "";
+}
+
+function getAssignedPersonId(match: MatchListItem, roleName: string) {
+  return getAssignment(match, roleName)?.person_id ?? "";
+}
+
+function getDateInputValue(match: MatchListItem) {
+  return formatMatchDate(match.kickoff_at, match.timezone, "yyyy-MM-dd");
+}
+
+function getCreateActionHiddenFields(match: MatchListItem) {
+  return [
+    ["date", getDateInputValue(match)],
+    ["time", formatMatchTime(match.kickoff_at, match.timezone, "HH:mm")],
+    ["timezone", match.timezone],
+    ["competition", match.competition ?? ""],
+    ["homeTeam", match.home_team],
+    ["awayTeam", `${match.away_team} copia`],
+    ["venue", match.venue ?? ""],
+    ["productionMode", match.production_mode ?? ""],
+    ["productionCode", match.production_code ?? ""],
+    ["commentaryPlan", match.commentary_plan ?? ""],
+    ["transport", match.transport ?? ""],
+    ["durationMinutes", String(match.duration_minutes ?? 150)],
+    ["status", match.status ?? "Pendiente"],
+    ["ownerId", getResponsibleId(match)],
+    ["notes", match.notes ?? ""],
+    ["realizadorId", getAssignedPersonId(match, "Realizador")],
+    ["graphicsOperatorId", getAssignedPersonId(match, "Operador de Grafica")],
+    ["camera1Id", getAssignedPersonId(match, "Camara 1")],
+    ["camera2Id", getAssignedPersonId(match, "Camara 2")],
+    ["camera3Id", getAssignedPersonId(match, "Camara 3")],
+    ["camera4Id", getAssignedPersonId(match, "Camara 4")],
+    ["camera5Id", getAssignedPersonId(match, "Camara 5")],
+    ["relatorId", getAssignedPersonId(match, "Relator")],
+    ["commentator1Id", getAssignedPersonId(match, "Comentario 1")],
+    ["commentator2Id", getAssignedPersonId(match, "Comentario 2")],
+    ["controlOperatorId", getAssignedPersonId(match, "Operador de Control")],
+    ["supportTechId", getAssignedPersonId(match, "Soporte tecnico")],
+  ] as const;
 }
 
 function EditableTextCell({
@@ -175,12 +219,33 @@ export function ProductionPlainTable({
   isEditing,
   redirectTo,
 }: ProductionPlainTableProps) {
+  const [showNewRow, setShowNewRow] = useState(false);
+
   return (
     <div className="h-full min-h-0 overflow-hidden border border-[#d8dee8] bg-[#fbfcfe]">
+      {canEdit && isEditing ? (
+        <div className="flex items-center justify-between border-b border-[#d8dee8] bg-white px-3 py-2">
+          <p className="text-[11px] font-black uppercase tracking-[0.14em] text-[#64748b]">
+            Acciones de edición
+          </p>
+          <button
+            type="button"
+            onClick={() => setShowNewRow((current) => !current)}
+            className="inline-flex h-8 items-center rounded-[var(--panel-radius)] border border-[#d8e0eb] bg-[#f8fafc] px-3 text-[11px] font-black uppercase tracking-[0.12em] text-[#64748b] hover:border-[#f3b5c2] hover:text-[var(--accent)]"
+          >
+            {showNewRow ? "Cancelar nueva fila" : "Añadir fila"}
+          </button>
+        </div>
+      ) : null}
       <div className="h-full min-h-0 overflow-auto">
-        <table className="min-w-[3260px] border-collapse font-mono text-[12px] text-[#1f2937]">
+        <table className="min-w-[3410px] border-collapse font-mono text-[12px] text-[#1f2937]">
           <thead className="sticky top-0 z-10">
             <tr className="border-b border-[#d8dee8] bg-[#f4f6f9] text-left text-[11px] font-bold uppercase tracking-[0.12em] text-[#64748b]">
+              {canEdit && isEditing ? (
+                <th className="w-[150px] border-r border-[#e1e7f0] px-2 py-2">
+                  Acciones
+                </th>
+              ) : null}
               <th className="w-[92px] border-r border-[#e1e7f0] px-2 py-2">Fecha</th>
               <th className="w-[82px] border-r border-[#e1e7f0] px-2 py-2">Hora</th>
               <th className="w-[150px] border-r border-[#e1e7f0] px-2 py-2">Liga</th>
@@ -204,6 +269,86 @@ export function ProductionPlainTable({
             </tr>
           </thead>
           <tbody>
+            {canEdit && isEditing && showNewRow ? (
+              <tr className="border-b border-[#d8dee8] bg-[#fffdf7]">
+                <td className="border-r border-[#e6ebf2] px-2 py-1">
+                  <button
+                    type="submit"
+                    form="production-planilla-new-row"
+                    className="h-8 rounded-[var(--panel-radius)] bg-[var(--accent)] px-3 text-[11px] font-black uppercase tracking-[0.12em] text-white"
+                  >
+                    Crear
+                  </button>
+                </td>
+                <td colSpan={20} className="px-2 py-1">
+                  <form
+                    id="production-planilla-new-row"
+                    action={createMatchAction}
+                    onSubmit={(event) => {
+                      const confirmed = window.confirm(
+                        "Vas a crear una nueva fila en la grilla de producción. Revisa fecha, hora y equipos antes de continuar.",
+                      );
+
+                      if (!confirmed) {
+                        event.preventDefault();
+                      }
+                    }}
+                    className="grid min-w-[980px] grid-cols-[120px_90px_160px_220px_220px_140px_minmax(220px,1fr)] gap-2"
+                  >
+                    <input type="hidden" name="redirectTo" value={redirectTo} />
+                    <input type="hidden" name="timezone" value="America/Bogota" />
+                    <input type="hidden" name="durationMinutes" value="150" />
+                    <input type="hidden" name="status" value="Pendiente" />
+                    <input type="hidden" name="productionMode" value="" />
+                    <input
+                      type="date"
+                      name="date"
+                      required
+                      className="h-8 border border-[#94a3b8] bg-white px-2"
+                    />
+                    <input
+                      type="time"
+                      name="time"
+                      required
+                      className="h-8 border border-[#94a3b8] bg-white px-2"
+                    />
+                    <input
+                      name="competition"
+                      placeholder="Liga"
+                      className="h-8 border border-[#94a3b8] bg-white px-2"
+                    />
+                    <input
+                      name="homeTeam"
+                      required
+                      placeholder="Local"
+                      className="h-8 border border-[#94a3b8] bg-white px-2"
+                    />
+                    <input
+                      name="awayTeam"
+                      required
+                      placeholder="Visitante"
+                      className="h-8 border border-[#94a3b8] bg-white px-2"
+                    />
+                    <select
+                      name="ownerId"
+                      className="h-8 border border-[#94a3b8] bg-white px-2"
+                    >
+                      <option value="">Responsable</option>
+                      {people.map((person) => (
+                        <option key={person.id} value={person.id}>
+                          {person.full_name}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      name="notes"
+                      placeholder="Observacion"
+                      className="h-8 border border-[#94a3b8] bg-white px-2"
+                    />
+                  </form>
+                </td>
+              </tr>
+            ) : null}
             {matches.map((match) => {
               const homeTeam = getTeamDisplayName(match.home_team, match.competition);
               const awayTeam = getTeamDisplayName(match.away_team, match.competition);
@@ -220,6 +365,56 @@ export function ProductionPlainTable({
                   key={match.id}
                   className="border-b border-[#e6ebf2] odd:bg-white even:bg-[#fbfcfe] hover:bg-[#f3f7ff]"
                 >
+                  {canEdit && isEditing ? (
+                    <td className="border-r border-[#e6ebf2] px-2 py-1">
+                      <div className="flex items-center gap-1.5">
+                        <form
+                          action={createMatchAction}
+                          onSubmit={(event) => {
+                            const confirmed = window.confirm(
+                              "Vas a copiar esta fila y crear un nuevo partido con la misma información base. Podrás ajustar la copia después de crearla.",
+                            );
+
+                            if (!confirmed) {
+                              event.preventDefault();
+                            }
+                          }}
+                        >
+                          <input type="hidden" name="redirectTo" value={redirectTo} />
+                          {getCreateActionHiddenFields(match).map(([name, value]) => (
+                            <input key={name} type="hidden" name={name} value={value} />
+                          ))}
+                          <button
+                            type="submit"
+                            className="h-7 rounded-[var(--panel-radius)] border border-[#d8e0eb] bg-white px-2 text-[10px] font-black uppercase tracking-[0.1em] text-[#64748b] hover:border-[#b7e4c7] hover:text-[#15803d]"
+                          >
+                            Copiar
+                          </button>
+                        </form>
+                        <form
+                          action={deleteMatchAction}
+                          onSubmit={(event) => {
+                            const confirmed = window.confirm(
+                              "Vas a eliminar esta fila de la grilla de producción. Esta acción puede afectar asignaciones, reportes y vistas relacionadas. ¿Quieres continuar?",
+                            );
+
+                            if (!confirmed) {
+                              event.preventDefault();
+                            }
+                          }}
+                        >
+                          <input type="hidden" name="matchId" value={match.id} />
+                          <input type="hidden" name="redirectTo" value={redirectTo} />
+                          <button
+                            type="submit"
+                            className="h-7 rounded-[var(--panel-radius)] border border-[#ffd7df] bg-[#fff5f7] px-2 text-[10px] font-black uppercase tracking-[0.1em] text-[var(--accent)] hover:bg-[#ffe7ec]"
+                          >
+                            Eliminar
+                          </button>
+                        </form>
+                      </div>
+                    </td>
+                  ) : null}
                   <td className="border-r border-[#e6ebf2] px-2 py-1.5 text-[#64748b]">
                     {formatMatchDate(match.kickoff_at, match.timezone, "dd/MM/yyyy")}
                   </td>
