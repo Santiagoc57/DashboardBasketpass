@@ -30,6 +30,20 @@ export function ProductionPlainWorkspace({
   const [isEditing, setIsEditing] = useState(false);
   const { close: closeInsightsDock } = useGridInsightsDock();
 
+  function requestEditMode() {
+    if (isEditing) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      "Vas a activar la edición de esta planilla. Los cambios que realices se guardan sobre la grilla operativa existente y pueden impactar asignaciones, reportes y vistas relacionadas. Revisa cada campo antes de modificarlo.",
+    );
+
+    if (confirmed) {
+      setIsEditing(true);
+    }
+  }
+
   useEffect(() => {
     if (!open) {
       return undefined;
@@ -83,19 +97,31 @@ export function ProductionPlainWorkspace({
                 {periodLabel} · {matches.length} partidos
               </span>
               {canEdit ? (
-                <button
-                  type="button"
-                  onClick={() => setIsEditing((current) => !current)}
-                  className={`inline-flex h-10 items-center gap-2 rounded-[var(--panel-radius)] border px-3 text-xs font-black uppercase tracking-[0.14em] transition ${
-                    isEditing
-                      ? "border-[var(--accent)] bg-[#fff1f4] text-[var(--accent)]"
-                      : "border-[#d8e0eb] bg-white text-[#64748b] hover:border-[#f3b5c2] hover:text-[var(--accent)]"
-                  }`}
-                  aria-pressed={isEditing}
-                >
-                  <Pencil className="size-4" />
-                  Editar
-                </button>
+                <>
+                  <button
+                    type="button"
+                    onClick={requestEditMode}
+                    disabled={isEditing}
+                    className={`inline-flex h-10 items-center gap-2 rounded-[var(--panel-radius)] border px-3 text-xs font-black uppercase tracking-[0.14em] transition ${
+                      isEditing
+                        ? "cursor-default border-[var(--accent)] bg-[#fff1f4] text-[var(--accent)]"
+                        : "border-[#d8e0eb] bg-white text-[#64748b] hover:border-[#f3b5c2] hover:text-[var(--accent)]"
+                    }`}
+                    aria-pressed={isEditing}
+                  >
+                    <Pencil className="size-4" />
+                    Editar
+                  </button>
+                  {isEditing ? (
+                    <button
+                      type="button"
+                      onClick={() => setIsEditing(false)}
+                      className="inline-flex h-10 items-center rounded-[var(--panel-radius)] border border-[#b7e4c7] bg-[#f0fdf4] px-3 text-xs font-black uppercase tracking-[0.14em] text-[#15803d] transition hover:border-[#86d7a4]"
+                    >
+                      Guardar cambios
+                    </button>
+                  ) : null}
+                </>
               ) : null}
               <button
                 type="button"
