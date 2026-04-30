@@ -62,6 +62,7 @@ import type {
 import type {
   IncidentProblem,
   IncidentRecord,
+  IncidentSeverity,
 } from "@/lib/incidents";
 import { getTeamLeagueColorSet } from "@/lib/team-directory";
 import { cn, formatPersonShortName } from "@/lib/utils";
@@ -147,6 +148,32 @@ type IncidentPlanillaColumn =
   | "images"
   | "aptoLineal";
 
+type IncidentPlanillaDraft = Partial<
+  Record<
+    | "severity"
+    | "technicalObservations"
+    | "buildingObservations"
+    | "generalObservations"
+    | "other"
+    | "st"
+    | "club"
+    | "speedtestValue"
+    | "pingValue"
+    | "gpuValue"
+    | "testTime"
+    | "testCheck"
+    | "startCheck"
+    | "graphicsCheck"
+    | "internetProblem"
+    | "feedProblem"
+    | "ocr"
+    | "overlays"
+    | "signalDelivery"
+    | "aptoLineal",
+    string
+  >
+>;
+
 const INCIDENT_CONTROL_COLUMNS_STORAGE_KEY =
   "basket-production.incidents.control-columns";
 const INCIDENT_PLANILLA_WIDTHS_STORAGE_KEY =
@@ -217,14 +244,14 @@ const INCIDENT_CONTROL_COLUMN_WIDTH_WEIGHT: Record<IncidentControlColumn, number
   updated: 0.65,
 };
 const INCIDENT_CONTROL_WIDE_COLUMN_WIDTH_WEIGHT: Record<IncidentControlColumn, number> = {
-  league: 0.9,
-  id: 1.05,
-  date: 0.9,
-  match: 1.7,
-  severity: 1.1,
-  operator: 1.35,
-  streamer: 1.35,
-  issue: 1.0,
+  league: 0.65,
+  id: 0.85,
+  date: 0.8,
+  match: 1.55,
+  severity: 0.9,
+  operator: 1.1,
+  streamer: 1.1,
+  issue: 1.7,
   updated: 0.8,
 };
 const INCIDENT_CONTROL_COMPACT_COLUMN_WIDTH_WEIGHT: Record<
@@ -845,13 +872,25 @@ function getIncidentActivityTone(tone?: "accent" | "warning" | "neutral" | "succ
   }
 }
 
-function ProblemPill({ problem }: { problem: IncidentProblem }) {
+function ProblemPill({
+  problem,
+  editable = false,
+  onToggle,
+}: {
+  problem: IncidentProblem;
+  editable?: boolean;
+  onToggle?: () => void;
+}) {
   const { Icon } = getProblemMeta(problem.label);
+  const Component = editable ? "button" : "div";
 
   return (
-    <div
+    <Component
+      type={editable ? "button" : undefined}
+      onClick={editable ? onToggle : undefined}
       className={cn(
-        "panel-radius flex min-h-[42px] items-center gap-3.5 border px-3 py-2",
+        "panel-radius flex min-h-[42px] w-full items-center gap-3.5 border px-3 py-2 text-left transition",
+        editable && "cursor-pointer hover:-translate-y-0.5 hover:shadow-sm",
         problem.active
           ? "border-[#ffd8df] bg-[#fff3f6]"
           : "border-[#e7eaef] bg-white",
@@ -873,8 +912,37 @@ function ProblemPill({ problem }: { problem: IncidentProblem }) {
       >
         {problem.label}
       </span>
-    </div>
+    </Component>
   );
+}
+
+function getIncidentProblemPatchKey(
+  label: string,
+):
+  | "internetProblem"
+  | "feedProblem"
+  | "graphicsProblem"
+  | "ocr"
+  | "overlays"
+  | "other"
+  | "st"
+  | "club"
+  | null {
+  const normalizedLabel = label
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase();
+
+  if (normalizedLabel.includes("INTERNET")) return "internetProblem";
+  if (normalizedLabel.includes("IMG") || normalizedLabel.includes("FEED")) return "feedProblem";
+  if (normalizedLabel.includes("GRAFICA")) return "graphicsProblem";
+  if (normalizedLabel.includes("OCR")) return "ocr";
+  if (normalizedLabel.includes("OVERLAY")) return "overlays";
+  if (normalizedLabel === "OTRO") return "other";
+  if (normalizedLabel === "ST") return "st";
+  if (normalizedLabel === "CLUB") return "club";
+
+  return null;
 }
 
 function getProblemMeta(label: string) {
@@ -1197,6 +1265,9 @@ export function IncidentsWorkspace({
       return defaults;
     }
   });
+  const [incidentPlanillaDrafts, setIncidentPlanillaDrafts] = useState<
+    Record<string, IncidentPlanillaDraft>
+  >({});
   const [isExporting, setIsExporting] = useState(false);
   const [evidenceByIncident, setEvidenceByIncident] = useState<
     Record<string, IncidentEvidenceState>
@@ -1555,6 +1626,30 @@ export function IncidentsWorkspace({
   const selectedIncidentTeams = selectedIncident
     ? splitIncidentMatchLabel(selectedIncident.matchLabel)
     : null;
+  const incidentOperatorOptions = useMemo(
+    () =>
+      Array.from(new Set(incidents.map((incident) => incident.operatorControl).filter(Boolean))).sort(
+        (left, right) => left.localeCompare(right, "es"),
+      ),
+    [incidents],
+  );
+  const incidentStreamerOptions = useMemo(
+    () =>
+      Array.from(new Set(incidents.map((incident) => incident.streamer).filter(Boolean))).sort(
+        (left, right) => left.localeCompare(right, "es"),
+      ),
+    [incidents],
+  );
+  const incidentTransmissionOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          ["Encoder", "Cancha", "Offtube", "Encoder / Offtube", "Sin definir", ...incidents.map((incident) => incident.transmissionType)]
+            .filter(Boolean),
+        ),
+      ),
+    [incidents],
+  );
   const isSelectedIncidentEditing = editingIncidentId === selectedIncident?.id;
   const editedChecks = selectedIncident ? editedChecksByIncident[selectedIncident.id] : undefined;
   const resolvedTestCheckBool = selectedIncident
@@ -1652,12 +1747,28 @@ export function IncidentsWorkspace({
       technicalObservations?: string;
       buildingObservations?: string;
       generalObservations?: string;
+      operatorControlName?: string;
+      streamerName?: string;
+      transmissionType?: string;
+      other?: boolean;
+      st?: boolean;
+      club?: boolean;
+      speedtestValue?: string;
+      pingValue?: string;
+      gpuValue?: string;
       testTime?: string;
       testCheck?: boolean;
       startCheck?: boolean;
       graphicsCheck?: boolean;
+      internetProblem?: boolean;
+      feedProblem?: boolean;
+      graphicsProblem?: boolean;
+      ocr?: boolean;
+      overlays?: boolean;
+      signalDelivery?: string;
       aptoLineal?: boolean;
     },
+    options: { refresh?: boolean } = {},
   ) {
     const response = await fetch("/api/collaborator-reports", {
       method: "PATCH",
@@ -1675,7 +1786,102 @@ export function IncidentsWorkspace({
       throw new Error(body?.error ?? "No pudimos actualizar la incidencia.");
     }
 
-    router.refresh();
+    if (options.refresh !== false) {
+      router.refresh();
+    }
+  }
+
+  function updateSelectedIncidentField(
+    incident: IncidentRecord,
+    payload: Parameters<typeof updateIncidentPlanillaField>[1],
+  ) {
+    void updateIncidentPlanillaField(incident, payload).catch((error) => {
+      window.alert(error instanceof Error ? error.message : "No pudimos guardar el cambio.");
+    });
+  }
+
+  const incidentPlanillaPendingChanges = Object.values(incidentPlanillaDrafts).reduce(
+    (count, draft) => count + Object.keys(draft).length,
+    0,
+  );
+
+  function getIncidentPlanillaDraftValue(
+    incident: IncidentRecord,
+    field: keyof IncidentPlanillaDraft,
+    originalValue: string,
+  ) {
+    return incidentPlanillaDrafts[incident.sourceReportId]?.[field] ?? originalValue;
+  }
+
+  function setIncidentPlanillaDraftValue(
+    incident: IncidentRecord,
+    field: keyof IncidentPlanillaDraft,
+    originalValue: string,
+    value: string,
+  ) {
+    setIncidentPlanillaDrafts((current) => {
+      const next = { ...current };
+      const draft = { ...(next[incident.sourceReportId] ?? {}) };
+
+      if (value === originalValue) {
+        delete draft[field];
+      } else {
+        draft[field] = value;
+      }
+
+      if (Object.keys(draft).length) {
+        next[incident.sourceReportId] = draft;
+      } else {
+        delete next[incident.sourceReportId];
+      }
+
+      return next;
+    });
+  }
+
+  async function saveIncidentPlanillaDrafts() {
+    try {
+      for (const [sourceReportId, draft] of Object.entries(incidentPlanillaDrafts)) {
+        const incident = incidents.find((item) => item.sourceReportId === sourceReportId);
+
+        if (!incident) {
+          continue;
+        }
+
+        await updateIncidentPlanillaField(
+          incident,
+          {
+            severity: draft.severity,
+            technicalObservations: draft.technicalObservations,
+            buildingObservations: draft.buildingObservations,
+            generalObservations: draft.generalObservations,
+            other: draft.other ? draft.other === "si" : undefined,
+            st: draft.st ? draft.st === "si" : undefined,
+            club: draft.club ? draft.club === "si" : undefined,
+            speedtestValue: draft.speedtestValue,
+            pingValue: draft.pingValue,
+            gpuValue: draft.gpuValue,
+            testTime: draft.testTime,
+            testCheck: draft.testCheck ? draft.testCheck === "si" : undefined,
+            startCheck: draft.startCheck ? draft.startCheck === "si" : undefined,
+            graphicsCheck: draft.graphicsCheck ? draft.graphicsCheck === "si" : undefined,
+            internetProblem: draft.internetProblem ? draft.internetProblem === "si" : undefined,
+            feedProblem: draft.feedProblem ? draft.feedProblem === "si" : undefined,
+            ocr: draft.ocr ? draft.ocr === "si" : undefined,
+            overlays: draft.overlays ? draft.overlays === "si" : undefined,
+            signalDelivery: draft.signalDelivery,
+            aptoLineal: draft.aptoLineal ? draft.aptoLineal === "si" : undefined,
+          },
+          { refresh: false },
+        );
+      }
+
+      setIncidentPlanillaDrafts({});
+      router.refresh();
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : "No pudimos guardar los cambios.");
+      throw error;
+    }
   }
 
   function openEvidencePreview(
@@ -2029,7 +2235,7 @@ export function IncidentsWorkspace({
         : column === "id"
           ? "ID"
           : column === "date"
-            ? "F.A"
+            ? "FECHA"
           : column === "match"
             ? "PARTIDO"
             : column === "severity"
@@ -2323,6 +2529,9 @@ export function IncidentsWorkspace({
         disabled={!sortedIncidents.length}
         canEdit={canManageEvidence}
         triggerClassName="size-10"
+        pendingChangesCount={incidentPlanillaPendingChanges}
+        onCancelChanges={() => setIncidentPlanillaDrafts({})}
+        onSaveChanges={saveIncidentPlanillaDrafts}
       >
         {({ isEditing }) => renderIncidentPlainWorkspaceContent(isEditing)}
       </PlainFullscreenWorkspace>
@@ -2365,6 +2574,8 @@ export function IncidentsWorkspace({
       "border-r border-[#e6ebf2] px-2 py-1.5 text-center";
     const inputClassName =
       "h-7 w-full rounded-none border border-[#94a3b8] bg-white px-1 text-center font-mono text-[12px] text-[#1f2937] outline-none";
+    const dirtyInputClassName =
+      "h-7 w-full rounded-none border border-[#f59e0b] bg-[#fff8ed] px-1 text-center font-mono text-[12px] text-[#1f2937] outline-none";
     const renderEditableText = (
       incident: IncidentRecord,
       value: string,
@@ -2372,44 +2583,73 @@ export function IncidentsWorkspace({
         | "technicalObservations"
         | "buildingObservations"
         | "generalObservations"
-        | "testTime",
-    ) =>
-      isEditing ? (
+        | "speedtestValue"
+        | "pingValue"
+        | "gpuValue"
+        | "testTime"
+        | "signalDelivery",
+    ) => {
+      const draftValue = getIncidentPlanillaDraftValue(incident, payloadKey, value);
+      const isDirty = Boolean(incidentPlanillaDrafts[incident.sourceReportId]?.[payloadKey]);
+
+      return isEditing ? (
         <input
-          defaultValue={value}
+          value={draftValue}
           onClick={stopPropagation}
-          onBlur={(event) =>
-            void updateIncidentPlanillaField(incident, {
-              [payloadKey]: event.target.value,
-            })
+          onChange={(event) =>
+            setIncidentPlanillaDraftValue(
+              incident,
+              payloadKey,
+              value,
+              event.target.value,
+            )
           }
           onKeyDown={(event) => {
             if (event.key === "Enter") {
               event.currentTarget.blur();
             }
           }}
-          className={inputClassName}
+          className={isDirty ? dirtyInputClassName : inputClassName}
         />
       ) : (
         <span title={value || "-"} className="block truncate">
           {value || "-"}
         </span>
       );
+    };
     const renderEditableBoolean = (
       incident: IncidentRecord,
       value: boolean,
-      payloadKey: "testCheck" | "startCheck" | "graphicsCheck" | "aptoLineal",
-    ) =>
-      isEditing ? (
+      payloadKey:
+        | "testCheck"
+        | "startCheck"
+        | "graphicsCheck"
+        | "aptoLineal"
+        | "other"
+        | "st"
+        | "club"
+        | "internetProblem"
+        | "feedProblem"
+        | "ocr"
+        | "overlays",
+    ) => {
+      const originalValue = value ? "si" : "no";
+      const draftValue = getIncidentPlanillaDraftValue(incident, payloadKey, originalValue);
+      const isDirty = Boolean(incidentPlanillaDrafts[incident.sourceReportId]?.[payloadKey]);
+
+      return isEditing ? (
         <select
-          defaultValue={value ? "si" : "no"}
+          value={draftValue}
           onClick={stopPropagation}
           onChange={(event) =>
-            void updateIncidentPlanillaField(incident, {
-              [payloadKey]: event.target.value === "si",
-            })
+            setIncidentPlanillaDraftValue(
+              incident,
+              payloadKey,
+              originalValue,
+              event.target.value,
+            )
           }
-          className={inputClassName}
+          className={isDirty ? dirtyInputClassName : inputClassName}
         >
           <option value="si">Sí</option>
           <option value="no">No</option>
@@ -2419,6 +2659,24 @@ export function IncidentsWorkspace({
       ) : (
         "No"
       );
+    };
+    const renderEditableProblem = (
+      incident: IncidentRecord,
+      label: string,
+      payloadKey:
+        | "other"
+        | "st"
+        | "club"
+        | "internetProblem"
+        | "feedProblem"
+        | "ocr"
+        | "overlays",
+    ) => {
+      const active = incident.problems.some(
+        (problem) => problem.label === label && problem.active,
+      );
+      return renderEditableBoolean(incident, active, payloadKey);
+    };
 
     return (
       <div className="h-full min-h-0 overflow-hidden border border-[#d8dee8] bg-[#fbfcfe]">
@@ -2465,12 +2723,6 @@ export function IncidentsWorkspace({
               {sortedIncidents.map((incident) => {
                 const active = selectedIncident?.id === incident.id;
                 const teams = splitIncidentMatchLabel(incident.matchLabel);
-                const isProblemActive = (label: string) =>
-                  incident.problems.some(
-                    (problem) => problem.label === label && problem.active,
-                  )
-                    ? "Sí"
-                    : "No";
 
                 return (
                   <tr
@@ -2504,14 +2756,25 @@ export function IncidentsWorkspace({
                     <td className="border-r border-[#e6ebf2] px-2 py-1.5">
                       {isEditing ? (
                         <select
-                          defaultValue={incident.severity}
+                          value={getIncidentPlanillaDraftValue(
+                            incident,
+                            "severity",
+                            incident.severity,
+                          )}
                           onClick={stopPropagation}
                           onChange={(event) =>
-                            void updateIncidentPlanillaField(incident, {
-                              severity: event.target.value,
-                            })
+                            setIncidentPlanillaDraftValue(
+                              incident,
+                              "severity",
+                              incident.severity,
+                              event.target.value,
+                            )
                           }
-                          className={inputClassName}
+                          className={
+                            incidentPlanillaDrafts[incident.sourceReportId]?.severity
+                              ? dirtyInputClassName
+                              : inputClassName
+                          }
                         >
                           {["Sin incidencia", "Baja", "Media", "Alta", "Crítica"].map((severity) => (
                             <option key={severity} value={severity}>
@@ -2544,12 +2807,24 @@ export function IncidentsWorkspace({
                         "generalObservations",
                       )}
                     </td>
-                    <td className={centeredCellClassName}>{isProblemActive("OTRO")}</td>
-                    <td className={centeredCellClassName}>{isProblemActive("ST")}</td>
-                    <td className={centeredCellClassName}>{isProblemActive("CLUB")}</td>
-                    <td className={centeredCellClassName}>{incident.speedtest}</td>
-                    <td className={centeredCellClassName}>{incident.ping}</td>
-                    <td className={centeredCellClassName}>{incident.gpuLoad}</td>
+                    <td className={centeredCellClassName}>
+                      {renderEditableProblem(incident, "OTRO", "other")}
+                    </td>
+                    <td className={centeredCellClassName}>
+                      {renderEditableProblem(incident, "ST", "st")}
+                    </td>
+                    <td className={centeredCellClassName}>
+                      {renderEditableProblem(incident, "CLUB", "club")}
+                    </td>
+                    <td className={centeredCellClassName}>
+                      {renderEditableText(incident, incident.speedtest, "speedtestValue")}
+                    </td>
+                    <td className={centeredCellClassName}>
+                      {renderEditableText(incident, incident.ping, "pingValue")}
+                    </td>
+                    <td className={centeredCellClassName}>
+                      {renderEditableText(incident, incident.gpuLoad, "gpuValue")}
+                    </td>
                     <td className={centeredCellClassName}>
                       {renderEditableText(incident, incident.testTime, "testTime")}
                     </td>
@@ -2574,12 +2849,30 @@ export function IncidentsWorkspace({
                         "graphicsCheck",
                       )}
                     </td>
-                    <td className={centeredCellClassName}>{isProblemActive("Problema Internet")}</td>
-                    <td className={centeredCellClassName}>{isProblemActive("Problema IMG")}</td>
-                    <td className={centeredCellClassName}>{isProblemActive("OCR")}</td>
-                    <td className={centeredCellClassName}>{isProblemActive("Overlays (GES)")}</td>
+                    <td className={centeredCellClassName}>
+                      {renderEditableProblem(
+                        incident,
+                        "Problema Internet",
+                        "internetProblem",
+                      )}
+                    </td>
+                    <td className={centeredCellClassName}>
+                      {renderEditableProblem(incident, "Problema IMG", "feedProblem")}
+                    </td>
+                    <td className={centeredCellClassName}>
+                      {renderEditableProblem(incident, "OCR", "ocr")}
+                    </td>
+                    <td className={centeredCellClassName}>
+                      {renderEditableProblem(incident, "Overlays (GES)", "overlays")}
+                    </td>
                     <td className={centeredCellClassName}>{incident.transmissionType}</td>
-                    <td className={centeredCellClassName}>{incident.signalDelivery}</td>
+                    <td className={centeredCellClassName}>
+                      {renderEditableText(
+                        incident,
+                        incident.signalDelivery,
+                        "signalDelivery",
+                      )}
+                    </td>
                     <td className={centeredCellClassName}>{incident.venueImages?.length ?? 0}</td>
                     <td className="px-2 py-1.5 text-center">
                       {renderEditableBoolean(incident, incident.aptoLineal, "aptoLineal")}
@@ -2941,7 +3234,27 @@ export function IncidentsWorkspace({
                   selectedSeverityTone?.value,
                 )}
               >
-                {selectedIncident.severity}
+                {isSelectedIncidentEditing ? (
+                  <select
+                    value={selectedIncident.severity}
+                    onChange={(event) =>
+                      updateSelectedIncidentField(selectedIncident, {
+                        severity: event.target.value as IncidentSeverity,
+                      })
+                    }
+                    className="w-full rounded-lg border border-[var(--border)] bg-white px-2 py-1 text-sm font-black text-[var(--foreground)] focus:border-[var(--accent)] focus:outline-none"
+                  >
+                    {(["Baja", "Media", "Alta", "Crítica"] satisfies IncidentSeverity[]).map(
+                      (severity) => (
+                        <option key={severity} value={severity}>
+                          {severity}
+                        </option>
+                      ),
+                    )}
+                  </select>
+                ) : (
+                  selectedIncident.severity
+                )}
               </p>
             </div>
           </div>
@@ -2953,20 +3266,68 @@ export function IncidentsWorkspace({
           </h4>
           <div className="grid grid-cols-2 gap-3">
             <div className="panel-radius min-w-0 border border-[var(--border)] bg-white p-3">
-              <PersonRoleStack
-                label="Operador"
-                value={selectedIncident.operatorControl}
-                initials={getInitials(selectedIncident.operatorControl)}
-                size="sm"
-              />
+              {isSelectedIncidentEditing ? (
+                <label className="block">
+                  <span className="text-[10px] font-black uppercase tracking-[0.16em] text-[#94a3b8]">
+                    Operador
+                  </span>
+                  <select
+                    value={selectedIncident.operatorControl}
+                    onChange={(event) =>
+                      updateSelectedIncidentField(selectedIncident, {
+                        operatorControlName: event.target.value,
+                      })
+                    }
+                    className="mt-2 w-full rounded-lg border border-[var(--border)] bg-white px-2 py-1.5 text-xs font-bold text-[var(--foreground)] focus:border-[var(--accent)] focus:outline-none"
+                  >
+                    <option value="">Sin asignar</option>
+                    {incidentOperatorOptions.map((operator) => (
+                      <option key={operator} value={operator}>
+                        {operator}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : (
+                <PersonRoleStack
+                  label="Operador"
+                  value={selectedIncident.operatorControl}
+                  initials={getInitials(selectedIncident.operatorControl)}
+                  size="sm"
+                />
+              )}
             </div>
             <div className="panel-radius min-w-0 border border-[var(--border)] bg-white p-3">
-              <PersonRoleStack
-                label="Streamer"
-                value={selectedIncident.streamer}
-                initials={getInitials(selectedIncident.streamer)}
-                size="sm"
-              />
+              {isSelectedIncidentEditing ? (
+                <label className="block">
+                  <span className="text-[10px] font-black uppercase tracking-[0.16em] text-[#94a3b8]">
+                    Streamer
+                  </span>
+                  <select
+                    value={selectedIncident.streamer}
+                    onChange={(event) =>
+                      updateSelectedIncidentField(selectedIncident, {
+                        streamerName: event.target.value,
+                      })
+                    }
+                    className="mt-2 w-full rounded-lg border border-[var(--border)] bg-white px-2 py-1.5 text-xs font-bold text-[var(--foreground)] focus:border-[var(--accent)] focus:outline-none"
+                  >
+                    <option value="">Sin asignar</option>
+                    {incidentStreamerOptions.map((streamer) => (
+                      <option key={streamer} value={streamer}>
+                        {streamer}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : (
+                <PersonRoleStack
+                  label="Streamer"
+                  value={selectedIncident.streamer}
+                  initials={getInitials(selectedIncident.streamer)}
+                  size="sm"
+                />
+              )}
             </div>
           </div>
         </section>
@@ -2981,35 +3342,79 @@ export function IncidentsWorkspace({
                 <Cpu className="size-4" />
               </span>
               <p className="text-[9px] font-black uppercase tracking-[0.14em] text-[#94a3b8]">Tipo</p>
-              <p className="truncate text-center text-xs font-bold text-[var(--foreground)]">
-                {selectedIncident.transmissionType}
-              </p>
+              {isSelectedIncidentEditing ? (
+                <select
+                  value={selectedIncident.transmissionType}
+                  onChange={(event) =>
+                    updateSelectedIncidentField(selectedIncident, {
+                      transmissionType: event.target.value,
+                    })
+                  }
+                  className="w-full rounded-lg border border-[var(--border)] bg-white px-2 py-1 text-center text-xs font-bold text-[var(--foreground)] focus:border-[var(--accent)] focus:outline-none"
+                >
+                  {incidentTransmissionOptions.map((transmissionType) => (
+                    <option key={transmissionType} value={transmissionType}>
+                      {transmissionType}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <p className="truncate text-center text-xs font-bold text-[var(--foreground)]">
+                  {selectedIncident.transmissionType}
+                </p>
+              )}
             </div>
             <div className="panel-radius flex min-h-[42px] flex-col items-center justify-center gap-1 border border-[var(--border)] bg-white px-2 py-2">
               <span className="inline-flex size-8 shrink-0 items-center justify-center rounded-full bg-[#f4f7fb] text-[#7c8aa0]">
                 <Wifi className="size-4" />
               </span>
               <p className="text-[9px] font-black uppercase tracking-[0.14em] text-[#94a3b8]">Señal</p>
-              <p className="truncate text-center text-xs font-bold text-[var(--foreground)]">
-                {selectedIncident.signalDelivery}
-              </p>
+              {isSelectedIncidentEditing ? (
+                <select
+                  value={selectedIncident.signalDelivery}
+                  onChange={(event) =>
+                    updateSelectedIncidentField(selectedIncident, {
+                      signalDelivery: event.target.value,
+                    })
+                  }
+                  className="w-full rounded-lg border border-[var(--border)] bg-white px-2 py-1 text-center text-xs font-bold text-[var(--foreground)] focus:border-[var(--accent)] focus:outline-none"
+                >
+                  {["BP", "IMG", "BP / IMG", "BP / IMG / SPT", "Sin definir"].map((signal) => (
+                    <option key={signal} value={signal}>
+                      {signal}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <p className="truncate text-center text-xs font-bold text-[var(--foreground)]">
+                  {selectedIncident.signalDelivery}
+                </p>
+              )}
             </div>
             <div
               role={isSelectedIncidentEditing ? "button" : undefined}
               tabIndex={isSelectedIncidentEditing ? 0 : undefined}
               onClick={
                 isSelectedIncidentEditing
-                  ? () => toggleEditedCheck(selectedIncident.id, "aptoLineal", resolvedAptoLineal!)
+                  ? () => {
+                      toggleEditedCheck(selectedIncident.id, "aptoLineal", resolvedAptoLineal!);
+                      updateSelectedIncidentField(selectedIncident, {
+                        aptoLineal: !resolvedAptoLineal,
+                      });
+                    }
                   : undefined
               }
               onKeyDown={
                 isSelectedIncidentEditing
                   ? (e) => {
                       if (e.key === "Enter" || e.key === " ") {
-                        e.preventDefault();
-                        toggleEditedCheck(selectedIncident.id, "aptoLineal", resolvedAptoLineal!);
+                          e.preventDefault();
+                          toggleEditedCheck(selectedIncident.id, "aptoLineal", resolvedAptoLineal!);
+                          updateSelectedIncidentField(selectedIncident, {
+                            aptoLineal: !resolvedAptoLineal,
+                          });
+                        }
                       }
-                    }
                   : undefined
               }
               className={cn(
@@ -3056,6 +3461,11 @@ export function IncidentsWorkspace({
                     type="time"
                     value={resolvedTestTime ?? ""}
                     onChange={(e) => setEditedField(selectedIncident.id, "testTime", e.target.value)}
+                    onBlur={(e) =>
+                      updateSelectedIncidentField(selectedIncident, {
+                        testTime: e.target.value,
+                      })
+                    }
                     className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[#f8fafc] px-2 py-1 text-sm font-bold text-[var(--foreground)] focus:border-[var(--accent)] focus:outline-none"
                   />
                 ) : (
@@ -3078,7 +3488,12 @@ export function IncidentsWorkspace({
                 tabIndex={isSelectedIncidentEditing ? 0 : undefined}
                 onClick={
                   isSelectedIncidentEditing
-                    ? () => toggleEditedCheck(selectedIncident.id, field, bool!)
+                    ? () => {
+                        toggleEditedCheck(selectedIncident.id, field, bool!);
+                        updateSelectedIncidentField(selectedIncident, {
+                          [field]: !bool,
+                        });
+                      }
                     : undefined
                 }
                 onKeyDown={
@@ -3087,6 +3502,9 @@ export function IncidentsWorkspace({
                         if (e.key === "Enter" || e.key === " ") {
                           e.preventDefault();
                           toggleEditedCheck(selectedIncident.id, field, bool!);
+                          updateSelectedIncidentField(selectedIncident, {
+                            [field]: !bool,
+                          });
                         }
                       }
                     : undefined
@@ -3153,24 +3571,56 @@ export function IncidentsWorkspace({
                   uploadState: selectedUploadState.gpu,
                 },
               ] as const
-            ).map(({ label, kind, attachment, previewSrc, value, uploadState }) => (
+            ).map(({ label, kind, value, uploadState }) => (
               <div
                 key={kind}
                 className="flex flex-col gap-2 rounded-xl border border-[var(--border)] bg-[#fafbfd] p-2"
               >
                 <p className="text-center text-[10px] font-black uppercase tracking-[0.16em] text-[#94a3b8]">{label}</p>
                 {isSelectedIncidentEditing ? (
-                  <button
-                    type="button"
-                    onClick={() => openDesktopEvidencePicker(selectedIncident, kind)}
-                    disabled={!canManageEvidence || isDesktopEvidenceBusy}
-                    className="mx-auto inline-flex size-9 items-center justify-center rounded-full bg-[#f5f0e8] text-[#b07d3c] shadow-sm transition hover:bg-[#ede5d6] disabled:cursor-not-allowed disabled:opacity-50"
-                    aria-label={`Adjuntar ${label}`}
-                  >
-                    <Upload className="size-3.5" />
-                  </button>
+                  <div className="flex items-center justify-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => openDesktopEvidencePicker(selectedIncident, kind)}
+                      disabled={!canManageEvidence || isDesktopEvidenceBusy}
+                      className="inline-flex size-8 items-center justify-center rounded-full bg-[#f5f0e8] text-[#b07d3c] shadow-sm transition hover:bg-[#ede5d6] disabled:cursor-not-allowed disabled:opacity-50"
+                      aria-label={`Adjuntar ${label}`}
+                    >
+                      <Upload className="size-3.5" />
+                    </button>
+                  </div>
                 ) : null}
-                <p className="text-center text-sm font-bold text-[var(--foreground)]">{value}</p>
+                {isSelectedIncidentEditing ? (
+                  <input
+                    value={value}
+                    onChange={(event) => {
+                      const nextValue = event.target.value;
+                      setEvidenceByIncident((current) => ({
+                        ...current,
+                        [selectedIncident.id]: {
+                          ...current[selectedIncident.id],
+                          ...(kind === "speedtest"
+                            ? { speedtest: nextValue }
+                            : kind === "ping"
+                              ? { ping: nextValue }
+                              : { gpuLoad: nextValue }),
+                        },
+                      }));
+                    }}
+                    onBlur={(event) =>
+                      updateSelectedIncidentField(selectedIncident, {
+                        ...(kind === "speedtest"
+                          ? { speedtestValue: event.target.value }
+                          : kind === "ping"
+                            ? { pingValue: event.target.value }
+                            : { gpuValue: event.target.value }),
+                      })
+                    }
+                    className="w-full rounded-lg border border-[var(--border)] bg-white px-2 py-1 text-center text-sm font-bold text-[var(--foreground)] focus:border-[var(--accent)] focus:outline-none"
+                  />
+                ) : (
+                  <p className="text-center text-sm font-bold text-[var(--foreground)]">{value}</p>
+                )}
                 {uploadState?.message ? (
                   <p className={cn(
                     "text-center text-[10px] leading-4",
@@ -3191,9 +3641,25 @@ export function IncidentsWorkspace({
             Problemas detectados
           </h4>
           <div className="grid grid-cols-2 gap-2">
-            {selectedIncident.problems.map((problem) => (
-              <ProblemPill key={problem.label} problem={problem} />
-            ))}
+            {selectedIncident.problems.map((problem) => {
+              const patchKey = getIncidentProblemPatchKey(problem.label);
+
+              return (
+                <ProblemPill
+                  key={problem.label}
+                  problem={problem}
+                  editable={isSelectedIncidentEditing && Boolean(patchKey)}
+                  onToggle={
+                    patchKey
+                      ? () =>
+                          updateSelectedIncidentField(selectedIncident, {
+                            [patchKey]: !problem.active,
+                          })
+                      : undefined
+                  }
+                />
+              );
+            })}
           </div>
         </section>
             </div>
@@ -3277,6 +3743,15 @@ export function IncidentsWorkspace({
                     <textarea
                       value={value ?? ""}
                       onChange={(e) => setEditedField(selectedIncident.id, field, e.target.value)}
+                      onBlur={(e) =>
+                        updateSelectedIncidentField(selectedIncident, {
+                          ...(field === "technicalObservation"
+                            ? { technicalObservations: e.target.value }
+                            : field === "buildingObservation"
+                              ? { buildingObservations: e.target.value }
+                              : { generalObservations: e.target.value }),
+                        })
+                      }
                       placeholder="Agregar observación..."
                       rows={3}
                       className="w-full resize-none rounded-xl border border-[var(--border)] bg-[#f8fafc] px-3 py-2 text-sm text-[#4b5c74] placeholder:text-[#c3ccd9] focus:border-[var(--accent)] focus:outline-none"

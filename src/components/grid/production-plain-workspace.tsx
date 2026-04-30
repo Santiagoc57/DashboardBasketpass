@@ -1,11 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { Maximize2, Pencil, X } from "lucide-react";
 
+import { saveMatchPlanillaChangesAction } from "@/app/actions/matches";
 import { useGridInsightsDock } from "@/components/grid/grid-insights-dock";
-import { ProductionPlainTable } from "@/components/grid/production-plain-table";
+import {
+  ProductionPlainTable,
+  type ProductionPlanillaDrafts,
+  type ProductionPlanillaDraftRow,
+} from "@/components/grid/production-plain-table";
 import type { MatchListItem } from "@/lib/types";
 
 type ProductionPlainWorkspaceProps = {
@@ -28,7 +33,27 @@ export function ProductionPlainWorkspace({
 }: ProductionPlainWorkspaceProps) {
   const [open, setOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const [drafts, setDrafts] = useState<ProductionPlanillaDrafts>({});
+  const [draftRows, setDraftRows] = useState<ProductionPlanillaDraftRow[]>([]);
+  const [selectedMatchIds, setSelectedMatchIds] = useState<string[]>([]);
+  const [deletedMatchIds, setDeletedMatchIds] = useState<string[]>([]);
   const { close: closeInsightsDock } = useGridInsightsDock();
+  const draftChangesCount = Object.values(drafts).reduce(
+    (count, fields) => count + Object.keys(fields).length,
+    0,
+  );
+  const pendingChanges = draftChangesCount + draftRows.length + deletedMatchIds.length;
+  const draftPayload = JSON.stringify(
+    Object.entries(drafts).flatMap(([matchId, fields]) =>
+      Object.entries(fields).map(([field, value]) => ({
+        matchId,
+        field,
+        value,
+      })),
+    ),
+  );
+  const draftRowsPayload = JSON.stringify(draftRows);
+  const deletedMatchIdsPayload = JSON.stringify(deletedMatchIds);
 
   function requestEditMode() {
     if (isEditing) {
@@ -44,6 +69,43 @@ export function ProductionPlainWorkspace({
     }
   }
 
+  const cancelEditing = useCallback(() => {
+    if (pendingChanges) {
+      const confirmed = window.confirm(
+        "Hay cambios pendientes en la planilla. Si cancelas, se perderán las modificaciones que no guardaste.",
+      );
+
+      if (!confirmed) {
+        return;
+      }
+    }
+
+    setDrafts({});
+    setDraftRows([]);
+    setSelectedMatchIds([]);
+    setDeletedMatchIds([]);
+    setIsEditing(false);
+  }, [pendingChanges]);
+
+  const closeWorkspace = useCallback(() => {
+    if (isEditing && pendingChanges) {
+      const confirmed = window.confirm(
+        "Hay cambios pendientes en la planilla. Si cierras ahora, se perderán las modificaciones que no guardaste.",
+      );
+
+      if (!confirmed) {
+        return;
+      }
+    }
+
+    setDrafts({});
+    setDraftRows([]);
+    setSelectedMatchIds([]);
+    setDeletedMatchIds([]);
+    setIsEditing(false);
+    setOpen(false);
+  }, [isEditing, pendingChanges]);
+
   useEffect(() => {
     if (!open) {
       return undefined;
@@ -51,8 +113,12 @@ export function ProductionPlainWorkspace({
 
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
-        setIsEditing(false);
-        setOpen(false);
+        if (isEditing) {
+          cancelEditing();
+          return;
+        }
+
+        closeWorkspace();
       }
     }
 
@@ -63,7 +129,7 @@ export function ProductionPlainWorkspace({
       document.body.style.overflow = "";
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [open]);
+  }, [cancelEditing, closeWorkspace, isEditing, open]);
 
   return (
     <>
@@ -113,22 +179,78 @@ export function ProductionPlainWorkspace({
                     Editar
                   </button>
                   {isEditing ? (
-                    <button
-                      type="button"
-                      onClick={() => setIsEditing(false)}
-                      className="inline-flex h-10 items-center rounded-[var(--panel-radius)] border border-[#b7e4c7] bg-[#f0fdf4] px-3 text-xs font-black uppercase tracking-[0.14em] text-[#15803d] transition hover:border-[#86d7a4]"
-                    >
-                      Guardar cambios
-                    </button>
+                    <>
+                      <span className="hidden rounded-full border border-[#f7d7a8] bg-[#fff8ed] px-3 py-1.5 text-xs font-black uppercase tracking-[0.12em] text-[#b7791f] lg:inline-flex">
+                        {pendingChanges} cambios pendientes
+                      </span>
+                      <button
+                        type="button"
+                        onClick={cancelEditing}
+                        className="inline-flex h-10 items-center rounded-[var(--panel-radius)] border border-[#d8e0eb] bg-white px-3 text-xs font-black uppercase tracking-[0.14em] text-[#64748b] transition hover:border-[#94a3b8]"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        type="submit"
+                        form="production-planilla-save-form"
+                        disabled={!pendingChanges}
+                        className="inline-flex h-10 items-center rounded-[var(--panel-radius)] border border-[#b7e4c7] bg-[#f0fdf4] px-3 text-xs font-black uppercase tracking-[0.14em] text-[#15803d] transition hover:border-[#86d7a4] disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        Guardar cambios
+                      </button>
+                    </>
                   ) : null}
                 </>
               ) : null}
+              <form
+                id="production-planilla-save-form"
+                action={saveMatchPlanillaChangesAction}
+                onSubmit={(event) => {
+                  if (!pendingChanges) {
+                    event.preventDefault();
+                    return;
+                  }
+
+                  const hasRequiredFieldEmpty = Object.values(drafts).some(
+                    (fields) =>
+                      fields.time === "" ||
+                      fields.homeTeam === "" ||
+                      fields.awayTeam === "",
+                  );
+                  const hasDraftRowRequiredFieldEmpty = draftRows.some(
+                    (row) =>
+                      !row.fields.date?.trim() ||
+                      !row.fields.time?.trim() ||
+                      !row.fields.homeTeam?.trim() ||
+                      !row.fields.awayTeam?.trim(),
+                  );
+
+                  if (hasRequiredFieldEmpty || hasDraftRowRequiredFieldEmpty) {
+                    event.preventDefault();
+                    window.alert(
+                      "Antes de guardar, revisa que fecha, hora, equipo local y equipo visitante no queden vacíos.",
+                    );
+                    return;
+                  }
+
+                  const confirmed = window.confirm(
+                    "Vas a aplicar cambios sobre datos operativos. Esto puede impactar grilla, asignaciones, reportes e incidencias relacionadas. Revisa antes de continuar.",
+                  );
+
+                  if (!confirmed) {
+                    event.preventDefault();
+                  }
+                }}
+                className="hidden"
+              >
+                <input type="hidden" name="redirectTo" value={redirectTo} />
+                <input type="hidden" name="changes" value={draftPayload} />
+                <input type="hidden" name="creates" value={draftRowsPayload} />
+                <input type="hidden" name="deletes" value={deletedMatchIdsPayload} />
+              </form>
               <button
                 type="button"
-                onClick={() => {
-                  setIsEditing(false);
-                  setOpen(false);
-                }}
+                onClick={closeWorkspace}
                 className="inline-flex size-10 items-center justify-center rounded-[var(--panel-radius)] border border-[#d8e0eb] bg-white text-[#64748b] hover:border-[#f3b5c2] hover:text-[var(--accent)]"
                 aria-label="Cerrar planilla"
                 title="Cerrar planilla"
@@ -143,7 +265,14 @@ export function ProductionPlainWorkspace({
               people={people}
               canEdit={canEdit}
               isEditing={isEditing}
-              redirectTo={redirectTo}
+              drafts={drafts}
+              onDraftsChange={setDrafts}
+              draftRows={draftRows}
+              onDraftRowsChange={setDraftRows}
+              selectedMatchIds={selectedMatchIds}
+              onSelectedMatchIdsChange={setSelectedMatchIds}
+              deletedMatchIds={deletedMatchIds}
+              onDeletedMatchIdsChange={setDeletedMatchIds}
             />
           </div>
         </div>,

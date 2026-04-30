@@ -68,6 +68,34 @@ const OPTIONAL_MATCH_COLUMNS = new Set([
 type MatchInsert = Database["public"]["Tables"]["matches"]["Insert"];
 type MatchUpdate = Database["public"]["Tables"]["matches"]["Update"];
 
+type MatchPlanillaDraftChange = {
+  matchId: string;
+  field: string;
+  value: string;
+};
+
+type MatchPlanillaDraftRow = {
+  id: string;
+  fields: Record<string, string>;
+};
+
+const PLANILLA_ROLE_FIELD_TO_ROLE_NAME: Record<string, string> = {
+  owner: "Responsable",
+  ownerId: "Responsable",
+  realizadorId: "Realizador",
+  graphicsOperatorId: "Operador de Grafica",
+  camera1Id: "Camara 1",
+  camera2Id: "Camara 2",
+  camera3Id: "Camara 3",
+  camera4Id: "Camara 4",
+  camera5Id: "Camara 5",
+  relatorId: "Relator",
+  commentator1Id: "Comentario 1",
+  commentator2Id: "Comentario 2",
+  controlOperatorId: "Operador de Control",
+  supportTechId: "Soporte tecnico",
+};
+
 async function reportMatchesFailure(
   error: unknown,
   details: Record<string, unknown>,
@@ -94,6 +122,10 @@ function assertProductionMode(value: string) {
 }
 
 function getGridRedirectForCreatedMatch(formData: FormData, fallback: string) {
+  if (String(formData.get("preserveRedirectTo") ?? "") === "true") {
+    return fallback;
+  }
+
   const url = new URL(fallback, "http://localhost");
   const createdDate = String(formData.get("date") ?? "").trim();
   const timezone = String(formData.get("timezone") ?? "").trim();
@@ -148,6 +180,31 @@ function buildStaffAssignments(params: {
     const roleId = params.roleIdsByName.get(roleName);
 
     if (!personId || !roleId) {
+      return [];
+    }
+
+    return {
+      match_id: params.matchId,
+      role_id: roleId,
+      person_id: personId,
+      confirmed: false,
+      confirmation_status: "pending",
+      confirmation_responded_at: null,
+      notes: null,
+    };
+  });
+}
+
+function buildStaffAssignmentsFromFields(params: {
+  matchId: string;
+  fields: Record<string, string>;
+  roleIdsByName: Map<string, string>;
+}) {
+  return Object.entries(PLANILLA_ROLE_FIELD_TO_ROLE_NAME).flatMap(([field, roleName]) => {
+    const roleId = params.roleIdsByName.get(roleName);
+    const personId = normalizeSelectedPersonId(params.fields[field]);
+
+    if (!roleId || !personId) {
       return [];
     }
 
@@ -610,6 +667,12 @@ export async function quickUpdateMatchFlatFieldAction(formData: FormData) {
       case "venue":
         payload.venue = maybeNull(rawValue);
         break;
+      case "homeTeam":
+        payload.home_team = rawValue;
+        break;
+      case "awayTeam":
+        payload.away_team = rawValue;
+        break;
       case "productionCode":
         payload.production_code = maybeNull(rawValue);
         break;
@@ -689,6 +752,318 @@ export async function quickUpdateMatchFlatFieldAction(formData: FormData) {
   } catch (error) {
     rethrowNavigationError(error);
     await reportMatchesFailure(error, { action: "quick-flat-update", field });
+    redirectWithNotice({
+      redirectTo,
+      intent: "error",
+      notice: ensureErrorMessage(error),
+    });
+  }
+}
+
+export async function saveMatchPlanillaChangesAction(formData: FormData) {
+  const redirectTo = getRedirectTarget(formData, "/grid");
+  await requireEditor();
+
+  let changes: MatchPlanillaDraftChange[] = [];
+  let creates: MatchPlanillaDraftRow[] = [];
+  let deletes: string[] = [];
+
+  try {
+    const parsed = JSON.parse(String(formData.get("changes") ?? "[]")) as unknown;
+
+    if (Array.isArray(parsed)) {
+      changes = parsed.filter(
+        (item): item is MatchPlanillaDraftChange =>
+          Boolean(item) &&
+          typeof item === "object" &&
+          typeof (item as MatchPlanillaDraftChange).matchId === "string" &&
+          typeof (item as MatchPlanillaDraftChange).field === "string" &&
+          typeof (item as MatchPlanillaDraftChange).value === "string",
+      );
+    }
+  } catch {
+    changes = [];
+  }
+
+  try {
+    const parsed = JSON.parse(String(formData.get("creates") ?? "[]")) as unknown;
+
+    if (Array.isArray(parsed)) {
+      creates = parsed.filter(
+        (item): item is MatchPlanillaDraftRow =>
+          Boolean(item) &&
+          typeof item === "object" &&
+          typeof (item as MatchPlanillaDraftRow).id === "string" &&
+          Boolean((item as MatchPlanillaDraftRow).fields) &&
+          typeof (item as MatchPlanillaDraftRow).fields === "object",
+      );
+    }
+  } catch {
+    creates = [];
+  }
+
+  try {
+    const parsed = JSON.parse(String(formData.get("deletes") ?? "[]")) as unknown;
+
+    if (Array.isArray(parsed)) {
+      deletes = parsed.filter((item): item is string => typeof item === "string");
+    }
+  } catch {
+    deletes = [];
+  }
+
+  if (!changes.length && !creates.length && !deletes.length) {
+    redirectWithNotice({
+      redirectTo,
+      intent: "success",
+      notice: "No había cambios pendientes.",
+    });
+  }
+
+  try {
+    const supabase = await createSupabaseServerClient();
+    const roleNames = Array.from(new Set(Object.values(PLANILLA_ROLE_FIELD_TO_ROLE_NAME)));
+    const rolesResult = await supabase.from("roles").select("id, name").in("name", roleNames);
+
+    if (rolesResult.error) {
+      throw rolesResult.error;
+    }
+
+    const roleIdsByName = new Map(
+      (rolesResult.data ?? []).map((role) => [role.name, role.id]),
+    );
+
+    for (const row of creates) {
+      const fields = row.fields;
+      const date = fields.date?.trim() ?? "";
+      const time = fields.time?.trim() ?? "";
+      const timezone = fields.timezone?.trim() || "America/Bogota";
+      const homeTeam = fields.homeTeam?.trim() ?? "";
+      const awayTeam = fields.awayTeam?.trim() ?? "";
+
+      if (!date || !time || !homeTeam || !awayTeam) {
+        throw new Error("Las filas nuevas requieren fecha, hora, equipo local y equipo visitante.");
+      }
+
+      const createResult = await insertMatchWithOptionalColumnFallback(supabase, {
+        competition: maybeNull(fields.competition ?? ""),
+        external_match_id: maybeNull(fields.externalMatchId ?? ""),
+        production_code: maybeNull(fields.productionCode ?? ""),
+        production_mode: assertProductionMode(fields.productionMode ?? ""),
+        status: assertMatchStatus(fields.status ?? "Pendiente"),
+        home_team: homeTeam,
+        away_team: awayTeam,
+        venue: maybeNull(fields.venue ?? ""),
+        commentary_plan: maybeNull(fields.commentaryPlan ?? ""),
+        transport: maybeNull(fields.transport ?? ""),
+        kickoff_at: buildKickoffAt({ date, time, timezone }),
+        duration_minutes: Number(fields.durationMinutes ?? 150),
+        timezone,
+        owner_id: normalizeSelectedPersonId(fields.ownerId),
+        notes: maybeNull(fields.notes ?? ""),
+      });
+
+      if (createResult.error) {
+        throw createResult.error;
+      }
+
+      const assignments = buildStaffAssignmentsFromFields({
+        matchId: createResult.data.id,
+        fields,
+        roleIdsByName,
+      });
+
+      if (assignments.length) {
+        const assignmentsResult = await supabase
+          .from("assignments")
+          .upsert(assignments, { onConflict: "match_id,role_id" });
+
+        if (assignmentsResult.error) {
+          throw assignmentsResult.error;
+        }
+      }
+
+      revalidatePath(`/match/${createResult.data.id}`);
+      revalidatePath(`/match/${createResult.data.id}/notificar`);
+    }
+
+    const changesByMatch = new Map<string, MatchPlanillaDraftChange[]>();
+
+    for (const change of changes) {
+      const current = changesByMatch.get(change.matchId) ?? [];
+      current.push(change);
+      changesByMatch.set(change.matchId, current);
+    }
+
+    for (const [matchId, matchChanges] of changesByMatch) {
+      const payload: MatchUpdate = {};
+      let timeValue: string | null = null;
+      let dateValue: string | null = null;
+      const roleChanges: Record<string, string> = {};
+
+      for (const change of matchChanges) {
+        const rawValue = change.value.trim();
+
+        switch (change.field) {
+          case "date":
+            if (!rawValue) {
+              throw new Error("La fecha no puede quedar vacía.");
+            }
+            dateValue = rawValue;
+            break;
+          case "time":
+            if (!rawValue) {
+              throw new Error("La hora no puede quedar vacía.");
+            }
+            timeValue = rawValue;
+            break;
+          case "homeTeam":
+            if (!rawValue) {
+              throw new Error("El equipo local no puede quedar vacío.");
+            }
+            payload.home_team = rawValue;
+            break;
+          case "awayTeam":
+            if (!rawValue) {
+              throw new Error("El equipo visitante no puede quedar vacío.");
+            }
+            payload.away_team = rawValue;
+            break;
+          case "competition":
+            payload.competition = maybeNull(rawValue);
+            break;
+          case "venue":
+            payload.venue = maybeNull(rawValue);
+            break;
+          case "productionCode":
+            payload.production_code = maybeNull(rawValue);
+            break;
+          case "productionMode":
+            payload.production_mode = assertProductionMode(rawValue);
+            break;
+          case "commentaryPlan":
+            payload.commentary_plan = maybeNull(rawValue);
+            break;
+          case "transport":
+            payload.transport = maybeNull(rawValue);
+            break;
+          case "notes":
+            payload.notes = maybeNull(rawValue);
+            break;
+          case "owner":
+            payload.owner_id = normalizeSelectedPersonId(rawValue);
+            roleChanges.owner = rawValue;
+            break;
+          case "status":
+            payload.status = assertMatchStatus(rawValue);
+            break;
+          default:
+            if (change.field in PLANILLA_ROLE_FIELD_TO_ROLE_NAME) {
+              roleChanges[change.field] = rawValue;
+            }
+            break;
+        }
+      }
+
+      if (timeValue || dateValue) {
+        const matchResult = await supabase
+          .from("matches")
+          .select("kickoff_at, timezone")
+          .eq("id", matchId)
+          .single();
+
+        if (matchResult.error) {
+          throw matchResult.error;
+        }
+
+        const existingDate = new Intl.DateTimeFormat("en-CA", {
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+          timeZone: matchResult.data.timezone,
+        }).format(new Date(matchResult.data.kickoff_at));
+
+        payload.kickoff_at = buildKickoffAt({
+          date: dateValue ?? existingDate,
+          time:
+            timeValue ??
+            new Intl.DateTimeFormat("en-GB", {
+              hour: "2-digit",
+              minute: "2-digit",
+              hour12: false,
+              timeZone: matchResult.data.timezone,
+            }).format(new Date(matchResult.data.kickoff_at)),
+          timezone: matchResult.data.timezone,
+        });
+      }
+
+      if (Object.keys(payload).length) {
+        const updateResult = await updateMatchWithOptionalColumnFallback(
+          supabase,
+          matchId,
+          payload,
+        );
+
+        if (updateResult.error) {
+          throw updateResult.error;
+        }
+      }
+
+      if (Object.keys(roleChanges).length) {
+        const roleIds = Object.keys(roleChanges)
+          .map((field) => roleIdsByName.get(PLANILLA_ROLE_FIELD_TO_ROLE_NAME[field]))
+          .filter((roleId): roleId is string => Boolean(roleId));
+
+        if (roleIds.length) {
+          const deleteAssignmentsResult = await supabase
+            .from("assignments")
+            .delete()
+            .eq("match_id", matchId)
+            .in("role_id", roleIds);
+
+          if (deleteAssignmentsResult.error) {
+            throw deleteAssignmentsResult.error;
+          }
+        }
+
+        const assignments = buildStaffAssignmentsFromFields({
+          matchId,
+          fields: roleChanges,
+          roleIdsByName,
+        });
+
+        if (assignments.length) {
+          const assignmentResult = await supabase
+            .from("assignments")
+            .upsert(assignments, { onConflict: "match_id,role_id" });
+
+          if (assignmentResult.error) {
+            throw assignmentResult.error;
+          }
+        }
+      }
+
+      revalidatePath(`/match/${matchId}`);
+      revalidatePath(`/match/${matchId}/notificar`);
+    }
+
+    if (deletes.length) {
+      const deleteResult = await supabase.from("matches").delete().in("id", deletes);
+
+      if (deleteResult.error) {
+        throw deleteResult.error;
+      }
+    }
+
+    revalidatePath("/grid");
+    redirectWithNotice({
+      redirectTo,
+      intent: "success",
+      notice: "Cambios de planilla guardados.",
+    });
+  } catch (error) {
+    rethrowNavigationError(error);
+    await reportMatchesFailure(error, { action: "save-planilla-changes" });
     redirectWithNotice({
       redirectTo,
       intent: "error",

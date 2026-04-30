@@ -134,6 +134,10 @@ type ReportPlanillaColumn =
   | "severity"
   | "technicalObservation";
 
+type ReportPlanillaDraft = Partial<
+  Record<"paid" | "feed" | "severity" | "technicalObservation", string>
+>;
+
 const REPORT_CONTROL_COLUMNS_STORAGE_KEY =
   "basket-production.reports.control-columns";
 const REPORT_RANKING_COLUMNS_STORAGE_KEY =
@@ -1199,6 +1203,9 @@ export function ReportsWorkspace({
       return defaults;
     }
   });
+  const [reportPlanillaDrafts, setReportPlanillaDrafts] = useState<
+    Record<string, ReportPlanillaDraft>
+  >({});
   const [rankingColumnOrder, setRankingColumnOrder] = useState<
     ReportRankingColumn[]
   >(() => {
@@ -2462,6 +2469,13 @@ export function ReportsWorkspace({
   const selectedReportTeams = selectedReport
     ? splitMatchLabel(selectedReport.match_label)
     : null;
+  const reportResponsibleOptions = useMemo(
+    () =>
+      Array.from(new Set(reports.map((report) => report.responsible_name).filter(Boolean))).sort(
+        (left, right) => left.localeCompare(right, "es"),
+      ),
+    [reports],
+  );
   const selectedReportSeverityTone = selectedReport
     ? selectedReport.severity === "Sin incidencia"
       ? {
@@ -3072,7 +3086,9 @@ export function ReportsWorkspace({
       feedDetected?: boolean;
       severity?: ReportSeverity;
       technicalObservations?: string;
+      responsibleName?: string;
     },
+    options: { refresh?: boolean } = {},
   ) {
     const response = await fetch("/api/collaborator-reports", {
       method: "PATCH",
@@ -3090,7 +3106,86 @@ export function ReportsWorkspace({
       throw new Error(body?.error ?? "No pudimos actualizar el reporte.");
     }
 
-    router.refresh();
+    if (options.refresh !== false) {
+      router.refresh();
+    }
+  }
+
+  function updateSelectedReportField(
+    report: ReportRecord,
+    payload: Parameters<typeof updateReportPlanillaField>[1],
+  ) {
+    void updateReportPlanillaField(report, payload).catch((error) => {
+      window.alert(error instanceof Error ? error.message : "No pudimos guardar el cambio.");
+    });
+  }
+
+  const reportPlanillaPendingChanges = Object.values(reportPlanillaDrafts).reduce(
+    (count, draft) => count + Object.keys(draft).length,
+    0,
+  );
+
+  function getReportPlanillaDraftValue(
+    report: ReportRecord,
+    column: keyof ReportPlanillaDraft,
+    originalValue: string,
+  ) {
+    return reportPlanillaDrafts[report.sourceReportId]?.[column] ?? originalValue;
+  }
+
+  function setReportPlanillaDraftValue(
+    report: ReportRecord,
+    column: keyof ReportPlanillaDraft,
+    originalValue: string,
+    value: string,
+  ) {
+    setReportPlanillaDrafts((current) => {
+      const next = { ...current };
+      const draft = { ...(next[report.sourceReportId] ?? {}) };
+
+      if (value === originalValue) {
+        delete draft[column];
+      } else {
+        draft[column] = value;
+      }
+
+      if (Object.keys(draft).length) {
+        next[report.sourceReportId] = draft;
+      } else {
+        delete next[report.sourceReportId];
+      }
+
+      return next;
+    });
+  }
+
+  async function saveReportPlanillaDrafts() {
+    try {
+      for (const [sourceReportId, draft] of Object.entries(reportPlanillaDrafts)) {
+        const report = reports.find((item) => item.sourceReportId === sourceReportId);
+
+        if (!report) {
+          continue;
+        }
+
+        await updateReportPlanillaField(
+          report,
+          {
+            paid: draft.paid ? draft.paid === "si" : undefined,
+            feedDetected: draft.feed ? draft.feed === "si" : undefined,
+            severity: draft.severity as ReportSeverity | undefined,
+            technicalObservations: draft.technicalObservation,
+          },
+          { refresh: false },
+        );
+      }
+
+      setReportPlanillaDrafts({});
+      router.refresh();
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : "No pudimos guardar los cambios.");
+      throw error;
+    }
   }
 
   function renderReportPlanillaCell(
@@ -3103,6 +3198,8 @@ export function ReportsWorkspace({
     };
     const baseInputClass =
       "h-7 w-full rounded-none border border-[#94a3b8] bg-white px-1 font-mono text-[12px] text-[#1f2937] outline-none";
+    const dirtyInputClass =
+      "h-7 w-full rounded-none border border-[#f59e0b] bg-[#fff8ed] px-1 font-mono text-[12px] text-[#1f2937] outline-none";
 
     switch (column) {
       case "date":
@@ -3135,17 +3232,29 @@ export function ReportsWorkspace({
             {report.realizer_name ?? "Sin realizador"}
           </span>
         );
-      case "paid":
+      case "paid": {
+        const paidValue = getReportPlanillaDraftValue(
+          report,
+          "paid",
+          report.paid ? "si" : "no",
+        );
         return isEditing ? (
           <select
-            defaultValue={report.paid ? "si" : "no"}
+            value={paidValue}
             onClick={stopPropagation}
             onChange={(event) =>
-              void updateReportPlanillaField(report, {
-                paid: event.target.value === "si",
-              })
+              setReportPlanillaDraftValue(
+                report,
+                "paid",
+                report.paid ? "si" : "no",
+                event.target.value,
+              )
             }
-            className={baseInputClass}
+            className={
+              reportPlanillaDrafts[report.sourceReportId]?.paid
+                ? dirtyInputClass
+                : baseInputClass
+            }
           >
             <option value="si">Sí</option>
             <option value="no">No</option>
@@ -3155,17 +3264,30 @@ export function ReportsWorkspace({
         ) : (
           "No"
         );
-      case "feed":
+      }
+      case "feed": {
+        const feedValue = getReportPlanillaDraftValue(
+          report,
+          "feed",
+          report.feed_detected ? "si" : "no",
+        );
         return isEditing ? (
           <select
-            defaultValue={report.feed_detected ? "si" : "no"}
+            value={feedValue}
             onClick={stopPropagation}
             onChange={(event) =>
-              void updateReportPlanillaField(report, {
-                feedDetected: event.target.value === "si",
-              })
+              setReportPlanillaDraftValue(
+                report,
+                "feed",
+                report.feed_detected ? "si" : "no",
+                event.target.value,
+              )
             }
-            className={baseInputClass}
+            className={
+              reportPlanillaDrafts[report.sourceReportId]?.feed
+                ? dirtyInputClass
+                : baseInputClass
+            }
           >
             <option value="si">Sí</option>
             <option value="no">No</option>
@@ -3175,17 +3297,30 @@ export function ReportsWorkspace({
         ) : (
           "No"
         );
-      case "severity":
+      }
+      case "severity": {
+        const severityValue = getReportPlanillaDraftValue(
+          report,
+          "severity",
+          report.severity,
+        );
         return isEditing ? (
           <select
-            defaultValue={report.severity}
+            value={severityValue}
             onClick={stopPropagation}
             onChange={(event) =>
-              void updateReportPlanillaField(report, {
-                severity: event.target.value as ReportSeverity,
-              })
+              setReportPlanillaDraftValue(
+                report,
+                "severity",
+                report.severity,
+                event.target.value,
+              )
             }
-            className={baseInputClass}
+            className={
+              reportPlanillaDrafts[report.sourceReportId]?.severity
+                ? dirtyInputClass
+                : baseInputClass
+            }
           >
             {["Sin incidencia", "Baja", "Media", "Alta", "Crítica"].map((severity) => (
               <option key={severity} value={severity}>
@@ -3196,22 +3331,35 @@ export function ReportsWorkspace({
         ) : (
           report.severity
         );
-      case "technicalObservation":
+      }
+      case "technicalObservation": {
+        const technicalObservationValue = getReportPlanillaDraftValue(
+          report,
+          "technicalObservation",
+          report.technicalObservation,
+        );
         return isEditing ? (
           <input
-            defaultValue={report.technicalObservation}
+            value={technicalObservationValue}
             onClick={stopPropagation}
-            onBlur={(event) =>
-              void updateReportPlanillaField(report, {
-                technicalObservations: event.target.value,
-              })
+            onChange={(event) =>
+              setReportPlanillaDraftValue(
+                report,
+                "technicalObservation",
+                report.technicalObservation,
+                event.target.value,
+              )
             }
             onKeyDown={(event) => {
               if (event.key === "Enter") {
                 event.currentTarget.blur();
               }
             }}
-            className={baseInputClass}
+            className={
+              reportPlanillaDrafts[report.sourceReportId]?.technicalObservation
+                ? dirtyInputClass
+                : baseInputClass
+            }
           />
         ) : (
           <span
@@ -3221,6 +3369,7 @@ export function ReportsWorkspace({
             {report.technicalObservation || "-"}
           </span>
         );
+      }
       default:
         return null;
     }
@@ -3841,6 +3990,9 @@ export function ReportsWorkspace({
                 disabled={!sortedReports.length}
                 canEdit={canManageEvidence}
                 triggerClassName="size-10"
+                pendingChangesCount={reportPlanillaPendingChanges}
+                onCancelChanges={() => setReportPlanillaDrafts({})}
+                onSaveChanges={saveReportPlanillaDrafts}
               >
                 {({ isEditing }) => renderReportPlainWorkspaceContent(isEditing)}
               </PlainFullscreenWorkspace>
@@ -4062,17 +4214,61 @@ export function ReportsWorkspace({
                         selectedReportSeverityTone?.value,
                       )}
                     >
-                      {selectedReport.severity}
+                      {isSelectedReportEditing ? (
+                        <select
+                          value={selectedReport.severity}
+                          onChange={(event) =>
+                            updateSelectedReportField(selectedReport, {
+                              severity: event.target.value as ReportSeverity,
+                            })
+                          }
+                          className="w-full rounded-lg border border-[var(--border)] bg-white px-2 py-1 text-sm font-black text-[var(--foreground)] focus:border-[var(--accent)] focus:outline-none"
+                        >
+                          {(["Sin incidencia", "Baja", "Media", "Alta", "Crítica"] satisfies ReportSeverity[]).map(
+                            (severity) => (
+                              <option key={severity} value={severity}>
+                                {severity}
+                              </option>
+                            ),
+                          )}
+                        </select>
+                      ) : (
+                        selectedReport.severity
+                      )}
                     </p>
                   </div>
 
                   <div className="panel-radius border border-[var(--border)] bg-white p-4">
-                    <PersonRoleStack
-                      label="Responsable"
-                      value={selectedReport.responsible_name}
-                      initials={getInitials(selectedReport.responsible_name)}
-                      size="md"
-                    />
+                    {isSelectedReportEditing ? (
+                      <label className="block">
+                        <span className="text-[10px] font-black uppercase tracking-[0.16em] text-[#94a3b8]">
+                          Responsable
+                        </span>
+                        <select
+                          value={selectedReport.responsible_name}
+                          onChange={(event) =>
+                            updateSelectedReportField(selectedReport, {
+                              responsibleName: event.target.value,
+                            })
+                          }
+                          className="mt-2 w-full rounded-lg border border-[var(--border)] bg-white px-2 py-1.5 text-sm font-bold text-[var(--foreground)] focus:border-[var(--accent)] focus:outline-none"
+                        >
+                          <option value="">Sin responsable</option>
+                          {reportResponsibleOptions.map((responsibleName) => (
+                            <option key={responsibleName} value={responsibleName}>
+                              {responsibleName}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    ) : (
+                      <PersonRoleStack
+                        label="Responsable"
+                        value={selectedReport.responsible_name}
+                        initials={getInitials(selectedReport.responsible_name)}
+                        size="md"
+                      />
+                    )}
                   </div>
 
                   <div className="grid grid-cols-2 gap-3">
@@ -4080,17 +4276,47 @@ export function ReportsWorkspace({
                       <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#94a3b8]">
                         Feed detectó
                       </p>
-                      <p className="mt-2 text-sm font-bold text-[var(--foreground)]">
-                        {selectedReport.feed_detected ? "Sí" : "No"}
-                      </p>
+                      {isSelectedReportEditing ? (
+                        <select
+                          value={selectedReport.feed_detected ? "si" : "no"}
+                          onChange={(event) =>
+                            updateSelectedReportField(selectedReport, {
+                              feedDetected: event.target.value === "si",
+                            })
+                          }
+                          className="mt-2 w-full rounded-lg border border-[var(--border)] bg-white px-2 py-1 text-sm font-bold text-[var(--foreground)] focus:border-[var(--accent)] focus:outline-none"
+                        >
+                          <option value="si">Sí</option>
+                          <option value="no">No</option>
+                        </select>
+                      ) : (
+                        <p className="mt-2 text-sm font-bold text-[var(--foreground)]">
+                          {selectedReport.feed_detected ? "Sí" : "No"}
+                        </p>
+                      )}
                     </div>
                     <div className="panel-radius border border-[var(--border)] bg-white p-4">
                       <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#94a3b8]">
                         Pago
                       </p>
-                      <p className="mt-2 text-sm font-bold text-[var(--foreground)]">
-                        {selectedReport.paid ? "Pagado" : "No pagado"}
-                      </p>
+                      {isSelectedReportEditing ? (
+                        <select
+                          value={selectedReport.paid ? "si" : "no"}
+                          onChange={(event) =>
+                            updateSelectedReportField(selectedReport, {
+                              paid: event.target.value === "si",
+                            })
+                          }
+                          className="mt-2 w-full rounded-lg border border-[var(--border)] bg-white px-2 py-1 text-sm font-bold text-[var(--foreground)] focus:border-[var(--accent)] focus:outline-none"
+                        >
+                          <option value="si">Pagado</option>
+                          <option value="no">No pagado</option>
+                        </select>
+                      ) : (
+                        <p className="mt-2 text-sm font-bold text-[var(--foreground)]">
+                          {selectedReport.paid ? "Pagado" : "No pagado"}
+                        </p>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -4100,11 +4326,25 @@ export function ReportsWorkspace({
                 <h4 className="text-[11px] font-black uppercase tracking-[0.18em] text-[#94a3b8]">
                   Observación técnica
                 </h4>
-                <div className="rounded-2xl border border-[var(--border)] bg-[var(--background-soft)] p-4">
-                  <p className="text-sm leading-7 text-[#4b5c74]">
-                    {selectedReport.technicalObservation || "Ninguna"}
-                  </p>
-                </div>
+                {isSelectedReportEditing ? (
+                  <textarea
+                    defaultValue={selectedReport.technicalObservation}
+                    onBlur={(event) =>
+                      updateSelectedReportField(selectedReport, {
+                        technicalObservations: event.target.value,
+                      })
+                    }
+                    placeholder="Agregar observación técnica..."
+                    rows={4}
+                    className="w-full resize-none rounded-2xl border border-[var(--border)] bg-[#f8fafc] p-4 text-sm leading-7 text-[#4b5c74] placeholder:text-[#c3ccd9] focus:border-[var(--accent)] focus:outline-none"
+                  />
+                ) : (
+                  <div className="rounded-2xl border border-[var(--border)] bg-[var(--background-soft)] p-4">
+                    <p className="text-sm leading-7 text-[#4b5c74]">
+                      {selectedReport.technicalObservation || "Ninguna"}
+                    </p>
+                  </div>
+                )}
               </section>
 
             </div>

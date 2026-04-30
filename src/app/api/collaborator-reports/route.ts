@@ -251,6 +251,22 @@ const reportPatchSchema = z.object({
   technicalObservations: z.string().optional(),
   buildingObservations: z.string().optional(),
   generalObservations: z.string().optional(),
+  responsibleName: z.string().optional(),
+  operatorControlName: z.string().optional(),
+  streamerName: z.string().optional(),
+  transmissionType: z.string().optional(),
+  other: z.boolean().optional(),
+  st: z.boolean().optional(),
+  club: z.boolean().optional(),
+  speedtestValue: z.string().optional(),
+  pingValue: z.string().optional(),
+  gpuValue: z.string().optional(),
+  internetProblem: z.boolean().optional(),
+  feedProblem: z.boolean().optional(),
+  graphicsProblem: z.boolean().optional(),
+  ocr: z.boolean().optional(),
+  overlays: z.boolean().optional(),
+  signalDelivery: z.string().optional(),
   aptoLineal: z.boolean().optional(),
   testTime: z.string().optional(),
   testCheck: z.boolean().optional(),
@@ -307,6 +323,7 @@ export async function PATCH(request: Request) {
       );
     }
 
+    const supabase = await createSupabaseServerClient();
     const updatePayload: Record<string, unknown> = {};
     const severity = mapSeverityToIncidentLevel(parsed.data.severity);
 
@@ -337,6 +354,202 @@ export async function PATCH(request: Request) {
         parsed.data.generalObservations.trim() || null;
     }
 
+    if (typeof parsed.data.other === "boolean") {
+      updatePayload.other_flag = parsed.data.other;
+    }
+
+    if (typeof parsed.data.st === "boolean") {
+      updatePayload.st_flag = parsed.data.st;
+    }
+
+    if (typeof parsed.data.club === "boolean") {
+      updatePayload.club_flag = parsed.data.club;
+    }
+
+    if (typeof parsed.data.speedtestValue === "string") {
+      updatePayload.speedtest_value = parsed.data.speedtestValue.trim() || null;
+    }
+
+    if (typeof parsed.data.pingValue === "string") {
+      updatePayload.ping_value = parsed.data.pingValue.trim() || null;
+    }
+
+    if (typeof parsed.data.gpuValue === "string") {
+      updatePayload.gpu_value = parsed.data.gpuValue.trim() || null;
+    }
+
+    if (typeof parsed.data.signalDelivery === "string") {
+      updatePayload.signal_label = parsed.data.signalDelivery.trim() || "BP";
+    }
+
+    let reportContext: { match_id: string; assignment_id: string } | null = null;
+    const needsMatchContext =
+      typeof parsed.data.responsibleName === "string" ||
+      typeof parsed.data.transmissionType === "string" ||
+      typeof parsed.data.operatorControlName === "string" ||
+      typeof parsed.data.streamerName === "string";
+
+    if (needsMatchContext) {
+      const reportContextResult = await supabase
+        .from("collaborator_reports")
+        .select("match_id, assignment_id")
+        .eq("id", parsed.data.reportId)
+        .single();
+
+      if (reportContextResult.error) {
+        throw reportContextResult.error;
+      }
+
+      reportContext = reportContextResult.data;
+    }
+
+    if (typeof parsed.data.responsibleName === "string" && reportContext) {
+      const normalizedResponsibleName = parsed.data.responsibleName.trim();
+      const personResult = normalizedResponsibleName
+        ? await supabase
+            .from("people")
+            .select("id")
+            .eq("full_name", normalizedResponsibleName)
+            .maybeSingle()
+        : { data: null, error: null };
+
+      if (personResult.error) {
+        throw personResult.error;
+      }
+
+      const responsibleResult = await supabase
+        .from("assignments")
+        .update({
+          person_id: personResult.data?.id ?? null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", reportContext.assignment_id)
+        .select("id")
+        .single();
+
+      if (responsibleResult.error) {
+        throw responsibleResult.error;
+      }
+    }
+
+    if (typeof parsed.data.transmissionType === "string" && reportContext) {
+      const matchResult = await supabase
+        .from("matches")
+        .update({
+          production_mode: parsed.data.transmissionType.trim() || null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", reportContext.match_id)
+        .select("id")
+        .single();
+
+      if (matchResult.error) {
+        throw matchResult.error;
+      }
+    }
+
+    const assignmentUpdates = [
+      {
+        roleName: "Operador de Control",
+        personName: parsed.data.operatorControlName,
+      },
+      {
+        roleName: "Encoder",
+        personName: parsed.data.streamerName,
+      },
+    ].filter(
+      (item): item is { roleName: string; personName: string } =>
+        typeof item.personName === "string",
+    );
+
+    for (const assignmentUpdate of assignmentUpdates) {
+      if (!reportContext) {
+        continue;
+      }
+
+      const normalizedPersonName = assignmentUpdate.personName.trim();
+      const roleResult = await supabase
+        .from("roles")
+        .select("id")
+        .eq("name", assignmentUpdate.roleName)
+        .single();
+
+      if (roleResult.error) {
+        throw roleResult.error;
+      }
+
+      const personResult = normalizedPersonName
+        ? await supabase
+            .from("people")
+            .select("id")
+            .eq("full_name", normalizedPersonName)
+            .maybeSingle()
+        : { data: null, error: null };
+
+      if (personResult.error) {
+        throw personResult.error;
+      }
+
+      const assignmentResult = await supabase.from("assignments").upsert(
+        {
+          match_id: reportContext.match_id,
+          role_id: roleResult.data.id,
+          person_id: personResult.data?.id ?? null,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "match_id,role_id" },
+      );
+
+      if (assignmentResult.error) {
+        throw assignmentResult.error;
+      }
+    }
+
+    const problemUpdates = {
+      internet: parsed.data.internetProblem,
+      img: parsed.data.feedProblem,
+      grafica: parsed.data.graphicsProblem,
+      ocr: parsed.data.ocr,
+      overlays: parsed.data.overlays,
+    };
+    const hasProblemUpdates = Object.values(problemUpdates).some(
+      (value) => typeof value === "boolean",
+    );
+
+    if (hasProblemUpdates) {
+      const reportResult = await supabase
+        .from("collaborator_reports")
+        .select("problems")
+        .eq("id", parsed.data.reportId)
+        .maybeSingle();
+
+      if (reportResult.error) {
+        throw reportResult.error;
+      }
+
+      const currentProblems =
+        reportResult.data?.problems &&
+        typeof reportResult.data.problems === "object" &&
+        !Array.isArray(reportResult.data.problems)
+          ? reportResult.data.problems
+          : {};
+
+      updatePayload.problems = {
+        ...currentProblems,
+        ...Object.fromEntries(
+          Object.entries(problemUpdates).filter(
+            (entry): entry is [string, boolean] => typeof entry[1] === "boolean",
+          ),
+        ),
+      };
+      updatePayload.problems = {
+        ...(updatePayload.problems as Record<string, unknown>),
+        hasAny: Object.entries(updatePayload.problems as Record<string, unknown>).some(
+          ([key, value]) => key !== "hasAny" && value === true,
+        ),
+      };
+    }
+
     if (typeof parsed.data.aptoLineal === "boolean") {
       updatePayload.apto_lineal = parsed.data.aptoLineal;
     }
@@ -361,7 +574,6 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ ok: true });
     }
 
-    const supabase = await createSupabaseServerClient();
     const result = await supabase
       .from("collaborator_reports")
       .update(updatePayload)

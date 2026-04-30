@@ -1,7 +1,7 @@
 "use client";
 
 import type React from "react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { Maximize2, Pencil, X } from "lucide-react";
 
@@ -13,7 +13,10 @@ type PlainFullscreenWorkspaceProps = {
   disabled?: boolean;
   canEdit?: boolean;
   triggerClassName?: string;
-  children: React.ReactNode | ((state: { isEditing: boolean }) => React.ReactNode);
+  pendingChangesCount?: number;
+  onSaveChanges?: () => void | Promise<void>;
+  onCancelChanges?: () => void;
+  children: React.ReactNode | ((state: { isEditing: boolean; isSaving: boolean }) => React.ReactNode);
 };
 
 export function PlainFullscreenWorkspace({
@@ -24,10 +27,15 @@ export function PlainFullscreenWorkspace({
   disabled,
   canEdit = false,
   triggerClassName = "size-12",
+  pendingChangesCount = 0,
+  onSaveChanges,
+  onCancelChanges,
   children,
 }: PlainFullscreenWorkspaceProps) {
   const [open, setOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const hasPendingChanges = pendingChangesCount > 0;
 
   function requestEditMode() {
     if (isEditing) {
@@ -43,6 +51,59 @@ export function PlainFullscreenWorkspace({
     }
   }
 
+  const cancelEditing = useCallback(() => {
+    if (hasPendingChanges) {
+      const confirmed = window.confirm(
+        "Hay cambios pendientes en la planilla. Si cancelas, se perderán las modificaciones que no guardaste.",
+      );
+
+      if (!confirmed) {
+        return;
+      }
+    }
+
+    onCancelChanges?.();
+    setIsEditing(false);
+  }, [hasPendingChanges, onCancelChanges]);
+
+  async function saveChanges() {
+    if (!hasPendingChanges || !onSaveChanges || isSaving) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      "Vas a aplicar cambios sobre datos operativos. Esto puede impactar grilla, asignaciones, reportes e incidencias relacionadas. Revisa antes de continuar.",
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setIsSaving(true);
+      await onSaveChanges();
+      setIsEditing(false);
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  const closeWorkspace = useCallback(() => {
+    if (isEditing && hasPendingChanges) {
+      const confirmed = window.confirm(
+        "Hay cambios pendientes en la planilla. Si cierras ahora, se perderán las modificaciones que no guardaste.",
+      );
+
+      if (!confirmed) {
+        return;
+      }
+    }
+
+    onCancelChanges?.();
+    setIsEditing(false);
+    setOpen(false);
+  }, [hasPendingChanges, isEditing, onCancelChanges]);
+
   useEffect(() => {
     if (!open) {
       return undefined;
@@ -50,8 +111,12 @@ export function PlainFullscreenWorkspace({
 
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
-        setIsEditing(false);
-        setOpen(false);
+        if (isEditing) {
+          cancelEditing();
+          return;
+        }
+
+        closeWorkspace();
       }
     }
 
@@ -62,7 +127,7 @@ export function PlainFullscreenWorkspace({
       document.body.style.overflow = "";
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [open]);
+  }, [cancelEditing, closeWorkspace, isEditing, open]);
 
   return (
     <>
@@ -109,22 +174,33 @@ export function PlainFullscreenWorkspace({
                     Editar
                   </button>
                   {isEditing ? (
-                    <button
-                      type="button"
-                      onClick={() => setIsEditing(false)}
-                      className="inline-flex h-10 items-center rounded-[var(--panel-radius)] border border-[#b7e4c7] bg-[#f0fdf4] px-3 text-xs font-black uppercase tracking-[0.14em] text-[#15803d] transition hover:border-[#86d7a4]"
-                    >
-                      Guardar cambios
-                    </button>
+                    <>
+                      <span className="hidden rounded-full border border-[#f7d7a8] bg-[#fff8ed] px-3 py-1.5 text-xs font-black uppercase tracking-[0.12em] text-[#b7791f] lg:inline-flex">
+                        {pendingChangesCount} cambios pendientes
+                      </span>
+                      <button
+                        type="button"
+                        onClick={cancelEditing}
+                        disabled={isSaving}
+                        className="inline-flex h-10 items-center rounded-[var(--panel-radius)] border border-[#d8e0eb] bg-white px-3 text-xs font-black uppercase tracking-[0.14em] text-[#64748b] transition hover:border-[#94a3b8] disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={saveChanges}
+                        disabled={!hasPendingChanges || isSaving}
+                        className="inline-flex h-10 items-center rounded-[var(--panel-radius)] border border-[#b7e4c7] bg-[#f0fdf4] px-3 text-xs font-black uppercase tracking-[0.14em] text-[#15803d] transition hover:border-[#86d7a4] disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {isSaving ? "Guardando" : "Guardar cambios"}
+                      </button>
+                    </>
                   ) : null}
                 </>
               ) : null}
               <button
                 type="button"
-                onClick={() => {
-                  setIsEditing(false);
-                  setOpen(false);
-                }}
+                onClick={closeWorkspace}
                 className="inline-flex size-10 items-center justify-center rounded-[var(--panel-radius)] border border-[#d8e0eb] bg-white text-[#64748b] hover:border-[#f3b5c2] hover:text-[var(--accent)]"
                 aria-label={`Cerrar ${title}`}
                 title={`Cerrar ${title}`}
@@ -134,7 +210,7 @@ export function PlainFullscreenWorkspace({
             </div>
           </div>
           <div className="min-h-0 flex-1 p-3">
-            {typeof children === "function" ? children({ isEditing }) : children}
+            {typeof children === "function" ? children({ isEditing, isSaving }) : children}
           </div>
         </div>,
         document.body,
