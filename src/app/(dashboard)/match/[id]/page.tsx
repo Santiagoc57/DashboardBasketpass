@@ -61,7 +61,7 @@ import {
 } from "@/lib/integrations";
 import { getTeamDisplayName } from "@/lib/team-directory";
 import { parseNotice } from "@/lib/search-params";
-import type { AssignmentDetail } from "@/lib/types";
+import type { AssignmentDetail, AuditEntry, MatchDetail } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 type PageProps = {
@@ -78,6 +78,13 @@ type ConflictNotice = {
   otherMatchId: string;
   otherMatchLabel: string;
   otherKickoffAt: string;
+};
+
+type MatchDetailPageData = {
+  match: MatchDetail;
+  people: PersonOption[];
+  history: AuditEntry[];
+  conflicts: ConflictNotice[];
 };
 
 const primaryCategories = new Set(["Coordinacion", "Produccion", "Talento"]);
@@ -464,7 +471,7 @@ export default async function MatchDetailPage({
     notFound();
   }
 
-  const { match, people, history, conflicts } = data;
+  const { match, people, history, conflicts } = data as MatchDetailPageData;
   const calendarLink = buildGoogleCalendarLink(match);
   const groupName = buildGroupName(match);
   const groupMessage = buildGroupMessage(match);
@@ -485,6 +492,7 @@ export default async function MatchDetailPage({
 
   const principalAssignedCount = principalAssignments.filter((assignment) => assignment.person_id).length;
   const nextOpenPrincipal = principalAssignments.find((assignment) => !assignment.person_id) ?? null;
+  const nextOpenPrincipalRoleId = nextOpenPrincipal?.role.id ?? null;
 
   return (
     <div className="space-y-8">
@@ -830,9 +838,9 @@ export default async function MatchDetailPage({
               />
             ))}
 
-            {nextOpenPrincipal ? (
+            {nextOpenPrincipalRoleId ? (
               <a
-                href={`#assignment-${nextOpenPrincipal.role.id}`}
+                href={`#assignment-${nextOpenPrincipalRoleId}`}
                 className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl border border-dashed border-[#e4cdd1] bg-[#fffafb] text-sm font-semibold text-[#9a6a71] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
               >
                 <Plus className="size-4" />
