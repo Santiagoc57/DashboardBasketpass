@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { IWorkbookData } from "@univerjs/core";
 import {
+  Cloud,
   Download,
   FileSpreadsheet,
   Maximize2,
@@ -58,6 +59,9 @@ type WorkbookApi = {
   save: () => IWorkbookData;
   dispose: () => void;
 };
+
+const GOOGLE_PRODUCTION_SHEET_ID = "1brPnW66u2vnFRpeHHyMhYyh-8Me74C1afcIle8EPiV4";
+const GOOGLE_PRODUCTION_SHEET_NAME = "MAYO 26";
 
 async function readJsonResponse(response: Response) {
   const payload = await response.json().catch(() => ({}));
@@ -217,6 +221,46 @@ export function ProductionPlainWorkspace({
       }
     } catch (blankError) {
       setError(blankError instanceof Error ? blankError.message : "No se pudo crear la planilla.");
+    } finally {
+      setBusy(false);
+    }
+  }, [periodLabel]);
+
+  const loadGoogleSheetWorkbook = useCallback(async () => {
+    setBusy(true);
+    setError("");
+    setStatus(`Leyendo Google Sheets: ${GOOGLE_PRODUCTION_SHEET_NAME}...`);
+
+    try {
+      const response = await fetch("/api/production-workbooks/google-sheet", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          periodLabel,
+          sheetId: GOOGLE_PRODUCTION_SHEET_ID,
+          sheetName: GOOGLE_PRODUCTION_SHEET_NAME,
+        }),
+      });
+      const payload = await readJsonResponse(response);
+
+      setWorkbook({
+        workbookId: payload.workbookId,
+        filename: payload.filename ?? `${GOOGLE_PRODUCTION_SHEET_NAME}.csv`,
+        snapshot: payload.snapshot,
+        mapping: payload.mapping,
+        preview: payload.preview,
+        baseRowVersions: payload.baseRowVersions ?? {},
+      });
+      setStatus("Hoja de Google cargada. Revisa los datos y aplica a la grilla cuando esté lista.");
+      if (payload.warning) {
+        setStatus(payload.warning);
+      }
+    } catch (googleSheetError) {
+      setError(
+        googleSheetError instanceof Error
+          ? googleSheetError.message
+          : "No se pudo cargar la hoja de Google.",
+      );
     } finally {
       setBusy(false);
     }
@@ -452,6 +496,16 @@ export function ProductionPlainWorkspace({
                   </button>
                   <button
                     type="button"
+                    onClick={loadGoogleSheetWorkbook}
+                    disabled={busy}
+                    className="inline-flex h-10 items-center gap-2 rounded-[var(--panel-radius)] border border-[#d8e0eb] bg-white px-3 text-xs font-black uppercase tracking-[0.14em] text-[#64748b] transition hover:border-[#f3b5c2] hover:text-[var(--accent)] disabled:opacity-50"
+                    title={`Cargar Google Sheets: ${GOOGLE_PRODUCTION_SHEET_NAME}`}
+                  >
+                    <Cloud className="size-4" />
+                    Sheets
+                  </button>
+                  <button
+                    type="button"
                     onClick={createBlankWorkbook}
                     disabled={busy}
                     className="inline-flex h-10 items-center gap-2 rounded-[var(--panel-radius)] border border-[#d8e0eb] bg-white px-3 text-xs font-black uppercase tracking-[0.14em] text-[#64748b] transition hover:border-[#f3b5c2] hover:text-[var(--accent)] disabled:opacity-50"
@@ -556,6 +610,16 @@ export function ProductionPlainWorkspace({
                       >
                         <Upload className="size-4" />
                         Subir .xlsx
+                      </button>
+                      <button
+                        type="button"
+                        onClick={loadGoogleSheetWorkbook}
+                        disabled={busy}
+                        className="inline-flex h-10 items-center gap-2 rounded-[var(--panel-radius)] border border-[#d8e0eb] bg-white px-4 text-xs font-black uppercase tracking-[0.14em] text-[#64748b] transition hover:border-[#f3b5c2] hover:text-[var(--accent)] disabled:opacity-50"
+                        title={`Cargar Google Sheets: ${GOOGLE_PRODUCTION_SHEET_NAME}`}
+                      >
+                        <Cloud className="size-4" />
+                        Google Sheets
                       </button>
                       <button
                         type="button"

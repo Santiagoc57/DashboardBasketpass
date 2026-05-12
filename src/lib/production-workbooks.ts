@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { parse as parseCsvRows } from "csv-parse/sync";
 import ExcelJS from "exceljs";
 import type { IWorkbookData } from "@univerjs/core";
 import { BooleanNumber, CellValueType, LocaleType } from "@univerjs/core";
@@ -382,13 +383,10 @@ function ensureInternalColumns(snapshot: IWorkbookData, mapping: ProductionWorkb
   }
 }
 
-export async function parseXlsxToSnapshot(buffer: ArrayBuffer, filename: string) {
-  const workbook = new ExcelJS.Workbook();
-  await workbook.xlsx.load(buffer);
-  const workbookId = crypto.randomUUID();
-  const snapshot: IWorkbookData = {
-    id: workbookId,
-    name: filename.replace(/\.xlsx?$/i, "") || "Libro de produccion",
+function createWorkbookSnapshot(name: string): IWorkbookData {
+  return {
+    id: crypto.randomUUID(),
+    name,
     appVersion: "3.0.0",
     locale: LocaleType.ES_ES,
     styles: {
@@ -398,32 +396,50 @@ export async function parseXlsxToSnapshot(buffer: ArrayBuffer, filename: string)
     sheetOrder: [],
     sheets: {},
   };
+}
+
+function addSheetToSnapshot(
+  snapshot: IWorkbookData,
+  sheetId: string,
+  name: string,
+  rowCount: number,
+  columnCount: number,
+) {
+  snapshot.sheetOrder.push(sheetId);
+  snapshot.sheets[sheetId] = {
+    id: sheetId,
+    name,
+    tabColor: "",
+    hidden: BooleanNumber.FALSE,
+    freeze: { xSplit: 0, ySplit: 1, startRow: 1, startColumn: 0 },
+    rowCount,
+    columnCount,
+    defaultColumnWidth: 128,
+    defaultRowHeight: 28,
+    mergeData: [],
+    cellData: {},
+    rowData: {},
+    columnData: {},
+    rowHeader: { width: 46 },
+    columnHeader: { height: 24 },
+    showGridlines: BooleanNumber.TRUE,
+    rightToLeft: BooleanNumber.FALSE,
+  };
+}
+
+export async function parseXlsxToSnapshot(buffer: ArrayBuffer, filename: string) {
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(buffer);
+  const snapshot = createWorkbookSnapshot(
+    filename.replace(/\.xlsx?$/i, "") || "Libro de produccion",
+  );
 
   workbook.worksheets.forEach((worksheet, index) => {
     const sheetId = `sheet-${index + 1}`;
     const rowCount = Math.max(worksheet.rowCount + 25, 80);
     const columnCount = Math.max(worksheet.columnCount + 8, 24);
 
-    snapshot.sheetOrder.push(sheetId);
-    snapshot.sheets[sheetId] = {
-      id: sheetId,
-      name: worksheet.name,
-      tabColor: "",
-      hidden: BooleanNumber.FALSE,
-      freeze: { xSplit: 0, ySplit: 1, startRow: 1, startColumn: 0 },
-      rowCount,
-      columnCount,
-      defaultColumnWidth: 128,
-      defaultRowHeight: 28,
-      mergeData: [],
-      cellData: {},
-      rowData: {},
-      columnData: {},
-      rowHeader: { width: 46 },
-      columnHeader: { height: 24 },
-      showGridlines: BooleanNumber.TRUE,
-      rightToLeft: BooleanNumber.FALSE,
-    };
+    addSheetToSnapshot(snapshot, sheetId, worksheet.name, rowCount, columnCount);
 
     worksheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
       row.eachCell({ includeEmpty: false }, (cell, columnNumber) => {
@@ -447,27 +463,56 @@ export async function parseXlsxToSnapshot(buffer: ArrayBuffer, filename: string)
 
   if (!snapshot.sheetOrder.length) {
     const sheetId = "sheet-1";
-    snapshot.sheetOrder.push(sheetId);
-    snapshot.sheets[sheetId] = {
-      id: sheetId,
-      name: "Produccion",
-      tabColor: "",
-      hidden: BooleanNumber.FALSE,
-      freeze: { xSplit: 0, ySplit: 1, startRow: 1, startColumn: 0 },
-      rowCount: 80,
-      columnCount: 24,
-      defaultColumnWidth: 128,
-      defaultRowHeight: 28,
-      mergeData: [],
-      cellData: {},
-      rowData: {},
-      columnData: {},
-      rowHeader: { width: 46 },
-      columnHeader: { height: 24 },
-      showGridlines: BooleanNumber.TRUE,
-      rightToLeft: BooleanNumber.FALSE,
-    };
+    addSheetToSnapshot(snapshot, sheetId, "Produccion", 80, 24);
   }
+
+  const mapping = detectMapping(snapshot);
+  ensureInternalColumns(snapshot, mapping);
+
+  return { snapshot, mapping };
+}
+
+export function parseCsvToSnapshot(csvText: string, filename: string, sheetName = "Produccion") {
+  const rows = parseCsvRows(csvText, {
+    bom: true,
+    relax_column_count: true,
+    skip_empty_lines: false,
+  }) as string[][];
+  const normalizedRows = rows.length ? rows : [[]];
+  const maxColumns = Math.max(1, ...normalizedRows.map((row) => row.length));
+  const snapshot = createWorkbookSnapshot(
+    filename.replace(/\.(csv|xlsx?)$/i, "") || "Libro de produccion",
+  );
+  const sheetId = "sheet-1";
+
+  addSheetToSnapshot(
+    snapshot,
+    sheetId,
+    sheetName || "Produccion",
+    Math.max(normalizedRows.length + 25, 80),
+    Math.max(maxColumns + 8, 24),
+  );
+
+  normalizedRows.forEach((row, rowIndex) => {
+    row.forEach((value, columnIndex) => {
+      const text = toCellValue(value);
+
+      if (!text && rowIndex > 0) {
+        return;
+      }
+
+      setCell(snapshot, sheetId, rowIndex, columnIndex, text);
+
+      if (rowIndex === 0) {
+        const field = Object.entries(FIELD_ALIASES).find(([, aliases]) =>
+          aliases.map(normalizeHeader).includes(normalizeHeader(text)),
+        )?.[0] as ProductionWorkbookField | undefined;
+
+        snapshot.sheets[sheetId]!.cellData![rowIndex]![columnIndex]!.s =
+          field && TRANSPORT_FIELDS.has(field) ? "transportHeader" : "header";
+      }
+    });
+  });
 
   const mapping = detectMapping(snapshot);
   ensureInternalColumns(snapshot, mapping);
