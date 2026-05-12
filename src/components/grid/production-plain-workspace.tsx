@@ -227,9 +227,19 @@ export function ProductionPlainWorkspace({
   }, [periodLabel]);
 
   const loadGoogleSheetWorkbook = useCallback(async () => {
+    if (workbook) {
+      const confirmed = window.confirm(
+        "Vas a sincronizar manualmente desde Google Sheets. Esto reemplazará el libro abierto con la versión actual de la pestaña MAYO 26.",
+      );
+
+      if (!confirmed) {
+        return;
+      }
+    }
+
     setBusy(true);
     setError("");
-    setStatus(`Leyendo Google Sheets: ${GOOGLE_PRODUCTION_SHEET_NAME}...`);
+    setStatus(`Sincronizando manualmente desde Google Sheets: ${GOOGLE_PRODUCTION_SHEET_NAME}...`);
 
     try {
       const response = await fetch("/api/production-workbooks/google-sheet", {
@@ -251,7 +261,7 @@ export function ProductionPlainWorkspace({
         preview: payload.preview,
         baseRowVersions: payload.baseRowVersions ?? {},
       });
-      setStatus("Hoja de Google cargada. Revisa los datos y aplica a la grilla cuando esté lista.");
+      setStatus("Sincronización manual lista. Revisa los datos y aplica a la grilla cuando esté lista.");
       if (payload.warning) {
         setStatus(payload.warning);
       }
@@ -264,7 +274,7 @@ export function ProductionPlainWorkspace({
     } finally {
       setBusy(false);
     }
-  }, [periodLabel]);
+  }, [periodLabel, workbook]);
 
   useEffect(() => {
     if (!openBlankOnMount || blankCreatedRef.current) {
@@ -499,10 +509,10 @@ export function ProductionPlainWorkspace({
                     onClick={loadGoogleSheetWorkbook}
                     disabled={busy}
                     className="inline-flex h-10 items-center gap-2 rounded-[var(--panel-radius)] border border-[#d8e0eb] bg-white px-3 text-xs font-black uppercase tracking-[0.14em] text-[#64748b] transition hover:border-[#f3b5c2] hover:text-[var(--accent)] disabled:opacity-50"
-                    title={`Cargar Google Sheets: ${GOOGLE_PRODUCTION_SHEET_NAME}`}
+                    title={`Sincronizar manualmente Google Sheets: ${GOOGLE_PRODUCTION_SHEET_NAME}`}
                   >
                     <Cloud className="size-4" />
-                    Sheets
+                    Sincronizar
                   </button>
                   <button
                     type="button"
@@ -616,10 +626,10 @@ export function ProductionPlainWorkspace({
                         onClick={loadGoogleSheetWorkbook}
                         disabled={busy}
                         className="inline-flex h-10 items-center gap-2 rounded-[var(--panel-radius)] border border-[#d8e0eb] bg-white px-4 text-xs font-black uppercase tracking-[0.14em] text-[#64748b] transition hover:border-[#f3b5c2] hover:text-[var(--accent)] disabled:opacity-50"
-                        title={`Cargar Google Sheets: ${GOOGLE_PRODUCTION_SHEET_NAME}`}
+                        title={`Sincronizar manualmente Google Sheets: ${GOOGLE_PRODUCTION_SHEET_NAME}`}
                       >
                         <Cloud className="size-4" />
-                        Google Sheets
+                        Sincronizar Google
                       </button>
                       <button
                         type="button"
