@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useRouter } from "next/navigation";
 import type { IWorkbookData } from "@univerjs/core";
 import {
   Cloud,
@@ -88,6 +89,7 @@ export function ProductionPlainWorkspace({
   const [busy, setBusy] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const editorApiRef = useRef<WorkbookApi | null>(null);
+  const router = useRouter();
   const { close: closeInsightsDock } = useGridInsightsDock();
   const blankCreatedRef = useRef(false);
 
@@ -392,6 +394,7 @@ export function ProductionPlainWorkspace({
           snapshot,
           mapping: workbook.mapping,
           baseRowVersions: workbook.baseRowVersions,
+          defaultDate,
         }),
       });
       const payload = await readJsonResponse(response);
@@ -399,8 +402,11 @@ export function ProductionPlainWorkspace({
 
       setWorkbook({ ...workbook, snapshot, preview: payload.preview });
       setStatus(
-        `Aplicado: ${result.created} creados, ${result.updated} actualizados, ${result.assignments} asignaciones.`,
+        result.created || result.updated || result.assignments
+          ? `Aplicado: ${result.created} creados, ${result.updated} actualizados, ${result.assignments} asignaciones.`
+          : "No se aplicó ninguna fila. Revisa que tenga hora, local y visita.",
       );
+      router.refresh();
     } catch (applyError) {
       setError(applyError instanceof Error ? applyError.message : "No se pudo aplicar.");
     } finally {
