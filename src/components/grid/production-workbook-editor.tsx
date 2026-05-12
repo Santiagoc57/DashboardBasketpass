@@ -44,7 +44,7 @@ function toColumnIndex(value: unknown) {
 }
 
 function uniqueOptions(values: string[]) {
-  return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean))).slice(0, 500);
+  return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean))).slice(0, 2_000);
 }
 
 function setDropdown(

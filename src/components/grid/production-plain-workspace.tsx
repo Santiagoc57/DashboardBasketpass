@@ -102,8 +102,9 @@ export function ProductionPlainWorkspace({
   }, [workbook]);
 
   const dropdowns = useMemo<ProductionWorkbookDropdowns>(() => {
+    const teamDirectory = getTeamDirectoryData();
     const teamNames = [
-      ...getTeamDirectoryData().map((team) => team.display_name),
+      ...teamDirectory.flatMap((team) => [team.display_name, team.official_name]),
       ...matches.flatMap((match) => [match.home_team, match.away_team]),
     ];
     const leagues = [
