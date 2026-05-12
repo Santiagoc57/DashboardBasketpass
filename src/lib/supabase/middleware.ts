@@ -8,6 +8,24 @@ import {
 import type { Database } from "@/lib/database.types";
 import { appEnv, isSupabaseConfigured } from "@/lib/env";
 
+const SUPABASE_MIDDLEWARE_TIMEOUT_MS = 5_000;
+
+function createFetchWithTimeout(timeoutMs: number) {
+  return (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+    const timeoutController = new AbortController();
+    const timeoutId = globalThis.setTimeout(() => {
+      timeoutController.abort();
+    }, timeoutMs);
+
+    return fetch(input, {
+      ...init,
+      signal: timeoutController.signal,
+    }).finally(() => {
+      globalThis.clearTimeout(timeoutId);
+    });
+  };
+}
+
 export async function updateSession(request: NextRequest) {
   if (!isSupabaseConfigured) {
     return NextResponse.next({ request });
@@ -38,23 +56,36 @@ export async function updateSession(request: NextRequest) {
           });
         },
       },
+      global: {
+        fetch: createFetchWithTimeout(SUPABASE_MIDDLEWARE_TIMEOUT_MS),
+      },
     },
   );
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const authResult = await supabase.auth.getUser().catch((error) => {
+    console.error("[middleware] failed to validate Supabase session", error);
+    return { data: { user: null } };
+  });
+  const user = authResult.data.user;
   let role: Database["public"]["Enums"]["app_role"] | null = null;
 
   if (user) {
-    const profileQuery = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", user.id)
-      .maybeSingle();
+    let profileRole: Database["public"]["Enums"]["app_role"] | null = null;
+
+    try {
+      const profileQuery = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      profileRole = profileQuery.data?.role ?? null;
+    } catch (error) {
+      console.error("[middleware] failed to load profile role", error);
+    }
 
     role = resolveDashboardAccessRole({
-      profileRole: profileQuery.data?.role ?? null,
+      profileRole,
       appMetadata: user.app_metadata,
     });
   }
