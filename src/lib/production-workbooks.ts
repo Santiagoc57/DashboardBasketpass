@@ -2,7 +2,13 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { parse as parseCsvRows } from "csv-parse/sync";
 import ExcelJS from "exceljs";
 import type { IWorkbookData } from "@univerjs/core";
-import { BooleanNumber, CellValueType, LocaleType } from "@univerjs/core";
+import {
+  BooleanNumber,
+  CellValueType,
+  HorizontalAlign,
+  LocaleType,
+  VerticalAlign,
+} from "@univerjs/core";
 
 import {
   MATCH_STATUS_OPTIONS,
@@ -11,10 +17,12 @@ import {
 import type { Database } from "@/lib/database.types";
 import { buildKickoffAt } from "@/lib/date";
 import { maybeNull } from "@/lib/utils";
+import { getTeamVenueByName } from "@/lib/team-directory";
 
 export const PRODUCTION_WORKBOOK_BUCKET = "production-workbooks";
 export const MATCH_ID_HEADER = "__basketpass_match_id";
 export const UPDATED_AT_HEADER = "__basketpass_updated_at";
+const DEFAULT_WORKBOOK_ZOOM_RATIO = 0.8;
 
 export type ProductionWorkbookField =
   | "matchId"
@@ -61,6 +69,15 @@ export type ProductionWorkbookColumnMapping = Partial<
 
 export type ProductionWorkbookRow = Partial<Record<ProductionWorkbookField, string>> & {
   rowIndex: number;
+};
+
+export type ProductionWorkbookApplyPreview = {
+  created: number;
+  updated: number;
+  skipped: number;
+  assignments: number;
+  invalidRows: Array<{ rowIndex: number; reason: string }>;
+  warningRows: Array<{ rowIndex: number; reason: string }>;
 };
 
 type ParsedMatchTeams = {
@@ -155,6 +172,15 @@ const BLANK_HEADERS: Array<[ProductionWorkbookField, string]> = [
   ["directions2", "Direcciones 2"],
   ["notes", "Observacion"],
 ];
+const TRAVEL_HEADERS = [
+  "Dia",
+  "Hora  de\nSalida",
+  "Cantidad\nAutos",
+  "Desde",
+  "Pasajeros",
+  "Hasta",
+  "Direcciones 2",
+] as const;
 const TRANSPORT_FIELDS = new Set<ProductionWorkbookField>([
   "departureTime",
   "carsCount",
@@ -166,26 +192,26 @@ const TRANSPORT_FIELDS = new Set<ProductionWorkbookField>([
 ]);
 const BLANK_COLUMN_WIDTHS: Partial<Record<ProductionWorkbookField, number>> = {
   date: 120,
-  productionMode: 150,
-  productionCode: 90,
-  competition: 160,
-  homeTeam: 220,
-  awayTeam: 220,
-  time: 90,
-  owner: 220,
-  realizador: 190,
-  graphicsOperator: 220,
-  camera1: 150,
-  camera2: 150,
-  camera3: 150,
-  camera4: 150,
-  camera5: 150,
-  commentaryPlan: 210,
-  relator: 170,
-  commentator1: 190,
-  commentator2: 190,
-  controlOperator: 210,
-  supportTech: 180,
+  productionMode: 180,
+  productionCode: 63,
+  competition: 192,
+  homeTeam: 264,
+  awayTeam: 264,
+  time: 63,
+  owner: 211,
+  realizador: 182,
+  graphicsOperator: 211,
+  camera1: 144,
+  camera2: 144,
+  camera3: 144,
+  camera4: 144,
+  camera5: 144,
+  commentaryPlan: 202,
+  relator: 163,
+  commentator1: 182,
+  commentator2: 182,
+  controlOperator: 202,
+  supportTech: 173,
   departureTime: 145,
   carsCount: 140,
   transportFrom: 180,
@@ -243,6 +269,52 @@ function setCell(snapshot: IWorkbookData, sheetId: string, row: number, column: 
   sheet.cellData[row][column] = { v: value, t: CellValueType.STRING };
 }
 
+function getProductionWorkbookStyles() {
+  return {
+    header: {
+      bl: 1,
+      fs: 10,
+      bg: { rgb: "#e61238" },
+      cl: { rgb: "#ffffff" },
+      ht: HorizontalAlign.CENTER,
+      vt: VerticalAlign.MIDDLE,
+    },
+    transportHeader: {
+      bl: 1,
+      fs: 10,
+      bg: { rgb: "#e61238" },
+      cl: { rgb: "#ffffff" },
+      ht: HorizontalAlign.CENTER,
+      vt: VerticalAlign.MIDDLE,
+    },
+    travelHeader: {
+      bl: 1,
+      fs: 10,
+      bg: { rgb: "#2563eb" },
+      cl: { rgb: "#ffffff" },
+      ht: HorizontalAlign.CENTER,
+      vt: VerticalAlign.MIDDLE,
+      tb: 3,
+    },
+    centeredCell: {
+      ht: HorizontalAlign.CENTER,
+      vt: VerticalAlign.MIDDLE,
+    },
+    invalidCell: {
+      bg: { rgb: "#fff1f2" },
+      cl: { rgb: "#be123c" },
+      ht: HorizontalAlign.CENTER,
+      vt: VerticalAlign.MIDDLE,
+    },
+    warningCell: {
+      bg: { rgb: "#fffbeb" },
+      cl: { rgb: "#92400e" },
+      ht: HorizontalAlign.CENTER,
+      vt: VerticalAlign.MIDDLE,
+    },
+  };
+}
+
 function parseMatchTeams(row: ProductionWorkbookRow): ParsedMatchTeams | null {
   const homeTeam = row.homeTeam?.trim();
   const awayTeam = row.awayTeam?.trim();
@@ -273,6 +345,7 @@ function parseMatchTeams(row: ProductionWorkbookRow): ParsedMatchTeams | null {
 
 function buildTransportSummary(row: ProductionWorkbookRow) {
   const parts = [
+    ["Dia", row.date],
     ["Hora de salida", row.departureTime],
     ["Autos", row.carsCount],
     ["Desde", row.transportFrom],
@@ -289,11 +362,95 @@ function buildTransportSummary(row: ProductionWorkbookRow) {
   return parts.join(" | ");
 }
 
+function buildTransportFieldValue(row: ProductionWorkbookRow) {
+  const transport = row.transport?.trim() ?? "";
+  const transportSummary = buildTransportSummary(row);
+
+  return [transport, transportSummary].filter(Boolean).join("\n");
+}
+
 function mergeNotesWithTransport(row: ProductionWorkbookRow) {
   const notes = row.notes?.trim() ?? "";
   const transportSummary = buildTransportSummary(row);
 
   return [notes, transportSummary].filter(Boolean).join("\n");
+}
+
+function getFieldForHeader(value: unknown) {
+  const normalized = normalizeHeader(value);
+
+  if (normalized === "id") {
+    return "productionCode" as ProductionWorkbookField;
+  }
+
+  for (const [field, aliases] of Object.entries(FIELD_ALIASES)) {
+    if (aliases.map(normalizeHeader).includes(normalized)) {
+      return field as ProductionWorkbookField;
+    }
+  }
+
+  return null;
+}
+
+function getTravelRowsByProductionCode(snapshot: IWorkbookData) {
+  const rowsByProductionCode = new Map<string, Partial<ProductionWorkbookRow>>();
+
+  for (const sheetId of snapshot.sheetOrder) {
+    const sheet = snapshot.sheets[sheetId];
+
+    if (!sheet?.cellData || normalizeHeader(sheet.name) !== "viajes") {
+      continue;
+    }
+
+    const headerCells = sheet.cellData[0] ?? {};
+    const columnsByField = new Map<ProductionWorkbookField, number>();
+
+    for (const [columnKey, cell] of Object.entries(headerCells)) {
+      const field = getFieldForHeader(cell?.v);
+
+      if (field) {
+        columnsByField.set(field, Number(columnKey));
+      }
+    }
+
+    const productionCodeColumn = columnsByField.get("productionCode");
+
+    if (productionCodeColumn == null) {
+      continue;
+    }
+
+    const maxRow = Math.max(0, ...Object.keys(sheet.cellData).map((row) => Number(row)));
+
+    for (let rowIndex = 1; rowIndex <= maxRow; rowIndex += 1) {
+      const productionCode = getCellText(snapshot, sheetId, rowIndex, productionCodeColumn);
+
+      if (!productionCode) {
+        continue;
+      }
+
+      const travelRow: Partial<ProductionWorkbookRow> = {};
+
+      for (const field of TRANSPORT_FIELDS) {
+        const column = columnsByField.get(field);
+
+        if (column == null) {
+          continue;
+        }
+
+        const value = getCellText(snapshot, sheetId, rowIndex, column);
+
+        if (value) {
+          travelRow[field] = value;
+        }
+      }
+
+      if (Object.keys(travelRow).length) {
+        rowsByProductionCode.set(productionCode.trim(), travelRow);
+      }
+    }
+  }
+
+  return rowsByProductionCode;
 }
 
 function detectMapping(snapshot: IWorkbookData): ProductionWorkbookColumnMapping {
@@ -383,16 +540,52 @@ function ensureInternalColumns(snapshot: IWorkbookData, mapping: ProductionWorkb
   }
 }
 
+function applyProductionSheetFormatting(
+  snapshot: IWorkbookData,
+  mapping: ProductionWorkbookColumnMapping,
+) {
+  const sheet = snapshot.sheets[mapping.sheetId];
+
+  if (!sheet) {
+    return;
+  }
+
+  sheet.rowData ??= {};
+  sheet.columnData ??= {};
+  sheet.rowData[mapping.headerRow] = {
+    ...(sheet.rowData[mapping.headerRow] ?? {}),
+    h: 30,
+    s: "header",
+  };
+
+  for (const [field, column] of Object.entries(mapping)) {
+    if (field === "headerRow" || field === "sheetId") {
+      continue;
+    }
+
+    const columnIndex = Number(column);
+    const typedField = field as ProductionWorkbookField;
+    const headerCell = sheet.cellData?.[mapping.headerRow]?.[columnIndex];
+
+    if (headerCell) {
+      headerCell.s = "header";
+    }
+
+    sheet.columnData[columnIndex] = {
+      ...(sheet.columnData[columnIndex] ?? {}),
+      s: "centeredCell",
+      w: BLANK_COLUMN_WIDTHS[typedField] ?? sheet.columnData[columnIndex]?.w ?? 140,
+    };
+  }
+}
+
 function createWorkbookSnapshot(name: string): IWorkbookData {
   return {
     id: crypto.randomUUID(),
     name,
     appVersion: "3.0.0",
     locale: LocaleType.ES_ES,
-    styles: {
-      header: { bl: 1, fs: 12, bg: { rgb: "#f4f6f9" } },
-      transportHeader: { bl: 1, fs: 12, bg: { rgb: "#dbeafe" }, cl: { rgb: "#1d4ed8" } },
-    },
+    styles: getProductionWorkbookStyles(),
     sheetOrder: [],
     sheets: {},
   };
@@ -411,6 +604,7 @@ function addSheetToSnapshot(
     name,
     tabColor: "",
     hidden: BooleanNumber.FALSE,
+    zoomRatio: DEFAULT_WORKBOOK_ZOOM_RATIO,
     freeze: { xSplit: 0, ySplit: 1, startRow: 1, startColumn: 0 },
     rowCount,
     columnCount,
@@ -425,6 +619,104 @@ function addSheetToSnapshot(
     showGridlines: BooleanNumber.TRUE,
     rightToLeft: BooleanNumber.FALSE,
   };
+}
+
+function appendCsvSheetToSnapshot(
+  snapshot: IWorkbookData,
+  csvText: string,
+  sheetName: string,
+  options?: {
+    headerStyle?: string;
+    headers?: readonly string[];
+    columnWidths?: Record<number, number>;
+    tabColor?: string;
+  },
+) {
+  const rows = parseCsvRows(csvText, {
+    bom: true,
+    relax_column_count: true,
+    skip_empty_lines: false,
+  }) as string[][];
+  const normalizedRows = rows.length ? rows : [options?.headers ? [...options.headers] : []];
+  const maxColumns = Math.max(
+    options?.headers?.length ?? 1,
+    ...normalizedRows.map((row) => row.length),
+  );
+  const sheetId = `sheet-${snapshot.sheetOrder.length + 1}`;
+
+  addSheetToSnapshot(
+    snapshot,
+    sheetId,
+    sheetName,
+    Math.max(normalizedRows.length + 25, 80),
+    Math.max(maxColumns + 4, 12),
+  );
+
+  const sheet = snapshot.sheets[sheetId]!;
+  sheet.tabColor = options?.tabColor ?? "";
+
+  normalizedRows.forEach((row, rowIndex) => {
+    row.forEach((value, columnIndex) => {
+      const text = toCellValue(value);
+
+      if (!text && rowIndex > 0) {
+        return;
+      }
+
+      setCell(snapshot, sheetId, rowIndex, columnIndex, text);
+    });
+  });
+
+  if (options?.headers?.length) {
+    options.headers.forEach((header, columnIndex) => {
+      const currentHeader = getCellText(snapshot, sheetId, 0, columnIndex);
+      if (!currentHeader) {
+        setCell(snapshot, sheetId, 0, columnIndex, header);
+      }
+    });
+  }
+
+  sheet.rowData ??= {};
+  sheet.columnData ??= {};
+  sheet.rowData[0] = {
+    ...(sheet.rowData[0] ?? {}),
+    h: options?.headerStyle === "travelHeader" ? 44 : 30,
+    s: options?.headerStyle ?? "header",
+  };
+
+  for (let columnIndex = 0; columnIndex < maxColumns; columnIndex += 1) {
+    const headerCell = sheet.cellData?.[0]?.[columnIndex];
+    if (headerCell) {
+      headerCell.s = options?.headerStyle ?? "header";
+    }
+
+    sheet.columnData[columnIndex] = {
+      ...(sheet.columnData[columnIndex] ?? {}),
+      s: "centeredCell",
+      w: options?.columnWidths?.[columnIndex] ?? 140,
+    };
+  }
+}
+
+export function appendTravelSheetToSnapshot(
+  snapshot: IWorkbookData,
+  csvText: string,
+  sheetName = "VIAJES",
+) {
+  appendCsvSheetToSnapshot(snapshot, csvText, sheetName, {
+    headerStyle: "travelHeader",
+    headers: TRAVEL_HEADERS,
+    tabColor: "#2563eb",
+    columnWidths: {
+      0: 132,
+      1: 132,
+      2: 132,
+      3: 583,
+      4: 583,
+      5: 74,
+      6: 583,
+    },
+  });
 }
 
 export async function parseXlsxToSnapshot(buffer: ArrayBuffer, filename: string) {
@@ -468,6 +760,7 @@ export async function parseXlsxToSnapshot(buffer: ArrayBuffer, filename: string)
 
   const mapping = detectMapping(snapshot);
   ensureInternalColumns(snapshot, mapping);
+  applyProductionSheetFormatting(snapshot, mapping);
 
   return { snapshot, mapping };
 }
@@ -516,6 +809,7 @@ export function parseCsvToSnapshot(csvText: string, filename: string, sheetName 
 
   const mapping = detectMapping(snapshot);
   ensureInternalColumns(snapshot, mapping);
+  applyProductionSheetFormatting(snapshot, mapping);
 
   return { snapshot, mapping };
 }
@@ -528,10 +822,7 @@ export function createBlankProductionWorkbookSnapshot(filename = "Libro de produ
     name: filename.replace(/\.xlsx?$/i, "") || "Libro de produccion",
     appVersion: "3.0.0",
     locale: LocaleType.ES_ES,
-    styles: {
-      header: { bl: 1, fs: 12, bg: { rgb: "#f4f6f9" } },
-      transportHeader: { bl: 1, fs: 12, bg: { rgb: "#dbeafe" }, cl: { rgb: "#1d4ed8" } },
-    },
+    styles: getProductionWorkbookStyles(),
     sheetOrder: [sheetId],
     sheets: {
       [sheetId]: {
@@ -539,6 +830,7 @@ export function createBlankProductionWorkbookSnapshot(filename = "Libro de produ
         name: "Produccion",
         tabColor: "",
         hidden: BooleanNumber.FALSE,
+        zoomRatio: DEFAULT_WORKBOOK_ZOOM_RATIO,
         freeze: { xSplit: 0, ySplit: 1, startRow: 1, startColumn: 0 },
         rowCount: 120,
         columnCount: BLANK_HEADERS.length + 4,
@@ -569,6 +861,8 @@ export function createBlankProductionWorkbookSnapshot(filename = "Libro de produ
     };
   });
   ensureInternalColumns(snapshot, mapping);
+  applyProductionSheetFormatting(snapshot, mapping);
+  appendTravelSheetToSnapshot(snapshot, "", "VIAJES");
 
   return { snapshot, mapping };
 }
@@ -579,6 +873,7 @@ export function snapshotToRows(
 ) {
   const sheet = snapshot.sheets[mapping.sheetId];
   const rows: ProductionWorkbookRow[] = [];
+  const travelRowsByProductionCode = getTravelRowsByProductionCode(snapshot);
 
   if (!sheet?.cellData) {
     return rows;
@@ -606,6 +901,14 @@ export function snapshotToRows(
     }
 
     if (hasContent) {
+      const travelRow = row.productionCode
+        ? travelRowsByProductionCode.get(row.productionCode.trim())
+        : null;
+
+      if (travelRow) {
+        Object.assign(row, travelRow);
+      }
+
       rows.push(row);
     }
   }
@@ -633,6 +936,125 @@ export function getWorkbookPreview(
   };
 }
 
+function getMappedColumn(mapping: ProductionWorkbookColumnMapping, field: ProductionWorkbookField) {
+  return typeof mapping[field] === "number" ? mapping[field] : null;
+}
+
+function markWorkbookRowValidation(
+  snapshot: IWorkbookData,
+  mapping: ProductionWorkbookColumnMapping,
+  rowIndex: number,
+  style: "invalidCell" | "warningCell",
+  fields: ProductionWorkbookField[],
+) {
+  const sheet = snapshot.sheets[mapping.sheetId];
+
+  if (!sheet) {
+    return;
+  }
+
+  for (const field of fields) {
+    const column = getMappedColumn(mapping, field);
+
+    if (column == null) {
+      continue;
+    }
+
+    sheet.cellData ??= {};
+    sheet.cellData[rowIndex] ??= {};
+    sheet.cellData[rowIndex][column] = {
+      ...(sheet.cellData[rowIndex][column] ?? { v: "", t: CellValueType.STRING }),
+      s: style,
+    };
+  }
+}
+
+export function getProductionWorkbookApplyPreview(params: {
+  snapshot: IWorkbookData;
+  mapping: ProductionWorkbookColumnMapping;
+  defaultDate?: string;
+}) {
+  const rows = snapshotToRows(params.snapshot, params.mapping);
+  const preview: ProductionWorkbookApplyPreview = {
+    created: 0,
+    updated: 0,
+    skipped: 0,
+    assignments: 0,
+    invalidRows: [],
+    warningRows: [],
+  };
+
+  for (const row of rows) {
+    const teams = parseMatchTeams(row);
+    const date = normalizeWorkbookDate(row.date ?? "")
+      || normalizeWorkbookDate(params.defaultDate ?? "");
+    const time = normalizeWorkbookTime(row.time ?? "");
+    const missing: string[] = [];
+
+    if (!date) {
+      missing.push("día");
+    }
+    if (!time) {
+      missing.push("hora");
+    }
+    if (!teams?.homeTeam) {
+      missing.push("local");
+    }
+    if (!teams?.awayTeam) {
+      missing.push("visita");
+    }
+
+    if (missing.length) {
+      preview.skipped += 1;
+      preview.invalidRows.push({
+        rowIndex: row.rowIndex + 1,
+        reason: `Falta ${missing.join(", ")}.`,
+      });
+      markWorkbookRowValidation(params.snapshot, params.mapping, row.rowIndex, "invalidCell", [
+        "date",
+        "time",
+        "homeTeam",
+        "awayTeam",
+        "match",
+      ]);
+      continue;
+    }
+
+    if (row.matchId?.trim()) {
+      preview.updated += 1;
+    } else {
+      preview.created += 1;
+    }
+
+    const assignmentCount = ROLE_FIELDS.filter((field) => row[field]?.trim()).length;
+    preview.assignments += assignmentCount;
+
+    if (!assignmentCount && !row.owner?.trim()) {
+      preview.warningRows.push({
+        rowIndex: row.rowIndex + 1,
+        reason: "Sin responsable ni roles asignados.",
+      });
+      markWorkbookRowValidation(params.snapshot, params.mapping, row.rowIndex, "warningCell", [
+        "owner",
+        "realizador",
+        "graphicsOperator",
+        "camera1",
+        "camera2",
+        "camera3",
+        "camera4",
+        "camera5",
+        "relator",
+        "commentator1",
+        "commentator2",
+        "controlOperator",
+        "supportTech",
+      ]);
+    }
+  }
+
+  return preview;
+}
+
 function normalizeStatus(value: string) {
   return MATCH_STATUS_OPTIONS.includes(value as (typeof MATCH_STATUS_OPTIONS)[number])
     ? (value as (typeof MATCH_STATUS_OPTIONS)[number])
@@ -642,6 +1064,10 @@ function normalizeStatus(value: string) {
 function normalizeWorkbookDate(value: string) {
   const trimmed = value.trim();
 
+  if (!trimmed) {
+    return "";
+  }
+
   if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
     return trimmed;
   }
@@ -650,7 +1076,83 @@ function normalizeWorkbookDate(value: string) {
     return `${trimmed}-01`;
   }
 
-  return trimmed.slice(0, 10);
+  const numericDate = trimmed.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})$/);
+  if (numericDate) {
+    const [, day, month, year] = numericDate;
+    const fullYear = year.length === 2 ? `20${year}` : year;
+
+    return `${fullYear}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+  }
+
+  const spanishDate = trimmed
+    .toLocaleLowerCase("es")
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .match(/^(\d{1,2})\s+([a-z]+)\s+(\d{2,4})$/);
+
+  if (spanishDate) {
+    const [, day, rawMonth, year] = spanishDate;
+    const monthByName: Record<string, string> = {
+      ene: "01",
+      enero: "01",
+      feb: "02",
+      febrero: "02",
+      mar: "03",
+      marzo: "03",
+      abr: "04",
+      abril: "04",
+      may: "05",
+      mayo: "05",
+      jun: "06",
+      junio: "06",
+      jul: "07",
+      julio: "07",
+      ago: "08",
+      agosto: "08",
+      sep: "09",
+      sept: "09",
+      septiembre: "09",
+      oct: "10",
+      octubre: "10",
+      nov: "11",
+      noviembre: "11",
+      dic: "12",
+      diciembre: "12",
+    };
+    const month = monthByName[rawMonth];
+
+    if (month) {
+      const fullYear = year.length === 2 ? `20${year}` : year;
+
+      return `${fullYear}-${month}-${day.padStart(2, "0")}`;
+    }
+  }
+
+  return "";
+}
+
+function normalizeWorkbookTime(value: string) {
+  const trimmed = value.trim();
+
+  if (!trimmed) {
+    return "";
+  }
+
+  const normalized = trimmed.replace(".", ":");
+
+  if (/^\d{1,2}:\d{2}$/.test(normalized)) {
+    const [hour, minute] = normalized.split(":");
+
+    return `${hour.padStart(2, "0")}:${minute}`;
+  }
+
+  if (/^\d{3,4}$/.test(normalized)) {
+    const padded = normalized.padStart(4, "0");
+
+    return `${padded.slice(0, 2)}:${padded.slice(2, 4)}`;
+  }
+
+  return "";
 }
 
 async function getOrCreatePerson(supabase: SupabaseAny, cache: Map<string, string>, fullName: string) {
@@ -736,14 +1238,17 @@ export async function enrichSnapshotWithExistingMatches(
   for (const row of rows) {
     const teams = parseMatchTeams(row);
 
-    if (!row.date || !row.time || !teams) {
+    const date = normalizeWorkbookDate(row.date ?? "");
+    const time = normalizeWorkbookTime(row.time ?? "");
+
+    if (!date || !time || !teams) {
       continue;
     }
 
     const timezone = "America/Bogota";
     const kickoffAt = buildKickoffAt({
-      date: row.date.slice(0, 10),
-      time: row.time.slice(0, 5),
+      date,
+      time,
       timezone,
     });
     const existing = await supabase
@@ -788,8 +1293,9 @@ export async function applySnapshotToGrid(params: {
     const teams = parseMatchTeams(row);
     const date = normalizeWorkbookDate(row.date ?? "")
       || normalizeWorkbookDate(params.defaultDate ?? "");
+    const time = normalizeWorkbookTime(row.time ?? "");
 
-    if (!date || !row.time || !teams) {
+    if (!date || !time || !teams) {
       continue;
     }
 
@@ -802,10 +1308,11 @@ export async function applySnapshotToGrid(params: {
       home_team: teams.homeTeam,
       away_team: teams.awayTeam,
       commentary_plan: maybeNull(row.commentaryPlan ?? ""),
-      transport: maybeNull(row.transport ?? ""),
+      transport: maybeNull(buildTransportFieldValue(row)),
+      venue: maybeNull(getTeamVenueByName(teams.homeTeam, row.competition ?? "")),
       kickoff_at: buildKickoffAt({
         date,
-        time: row.time.slice(0, 5),
+        time,
         timezone: "America/Bogota",
       }),
       duration_minutes: 150,
@@ -836,10 +1343,17 @@ export async function applySnapshotToGrid(params: {
         continue;
       }
 
-      const result = await params.supabase.from("matches").update(payload).eq("id", matchId);
+      const result = await params.supabase
+        .from("matches")
+        .update(payload)
+        .eq("id", matchId)
+        .select("updated_at")
+        .single();
       if (result.error) {
         throw result.error;
       }
+      setCell(params.snapshot, params.mapping.sheetId, row.rowIndex, params.mapping.updatedAt!, result.data.updated_at);
+      params.baseRowVersions[matchId] = result.data.updated_at;
       updated += 1;
     } else {
       const result = await params.supabase

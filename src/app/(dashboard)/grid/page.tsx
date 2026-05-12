@@ -1,5 +1,5 @@
 import { addDays, addMonths } from "date-fns";
-import { ArrowUpDown } from "lucide-react";
+import { ArrowUpDown, FileSpreadsheet, Plus } from "lucide-react";
 
 import { SectionAiAssistant } from "@/components/ai/section-ai-assistant";
 import { CreateMatchModal } from "@/components/grid/create-match-modal";
@@ -368,6 +368,23 @@ export default async function GridPage({ searchParams }: PageProps) {
                   initialDate={
                     filters.view === "day" ? filters.date : getDateInputValue()
                   }
+                  triggerVariant="icon"
+                  triggerIcon={<Plus className="size-5" />}
+                  triggerLabel="Crear partido"
+                  triggerClassName="size-[52px] rounded-[var(--panel-radius)] !border-[#facc15] !bg-[#facc15] !text-white shadow-[0_10px_24px_rgba(234,179,8,0.24)] hover:!border-[#eab308] hover:!bg-[#eab308] hover:!text-white"
+                />
+                <ProductionPlainWorkspace
+                  matches={visibleMatches}
+                  people={owners}
+                  canEdit={user.canEdit}
+                  redirectTo={redirectTo}
+                  periodLabel={summaryDateLabel}
+                  defaultDate={filters.date}
+                  openBlankOnMount={shouldOpenBlankWorkbook}
+                  triggerIcon={<FileSpreadsheet className="size-4" />}
+                  triggerLabel="Google Sheet"
+                  triggerTitle="Abrir Google Sheet"
+                  triggerClassName="inline-flex h-[52px] items-center justify-center gap-2 rounded-[var(--panel-radius)] border border-[var(--accent)] bg-[var(--accent)] px-4 text-sm font-extrabold text-white shadow-[0_10px_24px_rgba(230,18,56,0.18)] transition hover:border-[var(--accent-strong)] hover:bg-[var(--accent-strong)] disabled:cursor-not-allowed disabled:opacity-50"
                 />
               </>
             }
@@ -424,15 +441,6 @@ export default async function GridPage({ searchParams }: PageProps) {
                             initialSummary={initialCalendarSummary}
                             baseSearchParams={baseSearchParams}
                           />
-                          <ProductionPlainWorkspace
-                            matches={visibleMatches}
-                            people={owners}
-                            canEdit={user.canEdit}
-                            redirectTo={redirectTo}
-                            periodLabel={summaryDateLabel}
-                            defaultDate={filters.date}
-                            openBlankOnMount={shouldOpenBlankWorkbook}
-                          />
                           <GridInsightsDockTrigger />
                         </>
                       ) : null}
@@ -465,17 +473,6 @@ export default async function GridPage({ searchParams }: PageProps) {
                 }
               />
             )}
-            {!sortedDayGroups.length && user.canEdit && shouldOpenBlankWorkbook ? (
-              <ProductionPlainWorkspace
-                matches={visibleMatches}
-                people={owners}
-                canEdit={user.canEdit}
-                redirectTo={redirectTo}
-                periodLabel={summaryDateLabel}
-                defaultDate={filters.date}
-                openBlankOnMount
-              />
-            ) : null}
           </section>
         </div>
 

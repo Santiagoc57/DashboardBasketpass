@@ -26,6 +26,7 @@ type AssignmentRow = {
   match: {
     id: string;
     competition: string | null;
+    production_code: string | null;
     production_mode: string | null;
     status: MatchStatus;
     home_team: string;
@@ -72,6 +73,7 @@ export type CollaboratorAssignmentItem = {
   roleName: string | null;
   roleCategory: string | null;
   competition: string | null;
+  productionCode: string | null;
   productionMode: string | null;
   status: MatchStatus;
   homeTeam: string;
@@ -232,6 +234,7 @@ function buildAssignmentItem(params: {
     roleName: params.roleName ?? null,
     roleCategory: params.roleCategory ?? null,
     competition: match.competition,
+    productionCode: match.production_code,
     productionMode: match.production_mode,
     status: match.status,
     homeTeam: match.home_team,
@@ -386,7 +389,7 @@ async function getAssignmentsForPerson(personId: string) {
   const assignmentsResult = await supabase
     .from("assignments")
     .select(
-      "id, confirmed, notes, role:roles!assignments_role_id_fkey(id, name, category, sort_order), match:matches!assignments_match_id_fkey(id, competition, production_mode, status, home_team, away_team, venue, notes, kickoff_at, duration_minutes, timezone, owner:people!matches_owner_id_fkey(id, full_name, phone, email))",
+      "id, confirmed, notes, role:roles!assignments_role_id_fkey(id, name, category, sort_order), match:matches!assignments_match_id_fkey(id, competition, production_code, production_mode, status, home_team, away_team, venue, transport, notes, kickoff_at, duration_minutes, timezone, owner:people!matches_owner_id_fkey(id, full_name, phone, email))",
     )
     .eq("person_id", personId);
 
@@ -458,6 +461,7 @@ async function getFallbackAssignmentForMatch(params: {
       match: {
         id: params.matchId,
         competition: "Liga Nacional",
+        production_code: null,
         production_mode: "Encoder",
         status: "Pendiente",
         home_team: "Boca Juniors",
@@ -520,7 +524,7 @@ async function getFallbackAssignmentForMatch(params: {
   const matchResult = await supabase
     .from("matches")
     .select(
-      "id, competition, production_mode, status, home_team, away_team, venue, notes, kickoff_at, duration_minutes, timezone, owner:people!matches_owner_id_fkey(id, full_name, phone, email)",
+      "id, competition, production_code, production_mode, status, home_team, away_team, venue, transport, notes, kickoff_at, duration_minutes, timezone, owner:people!matches_owner_id_fkey(id, full_name, phone, email)",
     )
     .eq("id", params.matchId)
     .maybeSingle();

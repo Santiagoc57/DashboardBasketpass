@@ -109,7 +109,7 @@ export function PeopleDirectoryView({
   canEdit: boolean;
 }) {
   return (
-    <div className="grid gap-5 p-6 md:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-[repeat(auto-fill,minmax(300px,1fr))]">
+    <div className="grid gap-4 p-5 md:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-[repeat(auto-fill,minmax(300px,1fr))]">
       {people.map((person) => {
         const meta = parsePersonNotesMeta(person.notes);
         const roles = getPersonRoleValues(meta, person.primary_role);
@@ -143,12 +143,12 @@ export function PeopleDirectoryView({
               isSelected && "border-[#f0d9de] ring-1 ring-[#f4d2da]",
             )}
           >
-            <div className="pointer-events-none absolute -right-10 -top-10 size-40 rounded-full bg-[rgba(231,19,58,0.03)] blur-3xl" />
-            <div className="pointer-events-none absolute -bottom-10 -left-10 size-40 rounded-full bg-[rgba(231,19,58,0.04)] blur-3xl" />
+            <div className="pointer-events-none absolute -right-10 -top-10 size-36 rounded-full bg-[rgba(100,116,139,0.05)] blur-3xl" />
+            <div className="pointer-events-none absolute -bottom-10 -left-10 size-36 rounded-full bg-[rgba(100,116,139,0.04)] blur-3xl" />
 
-            <div className="pointer-events-none relative h-[5.4rem] bg-[var(--accent)]" />
+            <div className="pointer-events-none relative h-[3.9rem] bg-[#d8dee8]" />
 
-            <div className="relative flex justify-center -mt-12">
+            <div className="relative flex justify-center -mt-9">
               <div
                 className={cn(
                   "rounded-full p-1 shadow-[0_8px_18px_rgba(15,23,42,0.05)]",
@@ -157,13 +157,13 @@ export function PeopleDirectoryView({
               >
                 <div
                   className={cn(
-                    "flex size-24 items-center justify-center overflow-hidden rounded-full border-[3px]",
+                    "flex size-20 items-center justify-center overflow-hidden rounded-full border-[3px]",
                     state.avatarInnerClassName,
                   )}
                 >
                   <span
                     className={cn(
-                      "text-[2rem] font-black tracking-[-0.06em]",
+                      "text-[1.65rem] font-black tracking-[-0.06em]",
                       state.avatarTextClassName,
                     )}
                   >
@@ -173,22 +173,22 @@ export function PeopleDirectoryView({
               </div>
             </div>
 
-            <div className="px-6 pb-6 pt-4 text-center">
+            <div className="px-5 pb-4 pt-3 text-center">
               <div>
                 <h3
                   title={person.full_name}
-                  className="truncate whitespace-nowrap text-[1.2rem] font-black leading-[1.15] tracking-[-0.03em] text-[var(--foreground)] xl:text-[1.3rem]"
+                  className="truncate whitespace-nowrap text-[1.08rem] font-black leading-[1.12] tracking-[-0.03em] text-[var(--foreground)] xl:text-[1.14rem]"
                 >
                   {directoryDisplayName}
                 </h3>
-                <div className="mt-1.5 flex items-center justify-center gap-1.5 text-[var(--accent)]">
+                <div className="mt-1 flex items-center justify-center gap-1.5 text-[#64748b]">
                   <rolePresentation.Icon className="size-3.5" />
                   <p className="truncate text-[11px] font-bold uppercase tracking-[0.16em]">
                     {roleLabel}
                   </p>
                 </div>
                 {person.platform_access_role ? (
-                  <div className="mt-1 flex items-center justify-center gap-1.5 text-[#7b8798]">
+                  <div className="mt-0.5 flex items-center justify-center gap-1.5 text-[#7b8798]">
                     <Power className="size-3.5" />
                     <p className="truncate text-[10px] font-black uppercase tracking-[0.16em]">
                       {getAppRoleDisplayName(person.platform_access_role)}
@@ -197,7 +197,7 @@ export function PeopleDirectoryView({
                 ) : null}
               </div>
 
-              <div className="mt-2.5 flex items-center justify-center gap-1.5 text-xs font-medium text-[#7b8798]">
+              <div className="mt-2 flex items-center justify-center gap-1.5 text-xs font-medium text-[#7b8798]">
                 {cityIndicator.emoji ? (
                   <span className="inline-flex size-4 items-center justify-center text-sm leading-none">
                     {cityIndicator.emoji}
@@ -210,14 +210,14 @@ export function PeopleDirectoryView({
                 </p>
               </div>
 
-              <div className="mt-5 space-y-2.5">
+              <div className="mt-3.5 space-y-2">
                 {person.email ? (
                   <a
                     href={`mailto:${person.email}`}
-                    className="group flex min-h-[4.75rem] items-center justify-center rounded-[var(--panel-radius)] border border-[#eef1f5] px-4 py-2.5 text-center transition hover:bg-[#fafbfc]"
+                    className="group flex min-h-[3.65rem] items-center justify-center rounded-[var(--panel-radius)] border border-[#eef1f5] px-3 py-2 text-center transition hover:bg-[#fafbfc]"
                   >
                     <div className="min-w-0 space-y-1">
-                      <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#a0abba]">
+                      <p className="text-[9px] font-black uppercase tracking-[0.16em] text-[#a0abba]">
                         Correo institucional
                       </p>
                       <p className="truncate text-sm font-medium text-[#445164]">
@@ -226,9 +226,9 @@ export function PeopleDirectoryView({
                     </div>
                   </a>
                 ) : (
-                  <div className="flex min-h-[4.75rem] items-center justify-center rounded-[var(--panel-radius)] border border-[#eef1f5] px-4 py-2.5 text-center">
+                  <div className="flex min-h-[3.65rem] items-center justify-center rounded-[var(--panel-radius)] border border-[#eef1f5] px-3 py-2 text-center">
                     <div className="min-w-0 space-y-1">
-                      <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#a0abba]">
+                      <p className="text-[9px] font-black uppercase tracking-[0.16em] text-[#a0abba]">
                         Correo institucional
                       </p>
                       <p className="truncate text-sm font-medium text-[#7b8798]">
@@ -243,10 +243,10 @@ export function PeopleDirectoryView({
                     href={whatsappHref ?? undefined}
                     target="_blank"
                     rel="noreferrer"
-                    className="group flex min-h-[4.75rem] items-center justify-center rounded-[var(--panel-radius)] border border-[#eef1f5] px-4 py-2.5 text-center transition hover:bg-[#fafbfc]"
+                    className="group flex min-h-[3.65rem] items-center justify-center rounded-[var(--panel-radius)] border border-[#eef1f5] px-3 py-2 text-center transition hover:bg-[#fafbfc]"
                   >
                     <div className="min-w-0 space-y-1">
-                      <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#a0abba]">
+                      <p className="text-[9px] font-black uppercase tracking-[0.16em] text-[#a0abba]">
                         Teléfono directo
                       </p>
                       <p className="truncate text-sm font-medium text-[#445164]">
@@ -255,9 +255,9 @@ export function PeopleDirectoryView({
                     </div>
                   </a>
                 ) : (
-                  <div className="flex min-h-[4.75rem] items-center justify-center rounded-[var(--panel-radius)] border border-[#eef1f5] px-4 py-2.5 text-center">
+                  <div className="flex min-h-[3.65rem] items-center justify-center rounded-[var(--panel-radius)] border border-[#eef1f5] px-3 py-2 text-center">
                     <div className="min-w-0 space-y-1">
-                      <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#a0abba]">
+                      <p className="text-[9px] font-black uppercase tracking-[0.16em] text-[#a0abba]">
                         Teléfono directo
                       </p>
                       <p className="truncate text-sm font-medium text-[#7b8798]">
@@ -268,14 +268,14 @@ export function PeopleDirectoryView({
                 )}
               </div>
 
-              <div className="mt-5 flex items-center justify-center gap-3">
+              <div className="mt-3.5 flex items-center justify-center gap-3">
                 <a
                   href={actionHref}
                   target={whatsappHref ? "_blank" : undefined}
                   rel={whatsappHref ? "noreferrer" : undefined}
                   aria-label={actionLabel}
                   title={actionLabel}
-                  className="inline-flex size-10 shrink-0 items-center justify-center rounded-full border border-[#bfe4ca] bg-[#eefaf2] text-[#1faa52] transition hover:border-[#9ad8b0] hover:bg-[#e3f8e8] hover:text-[#148a43]"
+                  className="inline-flex size-10 shrink-0 items-center justify-center rounded-full border border-[#e6e9ef] text-[#6b778b] transition hover:bg-[#fafbfc] hover:text-[var(--foreground)]"
                 >
                   <Send className="size-3.5" />
                 </a>

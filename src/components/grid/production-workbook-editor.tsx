@@ -39,6 +39,18 @@ type WorkbookWithActiveSheet = {
   getActiveSheet: () => WorksheetWithRanges | null;
 };
 
+function runAfterReactRender(callback: () => void) {
+  window.setTimeout(callback, 0);
+}
+
+function waitForStableLayout() {
+  return new Promise<void>((resolve) => {
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => resolve());
+    });
+  });
+}
+
 function toColumnIndex(value: unknown) {
   return typeof value === "number" && Number.isInteger(value) && value >= 0 ? value : null;
 }
@@ -144,6 +156,12 @@ export function ProductionWorkbookEditor({
         return;
       }
 
+      await waitForStableLayout();
+
+      if (disposed || !containerRef.current) {
+        return;
+      }
+
       const { univer, univerAPI } = createUniver({
         locale: LocaleType.ES_ES,
         locales: {
@@ -182,6 +200,9 @@ export function ProductionWorkbookEditor({
       });
 
       const workbook = univerAPI.createWorkbook(snapshot);
+      window.setTimeout(() => {
+        window.dispatchEvent(new Event("resize"));
+      }, 50);
       let editorDisposed = false;
       const disposeEditor = () => {
         if (editorDisposed) {
@@ -210,7 +231,9 @@ export function ProductionWorkbookEditor({
 
     return () => {
       disposed = true;
-      cleanup?.();
+      if (cleanup) {
+        runAfterReactRender(cleanup);
+      }
     };
   }, [dropdowns, mapping, onReady, snapshot]);
 

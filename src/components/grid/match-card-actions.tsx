@@ -19,7 +19,7 @@ type MatchCardActionsProps = {
 };
 
 const controlClassName =
-  "inline-flex size-10 items-center justify-center rounded-full border border-[#d7dde7] bg-[#f4f6fa] text-[#16181d] transition hover:border-[rgba(230,18,56,0.24)] hover:bg-[#fff3f6] hover:text-[var(--accent)]";
+  "inline-flex size-[2.3rem] items-center justify-center rounded-full border border-[#d7dde7] bg-[#f4f6fa] text-[#64748b] transition hover:border-[rgba(230,18,56,0.38)] hover:bg-[#fff3f6] hover:text-[var(--accent)] hover:shadow-[0_8px_18px_rgba(230,18,56,0.14)]";
 
 export function MatchCardActions({
   canEdit,
@@ -114,7 +114,7 @@ export function MatchCardActions({
               "border-[rgba(230,18,56,0.24)] bg-[#fff3f6] text-[var(--accent)]",
           )}
         >
-          <PencilLine className="size-4" />
+          <PencilLine className="size-[0.92rem]" />
         </button>
 
         <div
@@ -162,7 +162,7 @@ export function MatchCardActions({
         mode="staff"
         triggerVariant="icon"
         triggerLabel="Notificar personal"
-        triggerIcon={<Megaphone className="size-4" />}
+        triggerIcon={<Megaphone className="size-[0.92rem]" />}
         triggerClassName={cn(controlClassName, "shadow-none")}
       />
 
@@ -176,7 +176,7 @@ export function MatchCardActions({
             "rotate-180 border-[rgba(230,18,56,0.24)] bg-[#fff3f6] text-[var(--accent)]",
         )}
       >
-        <ChevronDown className="size-4" />
+        <ChevronDown className="size-[0.92rem]" />
       </button>
     </div>
   );

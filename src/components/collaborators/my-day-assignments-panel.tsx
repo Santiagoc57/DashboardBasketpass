@@ -344,6 +344,60 @@ function formatAssignmentProductionMeta(assignment: CollaboratorAssignmentItem) 
   return `${roleLabel} · ${cameraLabel}`;
 }
 
+function getTransportDetailRows(value: string | null | undefined) {
+  const rawValue = value?.trim();
+
+  if (!rawValue) {
+    return [];
+  }
+
+  return rawValue
+    .split(/\n|\s+\|\s+/)
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .map((part) => {
+      const [label, ...rest] = part.split(":");
+
+      if (!rest.length) {
+        return { label: "Detalle", value: part };
+      }
+
+      return {
+        label: label.trim(),
+        value: rest.join(":").trim(),
+      };
+    });
+}
+
+function isTravelCompactPairLabel(value: string) {
+  const label = normalizeText(value);
+
+  return label === "dia" || label === "autos";
+}
+
+function renderTravelInfoCard(
+  assignmentId: string,
+  item: { label: string; value: string },
+  className?: string,
+) {
+  return (
+    <div
+      key={`${assignmentId}-${item.label}-${item.value}`}
+      className={cn(
+        "rounded-[var(--panel-radius)] border border-[#dbe7ff] bg-[#f8fbff] px-4 py-3",
+        className,
+      )}
+    >
+      <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#2563eb]">
+        {item.label}
+      </p>
+      <p className="mt-1 text-sm font-bold leading-6 text-[var(--foreground)]">
+        {item.value}
+      </p>
+    </div>
+  );
+}
+
 function formatAssignmentTableDateCompact(assignment: CollaboratorAssignmentItem) {
   return format(parseISO(assignment.kickoffAt), "d MMM", { locale: es })
     .replaceAll(".", "")
@@ -525,7 +579,7 @@ function getAssignmentOperationalItems(assignment: CollaboratorAssignmentItem) {
     {
       key: "produ",
       icon: Video,
-      label: "Produ",
+      label: "Producción",
       value: productionLabel,
       tone: "success" as const,
       showToneDot: false,
@@ -554,9 +608,9 @@ function getAssignmentOperationalItems(assignment: CollaboratorAssignmentItem) {
     {
       key: "modo",
       icon: CalendarDays,
-      label: PRODUCTION_SHORT_LABEL,
+      label: "Producción",
       value: roleLabel,
-      highlight: true,
+      highlight: false,
     },
     {
       key: "camaras",
@@ -605,10 +659,12 @@ function AssignmentOperationalSummary({
 function AssignmentCard({
   assignment,
   onOpenGroup,
+  onOpenTransport,
   onOpenReport,
 }: {
   assignment: CollaboratorAssignmentItem;
   onOpenGroup: (assignmentId: string) => void;
+  onOpenTransport: (assignmentId: string) => void;
   onOpenReport: (assignmentId: string) => void;
 }) {
   const leagueLabel = assignment.competition ?? "Sin liga";
@@ -698,27 +754,29 @@ function AssignmentCard({
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-2.5 border-t border-[#efe7e1] bg-[#fbfaf7] p-3.5 sm:p-4">
+        <div className="grid grid-cols-3 gap-2.5 border-t border-[#efe7e1] bg-[#fbfaf7] p-3.5 sm:p-4">
           <button
             type="button"
             onClick={() => onOpenGroup(assignment.assignmentId)}
-            className="inline-flex h-10 items-center justify-center gap-2 rounded-[var(--panel-radius)] bg-[#1faa52] px-3 text-xs font-black text-white shadow-[0_14px_28px_rgba(31,170,82,0.18)] transition hover:brightness-105"
+            className="inline-flex h-10 items-center justify-center rounded-[var(--panel-radius)] bg-[#1faa52] px-2 text-[11px] font-black text-white shadow-[0_14px_28px_rgba(31,170,82,0.18)] transition hover:brightness-105"
           >
-            <span className="inline-flex size-6 items-center justify-center rounded-full bg-[#eef2f5] shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]">
-              <MessageCircleMore className="size-3.5 text-[#1faa52]" />
-            </span>
             Chatear
           </button>
 
           <button
             type="button"
             onClick={() => onOpenReport(assignment.assignmentId)}
-            className="inline-flex h-10 items-center justify-center gap-2 rounded-[var(--panel-radius)] bg-[#7a36da] px-3 text-xs font-black text-white shadow-[0_14px_28px_rgba(122,54,218,0.22)] transition hover:brightness-105"
+            className="inline-flex h-10 items-center justify-center rounded-[var(--panel-radius)] bg-[#7a36da] px-2 text-[11px] font-black text-white shadow-[0_14px_28px_rgba(122,54,218,0.22)] transition hover:brightness-105"
           >
-            <span className="inline-flex size-6 items-center justify-center rounded-full bg-[#eef2f5] shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]">
-              <Megaphone className="size-3.5 text-[#7a36da]" />
-            </span>
             Reportar
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onOpenTransport(assignment.assignmentId)}
+            className="inline-flex h-10 items-center justify-center rounded-[var(--panel-radius)] bg-[#2563eb] px-2 text-[11px] font-black text-white shadow-[0_14px_28px_rgba(37,99,235,0.2)] transition hover:brightness-105"
+          >
+            Transporte
           </button>
         </div>
       </Card>
@@ -1047,11 +1105,11 @@ function AssignmentAssistantShell({
   return (
     <>
       <div
-        className="fixed inset-0 z-[90] flex items-end justify-center bg-[#101828]/55 p-3 backdrop-blur-sm xl:hidden"
+        className="fixed inset-0 z-[90] flex items-center justify-center bg-[#101828]/55 p-2 backdrop-blur-sm xl:hidden"
         onClick={onClose}
       >
         <div
-          className="max-h-[calc(100vh-1.5rem)] w-full max-w-md overflow-y-auto"
+          className="max-h-[calc(100dvh-1rem)] w-full max-w-md overflow-y-auto"
           onClick={(event) => event.stopPropagation()}
         >
           {children}
@@ -1073,119 +1131,6 @@ function DrawerSectionHeading({ children }: { children: ReactNode }) {
   );
 }
 
-function DrawerHighlightCard({
-  label,
-  value,
-}: {
-  label: string;
-  value: string;
-}) {
-  return (
-    <div className="rounded-[var(--panel-radius)] border border-[#e3e8f0] bg-[#f8fafc] px-4 py-4">
-      <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#7f8ea6]">
-        {label}
-      </p>
-      <p className="mt-2 text-[1.55rem] font-black leading-tight tracking-[-0.03em] text-[var(--foreground)]">
-        {value}
-      </p>
-    </div>
-  );
-}
-
-function DrawerPersonCard({
-  label,
-  value,
-  tone = "neutral",
-}: {
-  label: string;
-  value: string;
-  tone?: "accent" | "neutral";
-}) {
-  return (
-    <div className="panel-radius flex min-h-[59px] items-center gap-2.5 border border-[var(--border)] bg-white p-3 sm:min-h-[84px] sm:gap-3 sm:p-4">
-      <PersonRoleStack
-        label={label}
-        value={value}
-        initials={getInitials(value)}
-        size="sm"
-        tone={tone === "accent" ? "mint" : "neutral"}
-      />
-    </div>
-  );
-}
-
-function DrawerInfoCard({
-  icon: Icon,
-  label,
-  value,
-  valueClassName,
-}: {
-  icon: typeof Camera;
-  label: string;
-  value: string;
-  valueClassName?: string;
-}) {
-  return (
-    <div className="panel-radius flex min-h-[84px] items-center gap-3 border border-[var(--border)] bg-white p-4">
-      <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-full bg-[#f4f7fb] text-[#7c8aa0]">
-        <Icon className="size-[18px]" />
-      </span>
-      <div className="min-w-0">
-        <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#94a3b8]">
-          {label}
-        </p>
-        <p className={cn("mt-1 text-sm font-bold leading-tight text-[var(--foreground)]", valueClassName)}>
-          {value}
-        </p>
-      </div>
-    </div>
-  );
-}
-
-function DrawerStatusCard({
-  confirmed,
-}: {
-  confirmed: boolean;
-}) {
-  return (
-    <div
-      className={cn(
-        "panel-radius flex min-h-[84px] items-center justify-between gap-3 border px-4 py-3",
-        confirmed
-          ? "border-[#d7eadf] bg-[#f3fcf6]"
-          : "border-[#e3e8f0] bg-[#f8fafc]",
-      )}
-    >
-      <div>
-        <p
-          className={cn(
-            "text-[10px] font-black uppercase tracking-[0.16em]",
-            confirmed ? "text-[#178a56]" : "text-[#6b7c92]",
-          )}
-        >
-          Estado del reporte
-        </p>
-        <p
-          className={cn(
-            "mt-2 text-sm font-bold",
-            confirmed ? "text-[#178a56]" : "text-[var(--foreground)]",
-          )}
-        >
-          {confirmed ? "Reportado" : "Pendiente de reporte"}
-        </p>
-      </div>
-      <span
-        className={cn(
-          "inline-flex size-10 items-center justify-center rounded-full",
-          confirmed ? "bg-[#dcfce7] text-[#12b76a]" : "bg-[#eef2f6] text-[#7c8aa0]",
-        )}
-      >
-        {confirmed ? <CheckCircle2 className="size-7" /> : <Clock3 className="size-5" />}
-      </span>
-    </div>
-  );
-}
-
 function GroupAssistantDrawer({
   assignment,
   tab,
@@ -1199,6 +1144,9 @@ function GroupAssistantDrawer({
 }) {
   const contacts = getAssignmentContacts(assignment);
   const leagueAccent = getAssignmentLeagueAccentColor(assignment.competition);
+  const transportRows = getTransportDetailRows(assignment.transport);
+  const compactTravelRows = transportRows.filter((item) => isTravelCompactPairLabel(item.label));
+  const regularTravelRows = transportRows.filter((item) => !isTravelCompactPairLabel(item.label));
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -1223,11 +1171,6 @@ function GroupAssistantDrawer({
       <div className="relative border-b border-[var(--border)] p-6">
         <div className="mb-4 flex items-center justify-center gap-4 xl:justify-between">
           <div className="flex flex-wrap items-center justify-center gap-2 xl:justify-start">
-            {assignment.productionMode ? (
-              <span className="inline-flex rounded-full border border-[#f3cfd8] bg-[#fff3f6] px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-[var(--accent)]">
-                {getProductionModeLabel(assignment.productionMode)}
-              </span>
-            ) : null}
             <span
               className="inline-flex rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em]"
               style={{
@@ -1287,7 +1230,7 @@ function GroupAssistantDrawer({
           },
           {
             key: "context",
-            label: "Planilla",
+            label: "Transporte",
             active: tab === "context",
             onClick: () => onChangeTab("context"),
           },
@@ -1377,99 +1320,26 @@ function GroupAssistantDrawer({
         ) : (
           <div className="space-y-5">
             <section className="space-y-4">
-              <DrawerSectionHeading>{PRODUCTION_SHORT_LABEL}</DrawerSectionHeading>
-              <DrawerHighlightCard
-                label={PRODUCTION_SHORT_LABEL}
-                value={getProductionModeLabel(assignment.productionMode) || "Sin definir"}
-              />
-              <div className="grid grid-cols-2 gap-3">
-                <DrawerInfoCard
-                  icon={CalendarDays}
-                  label="Rol asignado"
-                  value={getRoleDisplayName(assignment.roleName) || "Sin definir"}
-                  valueClassName="text-[var(--accent)]"
-                />
-                <DrawerInfoCard
-                  icon={Camera}
-                  label="Cámaras"
-                  value={
-                    assignment.cameraCount > 0
-                      ? `${assignment.cameraCount} ${assignment.cameraCount === 1 ? "unidad" : "unidades"}`
-                      : "Sin definir"
-                  }
-                />
-              </div>
-            </section>
-
-            <section className="space-y-4">
-              <DrawerSectionHeading>Responsables</DrawerSectionHeading>
-              <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 sm:gap-3">
-                <DrawerPersonCard
-                  label={RESPONSIBLE_DISPLAY_LABEL}
-                  value={assignment.responsibleName ?? assignment.ownerName ?? "Sin asignar"}
-                  tone="accent"
-                />
-                <DrawerPersonCard
-                  label="Realizador"
-                  value={assignment.realizerName ?? "Sin asignar"}
-                />
-              </div>
-            </section>
-
-            <section className="space-y-4">
-              <DrawerSectionHeading>Contexto del partido</DrawerSectionHeading>
-              <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 sm:gap-3">
-                <DrawerPersonCard
-                  label="Productor"
-                  value={assignment.producerName ?? "Sin asignar"}
-                />
-                <DrawerPersonCard
-                  label="Relator"
-                  value={assignment.relatorName ?? "Sin asignar"}
-                  tone="accent"
-                />
-                <DrawerPersonCard
-                  label="Operador"
-                  value={assignment.operatorControlName ?? "Sin asignar"}
-                />
-                <DrawerPersonCard
-                  label="Encoder"
-                  value={assignment.encoderName ?? "Sin asignar"}
-                />
-              </div>
-              <DrawerStatusCard confirmed={assignment.confirmed} />
-            </section>
-
-            {[
-              { label: "Transporte", value: assignment.transport },
-              { label: "Plan de comentarios", value: assignment.commentaryPlan },
-              { label: "Observaciones", value: assignment.matchNotes ?? assignment.notes },
-            ]
-              .filter((item) => item.value?.trim())
-              .length ? (
-              <section className="space-y-4">
-                <DrawerSectionHeading>Notas operativas</DrawerSectionHeading>
-                {[
-                  { label: "Transporte", value: assignment.transport },
-                  { label: "Plan de comentarios", value: assignment.commentaryPlan },
-                  { label: "Observaciones", value: assignment.matchNotes ?? assignment.notes },
-                ]
-                  .filter((item) => item.value?.trim())
-                  .map((item) => (
-                    <div
-                      key={`${assignment.assignmentId}-${item.label}`}
-                      className="rounded-[var(--panel-radius)] border border-[var(--border)] bg-white px-4 py-4"
-                    >
-                      <p className="text-[11px] font-black uppercase tracking-[0.18em] text-[#95a3ba]">
-                        {item.label}
-                      </p>
-                      <p className="mt-2 text-sm font-semibold leading-6 text-[#65758e]">
-                        {item.value}
-                      </p>
+              <DrawerSectionHeading>Viajes</DrawerSectionHeading>
+              {transportRows.length ? (
+                <div className="grid gap-3">
+                  {compactTravelRows.length ? (
+                    <div className="grid grid-cols-2 gap-3">
+                      {compactTravelRows.map((item) =>
+                        renderTravelInfoCard(assignment.assignmentId, item),
+                      )}
                     </div>
-                  ))}
-              </section>
-            ) : null}
+                  ) : null}
+                  {regularTravelRows.map((item) =>
+                    renderTravelInfoCard(assignment.assignmentId, item),
+                  )}
+                </div>
+              ) : (
+                <div className="rounded-[var(--panel-radius)] border border-[#dbe7ff] bg-[#f8fbff] px-4 py-5 text-sm font-semibold leading-6 text-[#65758e]">
+                  Todavía no hay datos de viajes para este partido.
+                </div>
+              )}
+            </section>
           </div>
         )}
       </div>
@@ -1616,6 +1486,12 @@ export function MyDayAssignmentsPanel({
     setDrawerTab("group");
   }
 
+  function handleOpenTransport(assignmentId: string) {
+    setSelectedReportAssignmentId(null);
+    setSelectedGroupAssignmentId(assignmentId);
+    setDrawerTab("context");
+  }
+
   function handleOpenReport(assignmentId: string) {
     setSelectedGroupAssignmentId(null);
     setSelectedReportAssignmentId(assignmentId);
@@ -1676,6 +1552,7 @@ export function MyDayAssignmentsPanel({
                     key={`${assignment.assignmentId}-${assignment.matchId}`}
                     assignment={assignment}
                     onOpenGroup={handleOpenGroup}
+                    onOpenTransport={handleOpenTransport}
                     onOpenReport={handleOpenReport}
                   />
                 ))}
@@ -1740,6 +1617,7 @@ export function MyDayAssignmentsPanel({
                     key={`${assignment.assignmentId}-${assignment.matchId}`}
                     assignment={assignment}
                     onOpenGroup={handleOpenGroup}
+                    onOpenTransport={handleOpenTransport}
                     onOpenReport={handleOpenReport}
                   />
                 ))}

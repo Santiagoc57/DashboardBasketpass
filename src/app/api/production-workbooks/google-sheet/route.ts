@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { requireEditor } from "@/lib/auth";
 import {
+  appendTravelSheetToSnapshot,
   enrichSnapshotWithExistingMatches,
   getWorkbookPreview,
   parseCsvToSnapshot,
@@ -11,16 +12,23 @@ import { ensureErrorMessage } from "@/lib/utils";
 
 const DEFAULT_SHEET_ID =
   process.env.GOOGLE_PRODUCTION_SHEET_ID ?? "1brPnW66u2vnFRpeHHyMhYyh-8Me74C1afcIle8EPiV4";
-const DEFAULT_SHEET_NAME = process.env.GOOGLE_PRODUCTION_SHEET_NAME ?? "MAYO 26";
+const DEFAULT_SHEET_NAME = process.env.GOOGLE_PRODUCTION_SHEET_NAME ?? "PRODUCCION";
+const DEFAULT_TRAVEL_SHEET_ID =
+  process.env.GOOGLE_TRAVEL_SHEET_ID ?? "1GI4B3GhszrS33lDANAR5pNRnU3eag6kBr1qjF2-vRxE";
+const DEFAULT_TRAVEL_SHEET_NAME = process.env.GOOGLE_TRAVEL_SHEET_NAME ?? "";
+const DEFAULT_TRAVEL_WORKBOOK_TAB_NAME = process.env.GOOGLE_TRAVEL_WORKBOOK_TAB_NAME ?? "VIAJES";
 
 function localWorkbookId() {
   return `local-${crypto.randomUUID()}`;
 }
 
-function buildCsvUrl(sheetId: string, sheetName: string) {
+function buildCsvUrl(sheetId: string, sheetName?: string) {
   const url = new URL(`https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq`);
   url.searchParams.set("tqx", "out:csv");
-  url.searchParams.set("sheet", sheetName);
+
+  if (sheetName) {
+    url.searchParams.set("sheet", sheetName);
+  }
 
   return url.toString();
 }
@@ -42,8 +50,16 @@ export async function POST(request: Request) {
     const periodLabel = String(body.periodLabel ?? "Periodo visible");
     const sheetId = String(body.sheetId ?? DEFAULT_SHEET_ID).trim();
     const sheetName = String(body.sheetName ?? DEFAULT_SHEET_NAME).trim();
+    const travelSheetId = String(body.travelSheetId ?? DEFAULT_TRAVEL_SHEET_ID).trim();
+    const travelSheetName = String(body.travelSheetName ?? DEFAULT_TRAVEL_SHEET_NAME).trim();
+    const travelWorkbookTabName = String(
+      body.travelWorkbookTabName ?? DEFAULT_TRAVEL_WORKBOOK_TAB_NAME,
+    ).trim() || "VIAJES";
 
     assertGoogleSheetId(sheetId);
+    if (travelSheetId) {
+      assertGoogleSheetId(travelSheetId);
+    }
 
     if (!sheetName) {
       return NextResponse.json(
@@ -70,6 +86,28 @@ export async function POST(request: Request) {
 
     const filename = `${sheetName}.csv`;
     const { snapshot, mapping } = parseCsvToSnapshot(csvText, filename, sheetName);
+    let travelWarning = "";
+
+    if (travelSheetId) {
+      const travelResponse = await fetch(buildCsvUrl(travelSheetId, travelSheetName || undefined), {
+        cache: "no-store",
+      });
+      const travelContentType = travelResponse.headers.get("content-type") ?? "";
+      const travelCsvText = await travelResponse.text();
+
+      if (
+        travelResponse.ok &&
+        !travelContentType.includes("text/html") &&
+        !/^\s*</.test(travelCsvText)
+      ) {
+        appendTravelSheetToSnapshot(snapshot, travelCsvText, travelWorkbookTabName);
+      } else {
+        appendTravelSheetToSnapshot(snapshot, "", travelWorkbookTabName);
+        travelWarning =
+          " No pude leer la hoja de viajes; agregué la pestaña VIAJES en blanco.";
+      }
+    }
+
     const baseRowVersions = await enrichSnapshotWithExistingMatches(
       supabase,
       snapshot,
@@ -99,7 +137,7 @@ export async function POST(request: Request) {
         baseRowVersions,
         persistence: "local",
         warning:
-          "La tabla production_workbooks no está disponible; la hoja de Google se abrió en modo local.",
+          `La hoja de Google se abrió correctamente. El borrador no quedará guardado automáticamente; usa Aplicar a grilla cuando esté listo.${travelWarning}`,
       });
     }
 
@@ -107,7 +145,7 @@ export async function POST(request: Request) {
       workbook_id: insertResult.data.id,
       snapshot,
       column_mapping: mapping,
-      action: "google_import",
+      action: "upload",
     });
 
     return NextResponse.json({
@@ -117,6 +155,7 @@ export async function POST(request: Request) {
       mapping,
       preview: getWorkbookPreview(snapshot, mapping),
       baseRowVersions,
+      warning: travelWarning || undefined,
     });
   } catch (error) {
     return NextResponse.json(

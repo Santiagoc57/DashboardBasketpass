@@ -1,16 +1,16 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import type { IWorkbookData } from "@univerjs/core";
 import {
+  CheckCircle2,
   Cloud,
   Download,
   FileSpreadsheet,
+  Loader2,
   Maximize2,
-  RefreshCcw,
-  Save,
   Upload,
   X,
 } from "lucide-react";
@@ -39,6 +39,10 @@ type ProductionPlainWorkspaceProps = {
   periodLabel: string;
   defaultDate: string;
   openBlankOnMount?: boolean;
+  triggerClassName?: string;
+  triggerIcon?: ReactNode;
+  triggerLabel?: string;
+  triggerTitle?: string;
 };
 
 type WorkbookPreview = {
@@ -61,8 +65,20 @@ type WorkbookApi = {
   dispose: () => void;
 };
 
+type ApplyPreview = {
+  created: number;
+  updated: number;
+  skipped: number;
+  assignments: number;
+  invalidRows: Array<{ rowIndex: number; reason: string }>;
+  warningRows: Array<{ rowIndex: number; reason: string }>;
+  conflictRows: Array<{ rowIndex: number; matchId: string; label: string; reason: string }>;
+  notFoundRows: Array<{ rowIndex: number; matchId: string; reason: string }>;
+  missingInSheet: Array<{ matchId: string; label: string; reason: string }>;
+};
+
 const GOOGLE_PRODUCTION_SHEET_ID = "1brPnW66u2vnFRpeHHyMhYyh-8Me74C1afcIle8EPiV4";
-const GOOGLE_PRODUCTION_SHEET_NAME = "MAYO 26";
+const GOOGLE_PRODUCTION_SHEET_NAME = "PRODUCCION";
 
 async function readJsonResponse(response: Response) {
   const payload = await response.json().catch(() => ({}));
@@ -81,12 +97,17 @@ export function ProductionPlainWorkspace({
   periodLabel,
   defaultDate,
   openBlankOnMount = false,
+  triggerClassName,
+  triggerIcon,
+  triggerLabel,
+  triggerTitle = "Sincronizar Google Sheet de producción",
 }: ProductionPlainWorkspaceProps) {
   const [open, setOpen] = useState(false);
   const [workbook, setWorkbook] = useState<WorkbookState | null>(null);
   const [status, setStatus] = useState<string>("");
   const [error, setError] = useState<string>("");
   const [busy, setBusy] = useState(false);
+  const [applyPreview, setApplyPreview] = useState<ApplyPreview | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const editorApiRef = useRef<WorkbookApi | null>(null);
   const router = useRouter();
@@ -138,6 +159,7 @@ export function ProductionPlainWorkspace({
     setOpen(false);
     setError("");
     setStatus("");
+    setApplyPreview(null);
   }, []);
 
   useEffect(() => {
@@ -232,7 +254,7 @@ export function ProductionPlainWorkspace({
   const loadGoogleSheetWorkbook = useCallback(async () => {
     if (workbook) {
       const confirmed = window.confirm(
-        "Vas a sincronizar manualmente desde Google Sheets. Esto reemplazará el libro abierto con la versión actual de la pestaña MAYO 26.",
+        `Vas a sincronizar manualmente desde Google Sheets. Esto reemplazará el libro abierto con la versión actual de la pestaña ${GOOGLE_PRODUCTION_SHEET_NAME}.`,
       );
 
       if (!confirmed) {
@@ -264,7 +286,12 @@ export function ProductionPlainWorkspace({
         preview: payload.preview,
         baseRowVersions: payload.baseRowVersions ?? {},
       });
-      setStatus("Sincronización manual lista. Revisa los datos y aplica a la grilla cuando esté lista.");
+      setStatus(
+        `Sincronizado desde ${GOOGLE_PRODUCTION_SHEET_NAME} · ${payload.preview?.rows ?? 0} filas detectadas · ${new Date().toLocaleTimeString("es", {
+          hour: "2-digit",
+          minute: "2-digit",
+        })}`,
+      );
       if (payload.warning) {
         setStatus(payload.warning);
       }
@@ -290,6 +317,15 @@ export function ProductionPlainWorkspace({
     void createBlankWorkbook();
   }, [closeInsightsDock, createBlankWorkbook, openBlankOnMount]);
 
+  const openWorkspaceWithDefaultGoogleSheet = useCallback(() => {
+    closeInsightsDock();
+    setOpen(true);
+
+    if (canEdit && !busy) {
+      void loadGoogleSheetWorkbook();
+    }
+  }, [busy, canEdit, closeInsightsDock, loadGoogleSheetWorkbook]);
+
   function getCurrentSnapshot() {
     if (!workbook) {
       throw new Error("No hay libro cargado.");
@@ -298,71 +334,42 @@ export function ProductionPlainWorkspace({
     return editorApiRef.current?.save() ?? workbook.snapshot;
   }
 
-  async function saveDraft() {
+  async function previewApplyToGrid() {
     if (!workbook) {
       return;
     }
 
     setBusy(true);
     setError("");
-    setStatus("Guardando borrador...");
+    setStatus("Revisando filas antes de aplicar...");
 
     try {
       const snapshot = getCurrentSnapshot();
-      const response = await fetch("/api/production-workbooks/draft", {
+      const response = await fetch("/api/production-workbooks/preview", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          workbookId: workbook.workbookId,
-          snapshot,
-          mapping: workbook.mapping,
-          baseRowVersions: workbook.baseRowVersions,
-        }),
-      });
-      const payload = await readJsonResponse(response);
-
-      setWorkbook({ ...workbook, snapshot, preview: payload.preview });
-      setStatus("Borrador guardado.");
-    } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : "No se pudo guardar.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function refreshFromGrid() {
-    if (!workbook) {
-      return;
-    }
-
-    setBusy(true);
-    setError("");
-    setStatus("Actualizando desde la grilla...");
-
-    try {
-      const snapshot = getCurrentSnapshot();
-      const response = await fetch("/api/production-workbooks/refresh", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          workbookId: workbook.workbookId,
           snapshot,
           mapping: workbook.mapping,
           baseRowVersions: workbook.baseRowVersions,
           defaultDate,
+          visibleMatches: matches.map((match) => ({
+            id: match.id,
+            label: `${match.home_team} vs ${match.away_team}`,
+          })),
         }),
       });
       const payload = await readJsonResponse(response);
 
-      setWorkbook({
-        ...workbook,
-        snapshot: payload.snapshot,
-        preview: payload.preview,
-        baseRowVersions: payload.baseRowVersions ?? workbook.baseRowVersions,
-      });
-      setStatus("Libro actualizado desde la grilla.");
-    } catch (refreshError) {
-      setError(refreshError instanceof Error ? refreshError.message : "No se pudo actualizar.");
+      setWorkbook({ ...workbook, snapshot: payload.snapshot, preview: payload.preview });
+      setApplyPreview(payload.applyPreview);
+      setStatus(
+        payload.applyPreview.invalidRows.length
+          ? "Hay filas marcadas para corregir antes de aplicar."
+          : "Revisión lista. Confirma para aplicar los cambios.",
+      );
+    } catch (previewError) {
+      setError(previewError instanceof Error ? previewError.message : "No se pudo revisar.");
     } finally {
       setBusy(false);
     }
@@ -370,14 +377,6 @@ export function ProductionPlainWorkspace({
 
   async function applyToGrid() {
     if (!workbook) {
-      return;
-    }
-
-    const confirmed = window.confirm(
-      "Vas a aplicar este libro sobre partidos y asignaciones operativas. Revisa el contenido antes de continuar.",
-    );
-
-    if (!confirmed) {
       return;
     }
 
@@ -400,14 +399,19 @@ export function ProductionPlainWorkspace({
       });
       const payload = await readJsonResponse(response);
       const result = payload.result;
+      const appliedChanges = Boolean(result.created || result.updated || result.assignments);
 
       setWorkbook({ ...workbook, snapshot, preview: payload.preview });
+      setApplyPreview(null);
       setStatus(
-        result.created || result.updated || result.assignments
+        appliedChanges
           ? `Aplicado: ${result.created} creados, ${result.updated} actualizados, ${result.assignments} asignaciones.`
           : "No se aplicó ninguna fila. Revisa que tenga hora, local y visita.",
       );
       router.refresh();
+      if (appliedChanges) {
+        closeWorkspace();
+      }
     } catch (applyError) {
       setError(applyError instanceof Error ? applyError.message : "No se pudo aplicar.");
     } finally {
@@ -460,27 +464,22 @@ export function ProductionPlainWorkspace({
     <>
       <button
         type="button"
-        onClick={() => {
-          closeInsightsDock();
-          setOpen(true);
-        }}
-        disabled={!matches.length}
-        className="panel-surface inline-flex size-12 items-center justify-center rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--surface)] text-[#607089] transition hover:text-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-50"
-        aria-label="Abrir libro de producción"
-        title="Abrir libro de producción"
+        onClick={openWorkspaceWithDefaultGoogleSheet}
+        disabled={busy}
+        className={triggerClassName ?? "panel-surface inline-flex size-12 items-center justify-center rounded-[var(--panel-radius)] border border-[var(--border)] bg-[var(--surface)] text-[#607089] transition hover:text-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-50"}
+        aria-label={triggerTitle}
+        title={triggerTitle}
       >
-        <Maximize2 className="size-5" />
+        {triggerIcon ?? <Maximize2 className="size-5" />}
+        {triggerLabel ? <span>{triggerLabel}</span> : null}
       </button>
 
       {open && typeof document !== "undefined" ? createPortal(
         <div className="fixed inset-0 z-[80] flex flex-col bg-[#f8fafc] text-[#1f2937]">
           <div className="flex min-h-[4.25rem] items-center justify-between border-b border-[#d8dee8] bg-white px-5">
             <div className="min-w-0">
-              <p className="text-[11px] font-black uppercase tracking-[0.18em] text-[#94a3b8]">
-                Grilla de producción
-              </p>
               <h2 className="truncate text-xl font-black tracking-[-0.03em] text-[#14161b]">
-                Libro de producción
+                Producción de contenidos
               </h2>
             </div>
             <div className="flex shrink-0 items-center gap-2">
@@ -506,64 +505,42 @@ export function ProductionPlainWorkspace({
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
                     disabled={busy}
-                    className="inline-flex h-10 items-center gap-2 rounded-[var(--panel-radius)] border border-[#d8e0eb] bg-white px-3 text-xs font-black uppercase tracking-[0.14em] text-[#64748b] transition hover:border-[#f3b5c2] hover:text-[var(--accent)] disabled:opacity-50"
+                    className="inline-flex size-10 items-center justify-center rounded-[var(--panel-radius)] border border-[#d8e0eb] bg-white text-[#64748b] transition hover:border-[#f3b5c2] hover:text-[var(--accent)] disabled:opacity-50"
+                    aria-label="Subir Excel"
+                    title="Subir Excel"
                   >
                     <Upload className="size-4" />
-                    Subir
                   </button>
                   <button
                     type="button"
                     onClick={loadGoogleSheetWorkbook}
                     disabled={busy}
-                    className="inline-flex h-10 items-center gap-2 rounded-[var(--panel-radius)] border border-[#d8e0eb] bg-white px-3 text-xs font-black uppercase tracking-[0.14em] text-[#64748b] transition hover:border-[#f3b5c2] hover:text-[var(--accent)] disabled:opacity-50"
+                    className="inline-flex size-10 items-center justify-center rounded-[var(--panel-radius)] border border-[#d8e0eb] bg-white text-[#64748b] transition hover:border-[#f3b5c2] hover:text-[var(--accent)] disabled:opacity-50"
+                    aria-label={`Sincronizar Google Sheets: ${GOOGLE_PRODUCTION_SHEET_NAME}`}
                     title={`Sincronizar manualmente Google Sheets: ${GOOGLE_PRODUCTION_SHEET_NAME}`}
                   >
                     <Cloud className="size-4" />
-                    Sincronizar
-                  </button>
-                  <button
-                    type="button"
-                    onClick={createBlankWorkbook}
-                    disabled={busy}
-                    className="inline-flex h-10 items-center gap-2 rounded-[var(--panel-radius)] border border-[#d8e0eb] bg-white px-3 text-xs font-black uppercase tracking-[0.14em] text-[#64748b] transition hover:border-[#f3b5c2] hover:text-[var(--accent)] disabled:opacity-50"
-                  >
-                    <FileSpreadsheet className="size-4" />
-                    Blanco
-                  </button>
-                  <button
-                    type="button"
-                    onClick={saveDraft}
-                    disabled={busy || !workbook}
-                    className="inline-flex h-10 items-center gap-2 rounded-[var(--panel-radius)] border border-[#d8e0eb] bg-white px-3 text-xs font-black uppercase tracking-[0.14em] text-[#64748b] transition hover:border-[#94a3b8] disabled:opacity-50"
-                  >
-                    <Save className="size-4" />
-                    Guardar
-                  </button>
-                  <button
-                    type="button"
-                    onClick={refreshFromGrid}
-                    disabled={busy || !workbook}
-                    className="inline-flex h-10 items-center gap-2 rounded-[var(--panel-radius)] border border-[#d8e0eb] bg-white px-3 text-xs font-black uppercase tracking-[0.14em] text-[#64748b] transition hover:border-[#94a3b8] disabled:opacity-50"
-                  >
-                    <RefreshCcw className="size-4" />
-                    Refrescar
                   </button>
                   <button
                     type="button"
                     onClick={exportWorkbook}
                     disabled={busy || !workbook}
-                    className="inline-flex h-10 items-center gap-2 rounded-[var(--panel-radius)] border border-[#d8e0eb] bg-white px-3 text-xs font-black uppercase tracking-[0.14em] text-[#64748b] transition hover:border-[#94a3b8] disabled:opacity-50"
+                    className="inline-flex size-10 items-center justify-center rounded-[var(--panel-radius)] border border-[#d8e0eb] bg-white text-[#64748b] transition hover:border-[#94a3b8] disabled:opacity-50"
+                    aria-label="Descargar Excel"
+                    title="Descargar Excel"
                   >
                     <Download className="size-4" />
-                    Descargar
                   </button>
                   <button
                     type="button"
-                    onClick={applyToGrid}
+                    onClick={previewApplyToGrid}
                     disabled={busy || !workbook}
-                    className="inline-flex h-10 items-center rounded-[var(--panel-radius)] border border-[#b7e4c7] bg-[#f0fdf4] px-3 text-xs font-black uppercase tracking-[0.14em] text-[#15803d] transition hover:border-[#86d7a4] disabled:opacity-50"
+                    className="inline-flex h-10 items-center justify-center gap-2 rounded-[var(--panel-radius)] border border-[#b7e4c7] bg-[#f0fdf4] px-3 text-xs font-black uppercase tracking-[0.12em] text-[#15803d] transition hover:border-[#86d7a4] disabled:opacity-50"
+                    aria-label="Aplicar a grilla"
+                    title="Aplicar a grilla"
                   >
-                    Aplicar a grilla
+                    <CheckCircle2 className="size-4" />
+                    Aplicar
                   </button>
                 </>
               ) : null}
@@ -589,6 +566,163 @@ export function ProductionPlainWorkspace({
                   Faltan columnas requeridas: {workbook.preview.missingRequiredFields.join(", ")}
                 </span>
               ) : null}
+            </div>
+          ) : null}
+
+          {applyPreview ? (
+            <div className="fixed inset-0 z-[90] flex items-center justify-center bg-[rgba(15,23,42,0.42)] p-4 backdrop-blur-sm">
+              <div className="w-full max-w-[720px] overflow-hidden rounded-[var(--panel-radius)] border border-[#d8dee8] bg-white shadow-[0_28px_70px_rgba(15,23,42,0.24)]">
+                <div className="flex items-start justify-between gap-4 border-b border-[#eef1f5] px-6 py-5">
+                  <div>
+                    <h3 className="text-xl font-black tracking-[-0.03em] text-[#14161b]">
+                      Revisar aplicación
+                    </h3>
+                    <p className="mt-1 text-sm font-semibold text-[#64748b]">
+                      Confirma los cambios antes de enviarlos a Producción.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setApplyPreview(null)}
+                    className="inline-flex size-10 items-center justify-center rounded-full border border-[#d8e0eb] text-[#64748b] transition hover:bg-[#f8fafc] hover:text-[var(--foreground)]"
+                    aria-label="Cerrar revisión"
+                    title="Cerrar"
+                  >
+                    <X className="size-4" />
+                  </button>
+                </div>
+
+                <div className="grid gap-4 px-6 py-5">
+                  <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                    {[
+                      ["Nuevos", applyPreview.created],
+                      ["Actualizados", applyPreview.updated],
+                      ["Asignaciones", applyPreview.assignments],
+                      ["Omitidos", applyPreview.skipped],
+                      ["Conflictos", applyPreview.conflictRows.length],
+                      ["Fuera de hoja", applyPreview.missingInSheet.length],
+                      ["No encontrados", applyPreview.notFoundRows.length],
+                    ].map(([label, value]) => (
+                      <div
+                        key={label}
+                        className="rounded-[var(--panel-radius)] border border-[#e6eaf0] bg-[#f8fafc] px-4 py-3"
+                      >
+                        <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#94a3b8]">
+                          {label}
+                        </p>
+                        <p className="mt-1 text-2xl font-black text-[#14161b]">
+                          {value}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+
+                  {applyPreview.invalidRows.length ? (
+                    <div className="rounded-[var(--panel-radius)] border border-[#f3cfd8] bg-[#fff3f6] px-4 py-3">
+                      <p className="text-sm font-black text-[var(--accent)]">
+                        Corrige estas filas antes de aplicar
+                      </p>
+                      <ul className="mt-2 max-h-28 space-y-1 overflow-y-auto text-sm font-semibold text-[#8f1230]">
+                        {applyPreview.invalidRows.slice(0, 8).map((row) => (
+                          <li key={`${row.rowIndex}-${row.reason}`}>
+                            Fila {row.rowIndex}: {row.reason}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
+
+                  {applyPreview.conflictRows.length ? (
+                    <div className="rounded-[var(--panel-radius)] border border-[#f3cfd8] bg-[#fff3f6] px-4 py-3">
+                      <p className="text-sm font-black text-[var(--accent)]">
+                        Conflictos con cambios del dashboard
+                      </p>
+                      <ul className="mt-2 max-h-28 space-y-1 overflow-y-auto text-sm font-semibold text-[#8f1230]">
+                        {applyPreview.conflictRows.slice(0, 8).map((row) => (
+                          <li key={`${row.matchId}-${row.rowIndex}`}>
+                            Fila {row.rowIndex}: {row.label}. {row.reason}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
+
+                  {applyPreview.notFoundRows.length ? (
+                    <div className="rounded-[var(--panel-radius)] border border-[#f3cfd8] bg-[#fff3f6] px-4 py-3">
+                      <p className="text-sm font-black text-[var(--accent)]">
+                        Filas con partidos eliminados o archivados
+                      </p>
+                      <ul className="mt-2 max-h-24 space-y-1 overflow-y-auto text-sm font-semibold text-[#8f1230]">
+                        {applyPreview.notFoundRows.slice(0, 6).map((row) => (
+                          <li key={`${row.matchId}-${row.rowIndex}`}>
+                            Fila {row.rowIndex}: {row.reason}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
+
+                  {applyPreview.missingInSheet.length ? (
+                    <div className="rounded-[var(--panel-radius)] border border-[#d8dee8] bg-[#f8fafc] px-4 py-3">
+                      <p className="text-sm font-black text-[#506075]">
+                        Partidos en Supabase que ya no vienen en la hoja
+                      </p>
+                      <p className="mt-1 text-xs font-semibold text-[#64748b]">
+                        No se borrarán automáticamente. Revísalos manualmente si deben cancelarse o archivarse.
+                      </p>
+                      <ul className="mt-2 max-h-24 space-y-1 overflow-y-auto text-sm font-semibold text-[#506075]">
+                        {applyPreview.missingInSheet.slice(0, 8).map((match) => (
+                          <li key={match.matchId}>
+                            {match.label}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
+
+                  {applyPreview.warningRows.length ? (
+                    <div className="rounded-[var(--panel-radius)] border border-[#fde68a] bg-[#fffbeb] px-4 py-3">
+                      <p className="text-sm font-black text-[#92400e]">
+                        Advertencias
+                      </p>
+                      <ul className="mt-2 max-h-24 space-y-1 overflow-y-auto text-sm font-semibold text-[#92400e]">
+                        {applyPreview.warningRows.slice(0, 6).map((row) => (
+                          <li key={`${row.rowIndex}-${row.reason}`}>
+                            Fila {row.rowIndex}: {row.reason}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
+                </div>
+
+                <div className="flex flex-wrap items-center justify-end gap-3 border-t border-[#eef1f5] px-6 py-4">
+                  <button
+                    type="button"
+                    onClick={() => setApplyPreview(null)}
+                    disabled={busy}
+                    className="inline-flex h-11 items-center justify-center rounded-[var(--panel-radius)] border border-[#d8dee8] bg-white px-4 text-sm font-bold text-[#506075] transition hover:bg-[#f8fafc] disabled:opacity-50"
+                  >
+                    Volver a revisar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void applyToGrid()}
+                    disabled={
+                      busy ||
+                      Boolean(
+                        applyPreview.invalidRows.length ||
+                          applyPreview.conflictRows.length ||
+                          applyPreview.notFoundRows.length,
+                      )
+                    }
+                    className="inline-flex h-11 items-center justify-center gap-2 rounded-[var(--panel-radius)] border border-[#b7e4c7] bg-[#f0fdf4] px-4 text-sm font-black text-[#15803d] transition hover:border-[#86d7a4] disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {busy ? <Loader2 className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />}
+                    Aplicar cambios
+                  </button>
+                </div>
+              </div>
             </div>
           ) : null}
 

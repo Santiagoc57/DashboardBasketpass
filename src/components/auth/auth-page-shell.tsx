@@ -1,6 +1,6 @@
-import Image from "next/image";
 import { Radio, UsersRound } from "lucide-react";
 
+import { BasketMark } from "@/components/ui/basket-mark";
 import { APP_NAME } from "@/lib/constants";
 import { PRODUCT_COPY } from "@/lib/copy";
 import { cn } from "@/lib/utils";
@@ -29,16 +29,7 @@ export function AuthPageShell({
           <div className="absolute inset-0 opacity-[0.045] [background-image:radial-gradient(circle_at_top_left,rgba(230,18,56,0.42),transparent_26%),linear-gradient(rgba(28,13,16,0.08)_1px,transparent_1px),linear-gradient(90deg,rgba(28,13,16,0.08)_1px,transparent_1px)] [background-size:auto,42px_42px,42px_42px]" />
 
           <div className="relative z-10 flex items-center gap-3">
-            <div className="flex size-10 items-center justify-center overflow-hidden rounded-xl bg-[var(--accent)] shadow-[0_10px_24px_rgba(230,18,56,0.22)]">
-              <Image
-                src="/Logos/Logos Ligas/LogoBasquetpass.webp"
-                alt={`Logo de ${APP_NAME}`}
-                width={28}
-                height={28}
-                className="h-7 w-7 object-contain"
-                priority
-              />
-            </div>
+            <BasketMark />
             <p className="text-xl font-extrabold tracking-tight text-[var(--foreground)]">
               {APP_NAME}
             </p>
@@ -100,16 +91,7 @@ export function AuthPageShell({
         <section className="flex min-h-screen items-center justify-center px-6 py-8 sm:px-8 lg:px-10 xl:px-12">
           <div className="w-full max-w-[400px] xl:max-w-[420px]">
             <div className="mb-8 flex items-center justify-center gap-3 text-center lg:hidden">
-              <div className="flex size-10 items-center justify-center overflow-hidden rounded-xl bg-[var(--accent)] shadow-[0_10px_24px_rgba(230,18,56,0.22)]">
-                <Image
-                  src="/Logos/Logos Ligas/LogoBasquetpass.webp"
-                  alt={`Logo de ${APP_NAME}`}
-                  width={28}
-                  height={28}
-                  className="h-7 w-7 object-contain"
-                  priority
-                />
-              </div>
+              <BasketMark />
               <p className="text-xl font-extrabold tracking-tight text-[var(--foreground)]">
                 {APP_NAME}
               </p>

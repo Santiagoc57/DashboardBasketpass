@@ -10,6 +10,7 @@ import { upsertPersonAction } from "@/app/actions/people";
 import { SectionAiAssistant } from "@/components/ai/section-ai-assistant";
 import { SectionPageHeader } from "@/components/layout/section-page-header";
 import { SetupPanel } from "@/components/layout/setup-panel";
+import { PeopleBulkWhatsAppModal } from "@/components/people/people-bulk-whatsapp-modal";
 import { PeopleDirectoryView } from "@/components/people/people-directory-view";
 import { CreatePersonModal } from "@/components/people/create-person-modal";
 import { PeopleExportButton } from "@/components/people/people-export-button";
@@ -322,6 +323,9 @@ export default async function PeoplePage({ searchParams }: PageProps) {
               </span>
             </div>
             <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
+              {user.canEdit ? (
+                <PeopleBulkWhatsAppModal people={people} disabled={!people.length} />
+              ) : null}
               <SegmentedControl
                 size="sm"
                 items={[
