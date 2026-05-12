@@ -1,11 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import {
   BriefcaseBusiness,
   CalendarDays,
   ClipboardList,
+  FileSpreadsheet,
   Settings2,
   Shield,
   Users,
@@ -17,6 +18,7 @@ import { cn } from "@/lib/utils";
 
 const navItems = [
   { href: "/grid", label: "Producción", icon: CalendarDays },
+  { href: "/grid?workbook=blank", label: "Planilla", icon: FileSpreadsheet },
   { href: "/mi-jornada", label: "Mi jornada", icon: ClipboardList },
   { href: "/reports", label: "Operaciones", icon: BriefcaseBusiness },
   { href: "/teams", label: "Equipos", icon: Shield },
@@ -36,6 +38,8 @@ export function DashboardNav({
   role?: AppRole | null;
 }) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const workbookMode = searchParams.get("workbook");
   const allowedItems = navItems.filter((item) =>
     isDashboardNavHrefAllowedForRole(item.href, role),
   );
@@ -47,7 +51,12 @@ export function DashboardNav({
     return (
       <nav className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {allowedMobileItems.map((item) => {
-          const active = pathname.startsWith(item.href);
+          const active =
+            item.href === "/grid?workbook=blank"
+              ? pathname === "/grid" && workbookMode === "blank"
+              : item.href === "/grid"
+                ? pathname === "/grid" && workbookMode !== "blank"
+                : pathname.startsWith(item.href);
           const Icon = item.icon;
 
           return (
@@ -73,7 +82,12 @@ export function DashboardNav({
   return (
     <nav className="space-y-2 xl:space-y-3">
       {allowedItems.map((item) => {
-        const active = pathname.startsWith(item.href);
+        const active =
+          item.href === "/grid?workbook=blank"
+            ? pathname === "/grid" && workbookMode === "blank"
+            : item.href === "/grid"
+              ? pathname === "/grid" && workbookMode !== "blank"
+              : pathname.startsWith(item.href);
         const Icon = item.icon;
 
         return (

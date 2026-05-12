@@ -11,10 +11,11 @@ import { requireEditor } from "@/lib/auth";
 import { requireAdminAccessManager } from "@/lib/auth-access";
 import {
   hasFullDashboardAccessRole,
+  PLATFORM_ACCESS_ROLE_OPTIONS,
   resolveDashboardAccessRole,
 } from "@/lib/constants";
 import type { AppRole } from "@/lib/database.types";
-import { appEnv } from "@/lib/env";
+import { getPasswordResetRedirectUrl } from "@/lib/auth-redirect-url";
 import { buildPersonNotesMeta } from "@/lib/people-notes";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { emitOperationalAlert } from "@/lib/monitoring";
@@ -42,7 +43,7 @@ async function findAuthUserByEmail(email: string) {
 async function sendCollaboratorSetupEmail(email: string) {
   const supabase = await createSupabaseServerClient();
   const { error } = await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: `${appEnv.appUrl}/auth/confirm?next=/reset-password`,
+    redirectTo: await getPasswordResetRedirectUrl(),
   });
 
   if (error) {
@@ -50,7 +51,13 @@ async function sendCollaboratorSetupEmail(email: string) {
   }
 }
 
-async function revokeCollaboratorAccessByEmail(email: string) {
+type PlatformAccessRole = (typeof PLATFORM_ACCESS_ROLE_OPTIONS)[number];
+
+function isPlatformAccessRole(value: string): value is PlatformAccessRole {
+  return PLATFORM_ACCESS_ROLE_OPTIONS.some((role) => role === value);
+}
+
+async function revokePlatformAccessByEmail(email: string) {
   const supabaseAdmin = createSupabaseAdminClient();
   const authUser = await findAuthUserByEmail(email);
 
@@ -74,7 +81,7 @@ async function revokeCollaboratorAccessByEmail(email: string) {
       (authUser.app_metadata as Record<string, unknown> | null) ?? null,
   });
 
-  if (resolvedRole !== "collaborator") {
+  if (!isPlatformAccessRole(resolvedRole)) {
     return false;
   }
 
@@ -117,7 +124,7 @@ export async function upsertPersonAction(formData: FormData) {
   const hasActiveField = formData.has("active");
   const createPlatformAccess =
     String(formData.get("createPlatformAccess") ?? "off") === "on";
-  const accessRole = String(formData.get("accessRole") ?? "collaborator").trim();
+  const accessRoleInput = String(formData.get("accessRole") ?? "collaborator").trim();
   const temporaryPassword = String(formData.get("temporaryPassword") ?? "").trim();
   const personId = String(formData.get("personId") ?? "");
 
@@ -144,6 +151,10 @@ export async function upsertPersonAction(formData: FormData) {
     if (createPlatformAccess) {
       await requireAdminAccessManager();
 
+      if (!isPlatformAccessRole(accessRoleInput)) {
+        throw new Error("Selecciona un rol de acceso válido.");
+      }
+
       if (!payload.email) {
         throw new Error("Ingresa un correo electrónico antes de crear acceso.");
       }
@@ -154,9 +165,6 @@ export async function upsertPersonAction(formData: FormData) {
         );
       }
 
-      if (accessRole !== "collaborator") {
-        throw new Error("Solo se permite crear acceso de colaborador.");
-      }
     }
 
     const supabase = await createSupabaseServerClient();
@@ -173,6 +181,9 @@ export async function upsertPersonAction(formData: FormData) {
 
     if (createPlatformAccess && payload.email) {
       try {
+        const accessRole = isPlatformAccessRole(accessRoleInput)
+          ? accessRoleInput
+          : "collaborator";
         const supabaseAdmin = createSupabaseAdminClient();
         const existingAuthUser = await findAuthUserByEmail(payload.email);
         let authUserId = existingAuthUser?.id ?? null;
@@ -195,9 +206,12 @@ export async function upsertPersonAction(formData: FormData) {
               null,
           });
 
-          if (hasFullDashboardAccessRole(existingDashboardRole)) {
+          if (
+            accessRole === "collaborator" &&
+            hasFullDashboardAccessRole(existingDashboardRole)
+          ) {
             throw new Error(
-              "Ese correo ya pertenece a un usuario interno con acceso de administración.",
+              "Ese correo ya pertenece a un usuario interno con acceso de administración. Selecciona admin o editor para actualizarlo.",
             );
           }
         }
@@ -210,7 +224,7 @@ export async function upsertPersonAction(formData: FormData) {
               email_confirm: true,
               app_metadata: {
                 ...(existingAuthUser.app_metadata ?? {}),
-                bp_access_role: "collaborator",
+                bp_access_role: accessRole,
               },
               user_metadata: {
                 ...(existingAuthUser.user_metadata ?? {}),
@@ -228,7 +242,7 @@ export async function upsertPersonAction(formData: FormData) {
             password: temporaryPassword,
             email_confirm: true,
             app_metadata: {
-              bp_access_role: "collaborator",
+              bp_access_role: accessRole,
             },
             user_metadata: {
               full_name: payload.full_name,
@@ -250,7 +264,7 @@ export async function upsertPersonAction(formData: FormData) {
           {
             id: authUserId,
             full_name: payload.full_name,
-            role: "viewer",
+            role: accessRole === "collaborator" ? "viewer" : accessRole,
           },
           {
             onConflict: "id",
@@ -284,11 +298,11 @@ export async function upsertPersonAction(formData: FormData) {
         : createPlatformAccess
           ? personId
             ? accessEmailSent
-              ? "Registro actualizado, acceso de colaborador habilitado y correo enviado."
-              : "Registro actualizado y acceso de colaborador creado."
+              ? "Registro actualizado, acceso a plataforma habilitado y correo enviado."
+              : "Registro actualizado y acceso a plataforma creado."
             : accessEmailSent
-              ? "Registro creado, acceso de colaborador habilitado y correo enviado."
-              : "Registro creado y acceso de colaborador habilitado."
+              ? "Registro creado, acceso a plataforma habilitado y correo enviado."
+              : "Registro creado y acceso a plataforma habilitado."
           : personId
             ? "Registro de personal actualizado."
             : "Registro de personal creado.",
@@ -332,7 +346,7 @@ export async function deletePersonAction(formData: FormData) {
     }
 
     if (context.role === "admin" && person.email) {
-      await revokeCollaboratorAccessByEmail(person.email);
+      await revokePlatformAccessByEmail(person.email);
     }
 
     const result = await supabase
@@ -391,17 +405,17 @@ export async function revokePersonAccessAction(formData: FormData) {
       throw new Error("Este usuario no tiene correo asociado.");
     }
 
-    const revoked = await revokeCollaboratorAccessByEmail(person.email);
+    const revoked = await revokePlatformAccessByEmail(person.email);
 
     if (!revoked) {
-      throw new Error("No se encontró acceso colaborador para revocar.");
+      throw new Error("No se encontró acceso a plataforma para revocar.");
     }
 
     revalidatePath("/people");
     redirectWithNotice({
       redirectTo,
       intent: "success",
-      notice: "Acceso de colaborador revocado.",
+      notice: "Acceso a plataforma revocado.",
     });
   } catch (error) {
     rethrowNavigationError(error);

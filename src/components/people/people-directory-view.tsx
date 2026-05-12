@@ -9,7 +9,7 @@ import {
   getWhatsAppHref,
   MapPin,
 } from "@/components/people/people-view-helpers";
-import { getRoleDisplayName } from "@/lib/display";
+import { getAppRoleDisplayName, getRoleDisplayName } from "@/lib/display";
 import { getPersonRoleValues, parsePersonNotesMeta } from "@/lib/people-notes";
 import type { PersonListItem } from "@/lib/types";
 import { cn, normalizeText } from "@/lib/utils";
@@ -187,6 +187,14 @@ export function PeopleDirectoryView({
                     {roleLabel}
                   </p>
                 </div>
+                {person.platform_access_role ? (
+                  <div className="mt-1 flex items-center justify-center gap-1.5 text-[#7b8798]">
+                    <Power className="size-3.5" />
+                    <p className="truncate text-[10px] font-black uppercase tracking-[0.16em]">
+                      {getAppRoleDisplayName(person.platform_access_role)}
+                    </p>
+                  </div>
+                ) : null}
               </div>
 
               <div className="mt-2.5 flex items-center justify-center gap-1.5 text-xs font-medium text-[#7b8798]">

@@ -28,10 +28,18 @@ import { Textarea } from "@/components/ui/textarea";
 import { ToolbarSearchField } from "@/components/ui/toolbar-search-field";
 import { requireUserContext } from "@/lib/auth";
 import { SECTION_COPY } from "@/lib/copy";
-import { resolveDashboardAccessRole, ROLE_SEED } from "@/lib/constants";
+import {
+  PLATFORM_ACCESS_ROLE_OPTIONS,
+  resolveDashboardAccessRole,
+  ROLE_SEED,
+} from "@/lib/constants";
 import { getPeopleData } from "@/lib/data/dashboard";
 import type { AppRole } from "@/lib/database.types";
-import { getAssignmentStateDisplayName, getRoleDisplayName } from "@/lib/display";
+import {
+  getAppRoleDisplayName,
+  getAssignmentStateDisplayName,
+  getRoleDisplayName,
+} from "@/lib/display";
 import { isSupabaseConfigured } from "@/lib/env";
 import type { PeopleAiContextItem } from "@/lib/people-ai";
 import { getPersonRoleValues, parsePersonNotesMeta } from "@/lib/people-notes";
@@ -63,6 +71,12 @@ const TEAM_OPTIONS = Array.from(
   }, new Map<string, { name: string; stadium: string | null; competition: string }>())
     .values(),
 ).sort((left, right) => left.name.localeCompare(right.name, "es"));
+
+type PlatformAccessRole = (typeof PLATFORM_ACCESS_ROLE_OPTIONS)[number];
+
+function isPlatformAccessRole(value: AppRole | null): value is PlatformAccessRole {
+  return PLATFORM_ACCESS_ROLE_OPTIONS.some((role) => role === value);
+}
 
 function toPeopleAiContext(people: PersonListItem[]): PeopleAiContextItem[] {
   return people.map((person) => {
@@ -127,7 +141,65 @@ export default async function PeoplePage({ searchParams }: PageProps) {
 
   const user = await requireUserContext();
   const allPeople = await getPeopleData();
-  const people = allPeople.filter((person) => {
+  const platformAccessByEmail = new Map<string, PlatformAccessRole>();
+
+  if (user.role === "admin") {
+    try {
+      const supabaseAdmin = createSupabaseAdminClient();
+      const usersResult = await supabaseAdmin.auth.admin.listUsers({
+        page: 1,
+        perPage: 1000,
+      });
+
+      if (!usersResult.error) {
+        const authUserIds = usersResult.data.users
+          .map((authUser) => authUser.id)
+          .filter(Boolean);
+        const profilesById = new Map<string, AppRole | null>();
+
+        if (authUserIds.length) {
+          const profilesQuery = await supabaseAdmin
+            .from("profiles")
+            .select("id, role")
+            .in("id", authUserIds);
+
+          if (!profilesQuery.error) {
+            for (const profile of profilesQuery.data ?? []) {
+              profilesById.set(profile.id, profile.role as AppRole | null);
+            }
+          }
+        }
+
+        for (const authUser of usersResult.data.users) {
+          const email = authUser.email?.trim().toLowerCase();
+
+          if (!email) {
+            continue;
+          }
+
+          const resolvedRole = resolveDashboardAccessRole({
+            profileRole: profilesById.get(authUser.id) ?? null,
+            appMetadata:
+              (authUser.app_metadata as Record<string, unknown> | null) ?? null,
+          });
+
+          if (isPlatformAccessRole(resolvedRole)) {
+            platformAccessByEmail.set(email, resolvedRole);
+          }
+        }
+      }
+    } catch {
+      platformAccessByEmail.clear();
+    }
+  }
+
+  const allPeopleWithAccess = allPeople.map((person) => ({
+    ...person,
+    platform_access_role: person.email
+      ? platformAccessByEmail.get(person.email.trim().toLowerCase()) ?? null
+      : null,
+  }));
+  const people = allPeopleWithAccess.filter((person) => {
     if (!query) {
       return true;
     }
@@ -142,6 +214,9 @@ export default async function PeoplePage({ searchParams }: PageProps) {
       meta.coverage || "",
       person.phone ?? "",
       person.email ?? "",
+      person.platform_access_role
+        ? getAppRoleDisplayName(person.platform_access_role)
+        : "",
       getAssignmentStateDisplayName(person.assignment_state),
       meta.notes ?? "",
     ]
@@ -156,49 +231,15 @@ export default async function PeoplePage({ searchParams }: PageProps) {
   const inactiveCount = people.length - activeCount;
   const aiContext = toPeopleAiContext(people);
   const selectedPerson =
-    allPeople.find((person) => person.id === editPersonId) ?? null;
+    allPeopleWithAccess.find((person) => person.id === editPersonId) ?? null;
   const selectedMeta = selectedPerson
     ? parsePersonNotesMeta(selectedPerson.notes)
     : null;
-  let selectedPersonHasPlatformAccess = false;
-
-  if (selectedPerson?.email && user.role === "admin") {
-    try {
-      const supabaseAdmin = createSupabaseAdminClient();
-      const usersResult = await supabaseAdmin.auth.admin.listUsers({
-        page: 1,
-        perPage: 1000,
-      });
-
-      if (!usersResult.error) {
-        const authUser = usersResult.data.users.find(
-          (candidate) =>
-            candidate.email?.toLowerCase() ===
-            selectedPerson.email?.toLowerCase(),
-        );
-
-        if (authUser) {
-          const profileQuery = await supabaseAdmin
-            .from("profiles")
-            .select("role")
-            .eq("id", authUser.id)
-            .maybeSingle();
-
-          if (!profileQuery.error) {
-            selectedPersonHasPlatformAccess =
-              resolveDashboardAccessRole({
-                profileRole:
-                  (profileQuery.data?.role as AppRole | null | undefined) ?? null,
-                appMetadata:
-                  (authUser.app_metadata as Record<string, unknown> | null) ?? null,
-              }) === "collaborator";
-          }
-        }
-      }
-    } catch {
-      selectedPersonHasPlatformAccess = false;
-    }
-  }
+  const selectedPersonPlatformAccessRole =
+    selectedPerson?.platform_access_role ?? null;
+  const selectedPersonHasPlatformAccess = Boolean(
+    selectedPersonPlatformAccessRole,
+  );
 
   const currentPeopleHref = buildPeopleHref(resolvedSearchParams, {
     edit: undefined,
@@ -514,7 +555,7 @@ export default async function PeoplePage({ searchParams }: PageProps) {
                                 <p className="text-sm text-[#667085]">
                                   {selectedPerson.email
                                     ? selectedPersonHasPlatformAccess
-                                      ? "Este colaborador puede iniciar sesión y entrar directo a Mi jornada."
+                                      ? `Este usuario puede iniciar sesión con rol ${getAppRoleDisplayName(selectedPersonPlatformAccessRole)}.`
                                       : "Este colaborador no tiene acceso activo a la plataforma en este momento."
                                     : "Primero debes guardar un correo electrónico para poder gestionar acceso."}
                                 </p>
@@ -543,7 +584,7 @@ export default async function PeoplePage({ searchParams }: PageProps) {
 
                               <span className="text-[10px] font-black uppercase tracking-[0.18em] text-[var(--accent)]">
                                 {selectedPersonHasPlatformAccess
-                                  ? "Acceso habilitado"
+                                  ? `Acceso ${getAppRoleDisplayName(selectedPersonPlatformAccessRole)}`
                                   : "Acceso desactivado"}
                               </span>
                             </div>

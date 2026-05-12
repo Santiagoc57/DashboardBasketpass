@@ -9,7 +9,7 @@ import {
 } from "@/lib/constants";
 import type { Database } from "@/lib/database.types";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { appEnv } from "@/lib/env";
+import { getPasswordResetRedirectUrl } from "@/lib/auth-redirect-url";
 import { ensureErrorMessage } from "@/lib/utils";
 import {
   getRedirectTarget,
@@ -88,7 +88,7 @@ export async function requestPasswordResetAction(formData: FormData) {
   try {
     const supabase = await createSupabaseServerClient();
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${appEnv.appUrl}/auth/confirm?next=/reset-password`,
+      redirectTo: await getPasswordResetRedirectUrl(),
     });
 
     if (error) {

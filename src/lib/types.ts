@@ -19,6 +19,7 @@ export type UserContext = {
 
 export type PersonListItem = PersonRow & {
   primary_role: string | null;
+  platform_access_role?: Extract<AppRole, "admin" | "editor" | "collaborator"> | null;
   assignment_state: "En asignacion" | "Disponible" | "Inactivo";
   current_assignment_count: number;
 };

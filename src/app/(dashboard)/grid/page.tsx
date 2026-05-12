@@ -296,6 +296,7 @@ export default async function GridPage({ searchParams }: PageProps) {
   const hasActiveGridFilters = Boolean(
     filters.q || filters.league || filters.mode || filters.status || filters.owner,
   );
+  const shouldOpenBlankWorkbook = resolvedSearchParams.workbook === "blank";
 
   return (
     <GridInsightsDockProvider>
@@ -429,6 +430,8 @@ export default async function GridPage({ searchParams }: PageProps) {
                             canEdit={user.canEdit}
                             redirectTo={redirectTo}
                             periodLabel={summaryDateLabel}
+                            defaultDate={filters.date}
+                            openBlankOnMount={shouldOpenBlankWorkbook}
                           />
                           <GridInsightsDockTrigger />
                         </>
@@ -462,6 +465,17 @@ export default async function GridPage({ searchParams }: PageProps) {
                 }
               />
             )}
+            {!sortedDayGroups.length && user.canEdit && shouldOpenBlankWorkbook ? (
+              <ProductionPlainWorkspace
+                matches={visibleMatches}
+                people={owners}
+                canEdit={user.canEdit}
+                redirectTo={redirectTo}
+                periodLabel={summaryDateLabel}
+                defaultDate={filters.date}
+                openBlankOnMount
+              />
+            ) : null}
           </section>
         </div>
 

@@ -14,6 +14,12 @@ export const DEFAULT_MATCH_DURATION_MINUTES = 150;
 export const ADMIN_DEFAULT_DASHBOARD_HREF = "/grid";
 export const COLLABORATOR_DEFAULT_DASHBOARD_HREF = "/mi-jornada";
 
+export const PLATFORM_ACCESS_ROLE_OPTIONS = [
+  "admin",
+  "editor",
+  "collaborator",
+] as const;
+
 export const MATCH_STATUS_OPTIONS: Database["public"]["Enums"]["match_status"][] =
   ["Pendiente", "Confirmado", "Realizado"];
 

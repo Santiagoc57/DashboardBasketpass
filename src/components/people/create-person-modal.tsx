@@ -25,7 +25,9 @@ import {
 import { Select } from "@/components/ui/select";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { Textarea } from "@/components/ui/textarea";
-import { getRoleDisplayName } from "@/lib/display";
+import { PLATFORM_ACCESS_ROLE_OPTIONS } from "@/lib/constants";
+import type { AppRole } from "@/lib/database.types";
+import { getAppRoleDisplayName, getRoleDisplayName } from "@/lib/display";
 import { cn } from "@/lib/utils";
 
 function getInitials(name: string) {
@@ -87,6 +89,8 @@ export function CreatePersonModal({
   const [isOpen, setIsOpen] = useState(false);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const [createPlatformAccess, setCreatePlatformAccess] = useState(false);
+  const [platformAccessRole, setPlatformAccessRole] =
+    useState<Extract<AppRole, "admin" | "editor" | "collaborator">>("collaborator");
   const [fullNameValue, setFullNameValue] = useState("");
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -183,7 +187,6 @@ export function CreatePersonModal({
                 name="createPlatformAccess"
                 value={createPlatformAccess ? "on" : "off"}
               />
-              <input type="hidden" name="accessRole" value="collaborator" />
 
               <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto bg-[#faf7f7]">
                 <input
@@ -425,7 +428,7 @@ export function CreatePersonModal({
                               Acceso a la plataforma
                             </h4>
                             <p className="max-w-xl text-sm text-[#667085]">
-                              Permite que este colaborador inicie sesión con su correo y entre directo a Mi jornada.
+                              Permite que este usuario inicie sesión con su correo y el rol seleccionado.
                             </p>
                           </div>
                         </div>
@@ -476,6 +479,33 @@ export function CreatePersonModal({
                                 disabled={!canEdit}
                                 className={cn(fieldClassName, "pl-11")}
                               />
+                            </div>
+                          </label>
+
+                          <label className="space-y-2">
+                            <ModalFieldLabel required>Rol de acceso</ModalFieldLabel>
+                            <div className="relative">
+                              <Select
+                                name="accessRole"
+                                value={platformAccessRole}
+                                onChange={(event) =>
+                                  setPlatformAccessRole(
+                                    event.target.value as Extract<
+                                      AppRole,
+                                      "admin" | "editor" | "collaborator"
+                                    >,
+                                  )
+                                }
+                                disabled={!canEdit}
+                                className={cn(fieldClassName, "appearance-none pr-10")}
+                              >
+                                {PLATFORM_ACCESS_ROLE_OPTIONS.map((role) => (
+                                  <option key={role} value={role}>
+                                    {getAppRoleDisplayName(role)}
+                                  </option>
+                                ))}
+                              </Select>
+                              <ChevronDown className="pointer-events-none absolute right-4 top-1/2 size-4 -translate-y-1/2 text-[#98a2b3]" />
                             </div>
                           </label>
                         </div>

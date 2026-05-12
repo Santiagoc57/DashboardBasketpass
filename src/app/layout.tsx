@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { IBM_Plex_Mono, Manrope } from "next/font/google";
 
 import { APP_NAME } from "@/lib/constants";
+import "@univerjs/preset-sheets-core/lib/index.css";
+import "@univerjs/preset-sheets-data-validation/lib/index.css";
 import "./globals.css";
 
 const manrope = Manrope({
